@@ -1,0 +1,6 @@
+[submodule "vendor/json"]
+	path = vendor/json
+	url = https://github.com/nlohmann/json.git
+[submodule "vendor/utf8proc"]
+	path = vendor/utf8proc
+	url = https://github.com/JuliaStrings/utf8proc.git

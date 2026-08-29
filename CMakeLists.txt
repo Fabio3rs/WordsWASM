@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 3.12)
 project(WordsWASM C CXX)
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_C_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_CXX_EXTENSIONS ON)
-set(CMAKE_C_EXTENSIONS ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_C_EXTENSIONS OFF)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     set(SHOULD_ENABLE_SANITIZERS ON)
@@ -14,8 +14,23 @@ else()
     set(SHOULD_ENABLE_SANITIZERS OFF)
 endif()
 
+if(EMSCRIPTEN)
+    message(STATUS "Building for WASM")
+endif()
+
 option(ENABLE_TESTS "Enable tests" ON)
 option(ENABLE_SANITIZERS "Enable sanitizers" ${SHOULD_ENABLE_SANITIZERS})
+option(ENABLE_WEB_COMPRESSION "Generate Brotli/Gzip compressed web assets when building with Emscripten" ON)
+
+# Alpine's GCC toolchain defines _FORTIFY_SOURCE by default. Undefine the
+# toolchain-provided value before selecting ours to avoid a redefinition
+# warning becoming an error under -Werror.
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3)
+endif()
+
+add_subdirectory(vendor/utf8proc SYSTEM)
+add_subdirectory(vendor/json SYSTEM)
 
 if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
     message(STATUS "Setting G++ flags")
@@ -25,7 +40,7 @@ elseif (${CMAKE_CXX_COMPILER_ID} STREQUAL "MSVC")
     add_compile_options(/W4 /WX)
 elseif (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
     message(STATUS "Setting Clang flags")
-    add_compile_options(-Werror -Weverything -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-padded -Wno-global-constructors -Wno-exit-time-destructors -Wno-weak-vtables -Wno-documentation -Wno-documentation-unknown-command)
+    add_compile_options(-Werror -Weverything -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-padded -Wno-global-constructors -Wno-exit-time-destructors -Wno-weak-vtables -Wno-documentation -Wno-documentation-unknown-command -Wno-unsafe-buffer-usage)
 endif()
 
 if(ENABLE_TESTS)
@@ -79,46 +94,72 @@ if(ENABLE_SANITIZERS)
     endif()
 endif()
 
-# Add the include directory.
-include_directories(include)
+add_library(words_core STATIC)
+target_sources(words_core PRIVATE
+    src/artificial.cpp
+    src/database.cpp
+    src/engine.cpp
+    src/json.cpp
+    src/lexer.cpp
+    src/model.cpp
+)
+target_include_directories(words_core PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+)
+target_link_libraries(words_core
+    PUBLIC utf8proc::utf8proc
+    PRIVATE nlohmann_json::nlohmann_json
+)
+add_library(WordsWASM_lib ALIAS words_core)
+if(EMSCRIPTEN)
+    add_executable(WordsWASM
+        wasmsrc/main.cpp
+    )
 
-# Enable precompiled headers if supported
-if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.16")
-    # Modern CMake precompiled header support
-    set(PCH_HEADER "include/stdafx.hpp")
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${PCH_HEADER}")
-        message(STATUS "Using precompiled header: ${PCH_HEADER}")
-        # We'll set this after creating the targets
-    endif()
-endif()
+    target_link_libraries(WordsWASM
+        PUBLIC words_core
+        -lembind
+    )
 
-# Function to filter out excluded files.
-function(filter_out excluded output)
-    set(result "")
-    foreach(file ${${output}})
-        if(NOT "${file}" IN_LIST ${excluded})
-            list(APPEND result ${file})
+    # WebAssembly specific settings
+    target_link_options(WordsWASM PRIVATE
+        -lembind
+        -sWASM=1
+        -sMODULARIZE=1
+        -sEXPORT_NAME=Module
+        -sALLOW_MEMORY_GROWTH=1
+        -sENVIRONMENT=web
+        -sNO_DISABLE_EXCEPTION_CATCHING=1
+        -sEXPORTED_FUNCTIONS=_malloc,_free
+        -sEXPORTED_RUNTIME_METHODS=ccall,cwrap,HEAPU8
+        --emit-tsd words_wasm.d.ts
+    )
+
+    if(ENABLE_WEB_COMPRESSION)
+        find_program(BROTLI_EXECUTABLE brotli)
+        find_program(GZIP_EXECUTABLE gzip)
+
+        if(BROTLI_EXECUTABLE AND GZIP_EXECUTABLE)
+            set(WEB_COMPRESSION_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/compress_web_assets.cmake")
+            configure_file(
+                "${CMAKE_CURRENT_SOURCE_DIR}/cmake/compress_web_assets.cmake.in"
+                "${WEB_COMPRESSION_SCRIPT}"
+                @ONLY
+            )
+
+            add_custom_target(WordsWASM_assets ALL
+                DEPENDS WordsWASM
+                COMMAND "${CMAKE_COMMAND}" -P "${WEB_COMPRESSION_SCRIPT}"
+                COMMENT "Generating compressed web assets"
+                VERBATIM
+            )
+        else()
+            message(WARNING "brotli/gzip not found; compressed web assets will not be generated")
         endif()
-    endforeach()
-    set(${output} "${result}" PARENT_SCOPE)
-endfunction()
-
-# Gather all source files.
-file(GLOB_RECURSE SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
-set(EXCLUDE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
-filter_out(EXCLUDE_FILES SOURCES)
-
-message(STATUS "Sources: ${SOURCES}")
-
-add_library(WordsWASM_lib STATIC ${SOURCES})
-add_executable(WordsWASM "src/main.cpp")
-target_link_libraries(WordsWASM WordsWASM_lib)
-
-# Set up precompiled headers if supported and available
-if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.16" AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include/stdafx.hpp")
-    target_precompile_headers(WordsWASM_lib PRIVATE "include/stdafx.hpp")
-    target_precompile_headers(WordsWASM REUSE_FROM WordsWASM_lib)
-    message(STATUS "Precompiled headers enabled for faster compilation")
+    endif()
+else()
+    add_executable(words_cli src/main.cpp)
+    target_link_libraries(words_cli PRIVATE words_core)
 endif()
 
 if(ENABLE_TESTS AND GTest_FOUND)

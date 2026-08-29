@@ -1,0 +1,1552 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Whitaker's WORDS canonical Latin analysis",
+  "description": "Canonical semantic result for one Latin query.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schemaVersion",
+    "query",
+    "status",
+    "analyses",
+    "diagnostics"
+  ],
+  "properties": {
+    "schema": {
+      "const": "whitakers-words.analysis"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "query": {
+      "$ref": "#/$defs/query"
+    },
+    "status": {
+      "enum": [
+        "analyzed",
+        "unknown",
+        "error"
+      ]
+    },
+    "analyses": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/analysis"
+      }
+    },
+    "suggestions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "$ref": "#/$defs/twoWordsSuggestion"
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "analyzed"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "analyses": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "unknown",
+              "error"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "analyses": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "error"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "diagnostics": {
+            "minItems": 1,
+            "contains": {
+              "properties": {
+                "severity": {
+                  "const": "error"
+                }
+              },
+              "required": [
+                "severity"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "suggestions"
+        ]
+      },
+      "then": {
+        "properties": {
+          "status": {
+            "const": "unknown"
+          },
+          "diagnostics": {
+            "contains": {
+              "properties": {
+                "code": {
+                  "const": "two-words-suggestion"
+                }
+              },
+              "required": [
+                "code"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "twoWordsSuggestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "splitAt",
+        "classification",
+        "segments"
+      ],
+      "properties": {
+        "method": {
+          "const": "two-words"
+        },
+        "splitAt": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "classification": {
+          "enum": [
+            "unconstrained",
+            "number-pair"
+          ]
+        },
+        "segments": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/fullSuggestionSegment"
+            },
+            {
+              "$ref": "#/$defs/fullSuggestionSegment"
+            }
+          ],
+          "items": false
+        }
+      }
+    },
+    "fullSuggestionSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "analyses"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "analyses": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/analysis"
+          }
+        }
+      }
+    },
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "normalized",
+        "mode"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "normalized": {
+          "type": "string"
+        },
+        "mode": {
+          "const": "latin"
+        }
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "partOfSpeech",
+        "lexeme",
+        "form",
+        "morphology",
+        "derivation"
+      ],
+      "properties": {
+        "partOfSpeech": {
+          "$ref": "#/$defs/analysisPartOfSpeech"
+        },
+        "lexeme": {
+          "$ref": "#/$defs/lexeme"
+        },
+        "form": {
+          "$ref": "#/$defs/form"
+        },
+        "morphology": {
+          "type": "object"
+        },
+        "derivation": {
+          "$ref": "#/$defs/derivation"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "partOfSpeech": {
+                "enum": [
+                  "noun",
+                  "pronoun"
+                ]
+              }
+            },
+            "required": [
+              "partOfSpeech"
+            ]
+          },
+          "then": {
+            "properties": {
+              "morphology": {
+                "$ref": "#/$defs/nominalMorphology"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "partOfSpeech": {
+                "const": "adjective"
+              }
+            },
+            "required": [
+              "partOfSpeech"
+            ]
+          },
+          "then": {
+            "properties": {
+              "morphology": {
+                "$ref": "#/$defs/adjectiveMorphology"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "partOfSpeech": {
+                "const": "numeral"
+              }
+            },
+            "required": [
+              "partOfSpeech"
+            ]
+          },
+          "then": {
+            "properties": {
+              "morphology": {
+                "$ref": "#/$defs/numeralMorphology"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "partOfSpeech": {
+                "const": "verb"
+              }
+            },
+            "required": [
+              "partOfSpeech"
+            ]
+          },
+          "then": {
+            "properties": {
+              "morphology": {
+                "$ref": "#/$defs/verbMorphology"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "partOfSpeech": {
+                "const": "participle"
+              }
+            },
+            "required": [
+              "partOfSpeech"
+            ]
+          },
+          "then": {
+            "properties": {
+              "morphology": {
+                "$ref": "#/$defs/participleMorphology"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "partOfSpeech": {
+                "const": "supine"
+              }
+            },
+            "required": [
+              "partOfSpeech"
+            ]
+          },
+          "then": {
+            "properties": {
+              "morphology": {
+                "$ref": "#/$defs/supineMorphology"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "partOfSpeech": {
+                "const": "adverb"
+              }
+            },
+            "required": [
+              "partOfSpeech"
+            ]
+          },
+          "then": {
+            "properties": {
+              "morphology": {
+                "$ref": "#/$defs/adverbMorphology"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "partOfSpeech": {
+                "const": "preposition"
+              }
+            },
+            "required": [
+              "partOfSpeech"
+            ]
+          },
+          "then": {
+            "properties": {
+              "morphology": {
+                "$ref": "#/$defs/prepositionMorphology"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "partOfSpeech": {
+                "enum": [
+                  "conjunction",
+                  "interjection"
+                ]
+              }
+            },
+            "required": [
+              "partOfSpeech"
+            ]
+          },
+          "then": {
+            "properties": {
+              "morphology": {
+                "$ref": "#/$defs/emptyMorphology"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "analysisPartOfSpeech": {
+      "enum": [
+        "noun",
+        "pronoun",
+        "adjective",
+        "numeral",
+        "adverb",
+        "verb",
+        "participle",
+        "supine",
+        "preposition",
+        "conjunction",
+        "interjection"
+      ]
+    },
+    "lexeme": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dictionary",
+        "entryId",
+        "dictionaryForm",
+        "partOfSpeech",
+        "meaning",
+        "properties",
+        "metadata"
+      ],
+      "properties": {
+        "dictionary": {
+          "enum": [
+            "unknown",
+            "addons",
+            "orthographic-trick",
+            "syncope",
+            "unknown-name",
+            "roman-numeral",
+            "compound",
+            "general",
+            "special",
+            "local",
+            "unique"
+          ]
+        },
+        "entryId": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dictionaryForm": {
+          "type": "string",
+          "minLength": 1
+        },
+        "partOfSpeech": {
+          "$ref": "#/$defs/lexicalPartOfSpeech"
+        },
+        "meaning": {
+          "type": "string"
+        },
+        "properties": {
+          "$ref": "#/$defs/lexicalProperties"
+        },
+        "metadata": {
+          "$ref": "#/$defs/lexicalMetadata"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "partOfSpeech": {
+                "const": "noun"
+              }
+            },
+            "required": [
+              "partOfSpeech"
+            ]
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "$ref": "#/$defs/nounLexicalProperties"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "partOfSpeech": {
+                "const": "pronoun"
+              }
+            },
+            "required": [
+              "partOfSpeech"
+            ]
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "$ref": "#/$defs/pronounLexicalProperties"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "partOfSpeech": {
+                "const": "adjective"
+              }
+            },
+            "required": [
+              "partOfSpeech"
+            ]
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "$ref": "#/$defs/adjectiveLexicalProperties"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "partOfSpeech": {
+                "const": "numeral"
+              }
+            },
+            "required": [
+              "partOfSpeech"
+            ]
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "$ref": "#/$defs/numeralLexicalProperties"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "partOfSpeech": {
+                "const": "adverb"
+              }
+            },
+            "required": [
+              "partOfSpeech"
+            ]
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "$ref": "#/$defs/adverbLexicalProperties"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "partOfSpeech": {
+                "const": "verb"
+              }
+            },
+            "required": [
+              "partOfSpeech"
+            ]
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "$ref": "#/$defs/verbLexicalProperties"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "partOfSpeech": {
+                "const": "preposition"
+              }
+            },
+            "required": [
+              "partOfSpeech"
+            ]
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "$ref": "#/$defs/prepositionLexicalProperties"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "partOfSpeech": {
+                "enum": [
+                  "conjunction",
+                  "interjection"
+                ]
+              }
+            },
+            "required": [
+              "partOfSpeech"
+            ]
+          },
+          "then": {
+            "properties": {
+              "properties": {
+                "$ref": "#/$defs/emptyLexicalProperties"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "lexicalPartOfSpeech": {
+      "enum": [
+        "noun",
+        "pronoun",
+        "adjective",
+        "numeral",
+        "adverb",
+        "verb",
+        "preposition",
+        "conjunction",
+        "interjection"
+      ]
+    },
+    "lexicalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "declension": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "conjugation": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "variant": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "gender": {
+          "$ref": "#/$defs/nullableGender"
+        },
+        "nounKind": {
+          "$ref": "#/$defs/nullableNounKind"
+        },
+        "pronounKind": {
+          "$ref": "#/$defs/nullablePronounKind"
+        },
+        "degree": {
+          "$ref": "#/$defs/nullableDegree"
+        },
+        "numeralType": {
+          "$ref": "#/$defs/nullableNumeralType"
+        },
+        "numeralValue": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "verbKind": {
+          "$ref": "#/$defs/nullableVerbKind"
+        },
+        "governs": {
+          "$ref": "#/$defs/nullableCase"
+        }
+      }
+    },
+    "nounLexicalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "declension": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "variant": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "gender": {
+          "$ref": "#/$defs/nullableGender"
+        },
+        "nounKind": {
+          "$ref": "#/$defs/nullableNounKind"
+        }
+      }
+    },
+    "pronounLexicalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "declension": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "variant": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "pronounKind": {
+          "$ref": "#/$defs/nullablePronounKind"
+        }
+      }
+    },
+    "adjectiveLexicalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "declension": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "variant": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "degree": {
+          "$ref": "#/$defs/nullableDegree"
+        }
+      }
+    },
+    "numeralLexicalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "declension": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "variant": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "numeralType": {
+          "$ref": "#/$defs/nullableNumeralType"
+        },
+        "numeralValue": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "adverbLexicalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "degree": {
+          "$ref": "#/$defs/nullableDegree"
+        }
+      }
+    },
+    "verbLexicalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "conjugation": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "variant": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "verbKind": {
+          "$ref": "#/$defs/nullableVerbKind"
+        }
+      }
+    },
+    "prepositionLexicalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "governs": {
+          "$ref": "#/$defs/nullableCase"
+        }
+      }
+    },
+    "emptyLexicalProperties": {
+      "type": "object",
+      "maxProperties": 0
+    },
+    "lexicalMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "age",
+        "subject",
+        "geography",
+        "frequency",
+        "source"
+      ],
+      "properties": {
+        "age": {
+          "$ref": "#/$defs/nullableAge"
+        },
+        "subject": {
+          "$ref": "#/$defs/nullableSubject"
+        },
+        "geography": {
+          "$ref": "#/$defs/nullableGeography"
+        },
+        "frequency": {
+          "$ref": "#/$defs/nullableLexicalFrequency"
+        },
+        "source": {
+          "$ref": "#/$defs/nullableSource"
+        }
+      }
+    },
+    "form": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stem",
+        "stemKey",
+        "ending",
+        "rule"
+      ],
+      "properties": {
+        "stem": {
+          "type": "string"
+        },
+        "stemKey": {
+          "$ref": "#/$defs/stemKey"
+        },
+        "ending": {
+          "type": "string",
+          "maxLength": 7
+        },
+        "rule": {
+          "$ref": "#/$defs/ruleMetadata"
+        }
+      }
+    },
+    "ruleMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "age",
+        "frequency"
+      ],
+      "properties": {
+        "age": {
+          "$ref": "#/$defs/nullableAge"
+        },
+        "frequency": {
+          "$ref": "#/$defs/nullableRuleFrequency"
+        }
+      }
+    },
+    "nominalMorphology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "declension",
+        "variant",
+        "case",
+        "number",
+        "gender"
+      ],
+      "properties": {
+        "declension": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "variant": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "case": {
+          "$ref": "#/$defs/nullableCase"
+        },
+        "number": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "gender": {
+          "$ref": "#/$defs/nullableGender"
+        }
+      }
+    },
+    "adjectiveMorphology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "declension",
+        "variant",
+        "case",
+        "number",
+        "gender",
+        "degree"
+      ],
+      "properties": {
+        "declension": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "variant": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "case": {
+          "$ref": "#/$defs/nullableCase"
+        },
+        "number": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "gender": {
+          "$ref": "#/$defs/nullableGender"
+        },
+        "degree": {
+          "$ref": "#/$defs/nullableDegree"
+        }
+      }
+    },
+    "numeralMorphology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "declension",
+        "variant",
+        "case",
+        "number",
+        "gender",
+        "numeralType"
+      ],
+      "properties": {
+        "declension": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "variant": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "case": {
+          "$ref": "#/$defs/nullableCase"
+        },
+        "number": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "gender": {
+          "$ref": "#/$defs/nullableGender"
+        },
+        "numeralType": {
+          "$ref": "#/$defs/nullableNumeralType"
+        }
+      }
+    },
+    "verbMorphology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "conjugation",
+        "variant",
+        "tense",
+        "voice",
+        "mood",
+        "person",
+        "number"
+      ],
+      "properties": {
+        "conjugation": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "variant": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "tense": {
+          "$ref": "#/$defs/nullableTense"
+        },
+        "voice": {
+          "$ref": "#/$defs/nullableVoice"
+        },
+        "mood": {
+          "$ref": "#/$defs/nullableMood"
+        },
+        "person": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "number": {
+          "$ref": "#/$defs/nullableNumber"
+        }
+      }
+    },
+    "participleMorphology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "conjugation",
+        "variant",
+        "case",
+        "number",
+        "gender",
+        "tense",
+        "voice"
+      ],
+      "properties": {
+        "conjugation": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "variant": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "case": {
+          "$ref": "#/$defs/nullableCase"
+        },
+        "number": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "gender": {
+          "$ref": "#/$defs/nullableGender"
+        },
+        "tense": {
+          "$ref": "#/$defs/nullableTense"
+        },
+        "voice": {
+          "$ref": "#/$defs/nullableVoice"
+        }
+      }
+    },
+    "supineMorphology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "conjugation",
+        "variant",
+        "case",
+        "number",
+        "gender"
+      ],
+      "properties": {
+        "conjugation": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "variant": {
+          "$ref": "#/$defs/paradigmNumber"
+        },
+        "case": {
+          "$ref": "#/$defs/nullableCase"
+        },
+        "number": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "gender": {
+          "$ref": "#/$defs/nullableGender"
+        }
+      }
+    },
+    "adverbMorphology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "degree"
+      ],
+      "properties": {
+        "degree": {
+          "$ref": "#/$defs/nullableDegree"
+        }
+      }
+    },
+    "prepositionMorphology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "governs"
+      ],
+      "properties": {
+        "governs": {
+          "$ref": "#/$defs/nullableCase"
+        }
+      }
+    },
+    "emptyMorphology": {
+      "type": "object",
+      "maxProperties": 0
+    },
+    "derivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "steps"
+      ],
+      "properties": {
+        "method": {
+          "enum": [
+            "regular",
+            "derived",
+            "unique",
+            "syncope",
+            "orthographic",
+            "compound",
+            "roman-numeral",
+            "unknown-name"
+          ]
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/derivationStep"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "regular"
+              }
+            },
+            "required": [
+              "method"
+            ]
+          },
+          "then": {
+            "properties": {
+              "steps": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "enum": [
+                  "derived",
+                  "syncope",
+                  "orthographic",
+                  "compound",
+                  "roman-numeral"
+                ]
+              }
+            },
+            "required": [
+              "method"
+            ]
+          },
+          "then": {
+            "properties": {
+              "steps": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "derivationStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "prefix",
+            "suffix",
+            "tackon",
+            "packon",
+            "syncope",
+            "orthographic",
+            "compound",
+            "roman-numeral"
+          ]
+        },
+        "text": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "connector": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "meaning": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "before": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "after": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "rule": {
+          "$ref": "#/$defs/nullableToken"
+        }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "severity",
+        "parameters"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+        },
+        "severity": {
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ]
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "integer",
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "paradigmNumber": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "stemKey": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nullableString": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "nullableToken": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nullableAge": {
+      "enum": [
+        null,
+        "archaic",
+        "early",
+        "classical",
+        "late",
+        "later",
+        "medieval",
+        "scholarly",
+        "modern"
+      ]
+    },
+    "nullableLexicalFrequency": {
+      "enum": [
+        null,
+        "very-frequent",
+        "frequent",
+        "common",
+        "lesser",
+        "uncommon",
+        "very-rare",
+        "inscription",
+        "graffiti",
+        "pliny"
+      ]
+    },
+    "nullableRuleFrequency": {
+      "enum": [
+        null,
+        "most-frequent",
+        "sometimes",
+        "uncommon",
+        "infrequent",
+        "rare",
+        "very-rare",
+        "inscription",
+        "reserved-m",
+        "reserved-n"
+      ]
+    },
+    "nullableNounKind": {
+      "enum": [
+        null,
+        "singular-only",
+        "plural-only",
+        "abstract",
+        "group",
+        "proper-name",
+        "person",
+        "thing",
+        "locale",
+        "place"
+      ]
+    },
+    "nullablePronounKind": {
+      "enum": [
+        null,
+        "personal",
+        "relative",
+        "reflexive",
+        "demonstrative",
+        "interrogative",
+        "indefinite",
+        "adjectival"
+      ]
+    },
+    "nullableVerbKind": {
+      "enum": [
+        null,
+        "to-be",
+        "compound-of-to-be",
+        "governs-genitive",
+        "governs-dative",
+        "governs-ablative",
+        "transitive",
+        "intransitive",
+        "impersonal",
+        "deponent",
+        "semideponent",
+        "perfect-definite"
+      ]
+    },
+    "nullableSubject": {
+      "enum": [
+        null,
+        "agriculture",
+        "biological-medical",
+        "drama-arts",
+        "ecclesiastic",
+        "grammar-literature",
+        "legal-government",
+        "poetic",
+        "science-philosophy",
+        "technical",
+        "military",
+        "mythology"
+      ]
+    },
+    "nullableGeography": {
+      "enum": [
+        null,
+        "africa",
+        "britain",
+        "china",
+        "scandinavia",
+        "egypt",
+        "france-gaul",
+        "germany",
+        "greece",
+        "italy-rome",
+        "india",
+        "balkans",
+        "netherlands",
+        "persia",
+        "near-east",
+        "russia",
+        "spain-iberia",
+        "eastern-europe"
+      ]
+    },
+    "nullableSource": {
+      "enum": [
+        null,
+        "source-a",
+        "beeson",
+        "cassells",
+        "adams-latin-sexual-vocabulary",
+        "stelten-ecclesiastical-latin",
+        "deferrari-aquinas",
+        "gildersleeve-lodge",
+        "collatinus",
+        "leverett",
+        "bracton",
+        "calepinus-novus",
+        "lewis-elementary-latin-dictionary",
+        "latham-medieval-word-list",
+        "lynn-nelson",
+        "oxford-latin-dictionary",
+        "souter",
+        "other-dictionaries",
+        "plater-white",
+        "lewis-short",
+        "found-in-translation",
+        "source-u",
+        "saxonis-vademecum",
+        "whitaker",
+        "temporary",
+        "user-submitted"
+      ]
+    },
+    "nullableCase": {
+      "enum": [
+        null,
+        "nominative",
+        "vocative",
+        "genitive",
+        "locative",
+        "dative",
+        "ablative",
+        "accusative"
+      ]
+    },
+    "nullableNumber": {
+      "enum": [
+        null,
+        "singular",
+        "plural"
+      ]
+    },
+    "nullableGender": {
+      "enum": [
+        null,
+        "masculine",
+        "feminine",
+        "neuter",
+        "common"
+      ]
+    },
+    "nullableDegree": {
+      "enum": [
+        null,
+        "positive",
+        "comparative",
+        "superlative"
+      ]
+    },
+    "nullableNumeralType": {
+      "enum": [
+        null,
+        "cardinal",
+        "ordinal",
+        "distributive",
+        "adverbial"
+      ]
+    },
+    "nullableTense": {
+      "enum": [
+        null,
+        "present",
+        "imperfect",
+        "future",
+        "perfect",
+        "pluperfect",
+        "future-perfect"
+      ]
+    },
+    "nullableVoice": {
+      "enum": [
+        null,
+        "active",
+        "passive"
+      ]
+    },
+    "nullableMood": {
+      "enum": [
+        null,
+        "indicative",
+        "subjunctive",
+        "imperative",
+        "infinitive",
+        "participle"
+      ]
+    }
+  }
+}
