@@ -27,5 +27,10 @@ if(NOT EMSCRIPTEN)
                 --root "${CMAKE_SOURCE_DIR}"
                 --cpp "$<TARGET_FILE:words_cli>"
         )
+        add_test(
+            NAME words_quantity_import
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/quantity_import_test.py"
+        )
     endif()
 endif()
