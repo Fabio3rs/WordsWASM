@@ -571,16 +571,103 @@ TEST(EngineTest, RejectsGeneralPhraseParsingOutsideCompoundGrammar) {
     EXPECT_EQ(full.at("query").at("normalized"), "amata");
 }
 
-TEST(EngineTest, MacronKeepsLegacyAnalysesAndNfcSurface) {
-    const auto ascii = test::engine().analyze("puella");
-    const auto marked = test::engine().analyze("puella\xCC\x84");
+TEST(EngineTest, UnknownQuantityKeepsLegacyAnalysesAndNfcSurface) {
+    const auto ascii = test::engine().analyze("servus");
+    const auto marked = test::engine().analyze("servu\xCC\x84s");
     ASSERT_EQ(ascii.status, QueryStatus::analyzed);
     ASSERT_EQ(marked.status, QueryStatus::analyzed);
-    EXPECT_EQ(marked.surface.normalized_nfc, "puellā");
+    EXPECT_EQ(marked.surface.normalized_nfc, "servūs");
     EXPECT_EQ(marked.analyses.size(), ascii.analyses.size());
     for (const auto &analysis : marked.analyses) {
         EXPECT_EQ(analysis.quantity_match, QuantityMatch::unknown);
-        EXPECT_EQ(marked.surface.slice(analysis.ending), "ā");
+    }
+}
+
+TEST(EngineTest, InflectionQuantityDistinguishesFirstDeclensionA) {
+    const auto long_a = test::engine().analyze("rosā");
+    const auto short_a = test::engine().analyze("rosă");
+    ASSERT_EQ(long_a.status, QueryStatus::analyzed);
+    ASSERT_EQ(short_a.status, QueryStatus::analyzed);
+
+    const auto noun_readings = [](const QueryResult &result) {
+        std::vector<const AnalysisIR *> readings;
+        for (const auto &analysis : result.analyses) {
+            if (std::holds_alternative<NounMorphology>(analysis.morphology)) {
+                readings.push_back(&analysis);
+            }
+        }
+        return readings;
+    };
+    const auto long_nouns = noun_readings(long_a);
+    ASSERT_EQ(long_nouns.size(), 1U);
+    ASSERT_FALSE(long_a.analyses.empty());
+    EXPECT_EQ(&long_a.analyses.front(), long_nouns.front());
+    EXPECT_EQ(std::get<NounMorphology>(long_nouns.front()->morphology)
+                  .grammatical_case,
+              GrammaticalCase::ablative);
+    EXPECT_EQ(long_nouns.front()->quantity_match, QuantityMatch::exact);
+
+    const auto short_nouns = noun_readings(short_a);
+    ASSERT_EQ(short_nouns.size(), 2U);
+    EXPECT_TRUE(
+        std::ranges::all_of(short_nouns, [](const AnalysisIR *analysis) {
+            const auto grammatical_case =
+                std::get<NounMorphology>(analysis->morphology).grammatical_case;
+            return grammatical_case == GrammaticalCase::nominative ||
+                   grammatical_case == GrammaticalCase::vocative;
+        }));
+    EXPECT_TRUE(
+        std::ranges::all_of(short_nouns, [](const AnalysisIR *analysis) {
+            return analysis->quantity_match == QuantityMatch::exact;
+        }));
+}
+
+TEST(EngineTest, LexicalQuantityPartitionsMalumHomographs) {
+    constexpr std::uint32_t first_long_mal_entry = 26'263U;
+    constexpr std::uint32_t last_long_mal_entry = 26'266U;
+    constexpr std::uint32_t short_evil_entry = 26'267U;
+    constexpr std::uint32_t short_bad_entry = 26'269U;
+
+    const auto ascii = test::engine().analyze("malum");
+    const auto long_a = test::engine().analyze("mālum");
+    const auto short_a = test::engine().analyze("mălum");
+    ASSERT_EQ(ascii.status, QueryStatus::analyzed);
+    ASSERT_EQ(long_a.status, QueryStatus::analyzed);
+    ASSERT_EQ(short_a.status, QueryStatus::analyzed);
+    EXPECT_EQ(long_a.analyses.size() + short_a.analyses.size(),
+              ascii.analyses.size());
+
+    const auto entry_id = [](const AnalysisIR &analysis) {
+        return test::engine()
+                   .database()
+                   .lexeme(analysis.lexeme)
+                   .dictionary_entry +
+               1U;
+    };
+    EXPECT_TRUE(std::ranges::all_of(long_a.analyses, [&](const auto &analysis) {
+        const auto entry = entry_id(analysis);
+        return entry >= first_long_mal_entry && entry <= last_long_mal_entry &&
+               analysis.quantity_match == QuantityMatch::exact;
+    }));
+    EXPECT_TRUE(
+        std::ranges::all_of(short_a.analyses, [&](const auto &analysis) {
+            const auto entry = entry_id(analysis);
+            return (entry == short_evil_entry || entry == short_bad_entry) &&
+                   analysis.quantity_match == QuantityMatch::exact;
+        }));
+    EXPECT_TRUE(std::ranges::all_of(ascii.analyses, [](const auto &analysis) {
+        return analysis.quantity_match == QuantityMatch::unspecified;
+    }));
+}
+
+TEST(EngineTest, RejectsCharactersThatOnlyCaseFoldIntoLatinAscii) {
+    for (const std::string_view text : {"ß", "K", "ſ"}) {
+        const auto result = test::engine().analyze(text);
+        EXPECT_EQ(result.status, QueryStatus::error) << text;
+        EXPECT_TRUE(result.analyses.empty()) << text;
+        ASSERT_EQ(result.diagnostics.size(), 1U) << text;
+        EXPECT_EQ(result.diagnostics.front().code, "unsupported-character")
+            << text;
     }
 }
 

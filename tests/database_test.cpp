@@ -19,6 +19,41 @@ TEST(DatabaseTest, LoadsDensePocAndFindsRealData) {
     EXPECT_TRUE((*database)->lookup_stem("zzzzzz").empty());
 }
 
+TEST(DatabaseTest, LoadsInflectionAndSparseStemQuantities) {
+    constexpr auto first_declension_ablative_rule = RuleId{146U};
+    constexpr auto first_declension_nominative_rule = RuleId{148U};
+    constexpr std::uint32_t first_long_mal_entry = 26'263U;
+    constexpr std::uint32_t last_long_mal_entry = 26'266U;
+    constexpr std::uint32_t short_evil_entry = 26'267U;
+    constexpr std::uint32_t short_bad_entry = 26'269U;
+
+    auto database = Database::load_dense_poc(test::read_database());
+    ASSERT_TRUE(database) << database.error().message;
+
+    const auto ablative =
+        (*database)->inflection_quantity(first_declension_ablative_rule);
+    EXPECT_EQ(ablative.known, 1U);
+    EXPECT_EQ(ablative.long_vowel, 1U);
+    const auto nominative =
+        (*database)->inflection_quantity(first_declension_nominative_rule);
+    EXPECT_EQ(nominative.known, 1U);
+    EXPECT_EQ(nominative.long_vowel, 0U);
+
+    for (const auto &reference : (*database)->lookup_stem("mal")) {
+        const auto entry =
+            (*database)->lexeme(reference.lexeme).dictionary_entry + 1U;
+        const auto quantity = (*database)->stem_quantity(
+            reference.lexeme, reference.lexical_slot);
+        if (entry >= first_long_mal_entry && entry <= last_long_mal_entry) {
+            EXPECT_EQ(quantity.known, 2U) << entry;
+            EXPECT_EQ(quantity.long_vowel, 2U) << entry;
+        } else if (entry == short_evil_entry || entry == short_bad_entry) {
+            EXPECT_EQ(quantity.known, 2U) << entry;
+            EXPECT_EQ(quantity.long_vowel, 0U) << entry;
+        }
+    }
+}
+
 TEST(DatabaseTest, DecodesAdjectiveDegreePayloads) {
     auto database = Database::load_dense_poc(test::read_database());
     ASSERT_TRUE(database) << database.error().message;

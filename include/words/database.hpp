@@ -175,6 +175,9 @@ class Database final {
 
     [[nodiscard]] const LexemeRecord &lexeme(LexemeId id) const;
     [[nodiscard]] const InflectionRule &rule(RuleId id) const;
+    [[nodiscard]] QuantityMask inflection_quantity(RuleId id) const noexcept;
+    [[nodiscard]] QuantityMask
+    stem_quantity(LexemeId id, std::uint8_t lexical_slot) const noexcept;
     [[nodiscard]] const SuffixRule &suffix(AddonId id) const;
     [[nodiscard]] const PrefixRule &prefix(AddonId id) const;
     [[nodiscard]] const TackonRule &tackon(AddonId id) const;
@@ -246,6 +249,11 @@ class Database final {
         std::uint32_t ordinal{};
     };
 
+    struct StemQuantityRecord final {
+        std::uint32_t key{};
+        QuantityMask quantity;
+    };
+
     explicit Database(std::vector<std::byte> image)
         : image_{std::move(image)} {}
 
@@ -263,6 +271,8 @@ class Database final {
     std::vector<std::string_view> rewrite_meanings_;
     std::vector<LexemeRecord> lexemes_;
     std::vector<InflectionRule> rules_;
+    std::vector<QuantityMask> inflection_quantities_;
+    std::vector<StemQuantityRecord> stem_quantities_;
     std::vector<SuffixRule> suffixes_;
     std::vector<PrefixRule> prefixes_;
     std::vector<TackonRule> tackons_;

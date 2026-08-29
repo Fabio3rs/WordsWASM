@@ -258,6 +258,51 @@ transformed_paradigm_matches(const SuffixRule &suffix,
                                });
 }
 
+[[nodiscard]] std::optional<QuantityMatch>
+candidate_quantity_match(const Database &database, const SurfaceForm &surface,
+                         const CandidateIR &candidate,
+                         const StemReference &stem) noexcept {
+    if (!has_quantity(surface)) {
+        return QuantityMatch::unspecified;
+    }
+
+    const auto stem_quantity =
+        database.stem_quantity(stem.lexeme, stem.lexical_slot);
+    const auto ending_quantity = database.inflection_quantity(candidate.rule);
+    bool has_unknown_evidence{};
+    for (std::size_t index = 0; index < surface.quantities.size(); ++index) {
+        const auto observed = surface.quantities[index];
+        if (observed == VowelQuantity::unknown) {
+            continue;
+        }
+
+        QuantityMask expected;
+        std::size_t relative = std::numeric_limits<std::size_t>::max();
+        if (index >= candidate.stem.begin &&
+            index < candidate.stem.begin + candidate.stem.count) {
+            expected = stem_quantity;
+            relative = index - candidate.stem.begin;
+        } else if (index >= candidate.ending.begin &&
+                   index < candidate.ending.begin + candidate.ending.count) {
+            expected = ending_quantity;
+            relative = index - candidate.ending.begin;
+        }
+
+        if (relative >= std::numeric_limits<std::uint32_t>::digits ||
+            (expected.known & (std::uint32_t{1U} << relative)) == 0U) {
+            has_unknown_evidence = true;
+            continue;
+        }
+        const auto expected_long =
+            (expected.long_vowel & (std::uint32_t{1U} << relative)) != 0U;
+        const auto observed_long = observed == VowelQuantity::long_vowel;
+        if (expected_long != observed_long) {
+            return std::nullopt;
+        }
+    }
+    return has_unknown_evidence ? QuantityMatch::unknown : QuantityMatch::exact;
+}
+
 [[nodiscard]] std::array<std::uint8_t, 12>
 morphology_key(const Morphology &morphology) noexcept {
     if (const auto *noun = std::get_if<NounMorphology>(&morphology)) {
@@ -346,9 +391,9 @@ struct EnumerationState final {
 };
 
 void append_regular_analyses(const Database &database,
+                             const SurfaceForm &surface,
                              const CandidateIR &candidate,
                              const std::span<const StemReference> stems,
-                             const QuantityMatch quantity_match,
                              const DerivationIR &derivation,
                              std::vector<AnalysisIR> &output,
                              EnumerationState &state) {
@@ -357,6 +402,11 @@ void append_regular_analyses(const Database &database,
         const auto &lexeme = database.lexeme(stem.lexeme);
         if (!coarse_part_matches(lexeme.part_of_speech, rule.part_of_speech) ||
             !stem_key_matches(stem, rule) || !paradigm_matches(lexeme, rule)) {
+            continue;
+        }
+        const auto quantity_match =
+            candidate_quantity_match(database, surface, candidate, stem);
+        if (!quantity_match) {
             continue;
         }
         if (rule.part_of_speech == PartOfSpeech::noun &&
@@ -373,7 +423,7 @@ void append_regular_analyses(const Database &database,
                 NounMorphology{lexeme.declension, lexeme.variant,
                                rule.grammatical_case, rule.number,
                                lexeme.gender},
-                quantity_match,
+                *quantity_match,
                 derivation,
             });
             continue;
@@ -393,7 +443,7 @@ void append_regular_analyses(const Database &database,
                 AdjectiveMorphology{
                     lexeme.declension, lexeme.variant, rule.grammatical_case,
                     rule.number, rule.gender, adjective_degree(lexeme, stem)},
-                quantity_match,
+                *quantity_match,
                 derivation,
             });
             continue;
@@ -412,7 +462,7 @@ void append_regular_analyses(const Database &database,
                 PronounMorphology{lexeme.declension, lexeme.variant,
                                   rule.grammatical_case, rule.number,
                                   rule.gender},
-                quantity_match,
+                *quantity_match,
                 derivation,
             });
             continue;
@@ -428,7 +478,7 @@ void append_regular_analyses(const Database &database,
                 NumeralMorphology{lexeme.declension, lexeme.variant,
                                   rule.grammatical_case, rule.number,
                                   rule.gender, numeral_type(lexeme, stem)},
-                quantity_match,
+                *quantity_match,
                 derivation,
             });
             continue;
@@ -445,7 +495,7 @@ void append_regular_analyses(const Database &database,
                 candidate.stem,
                 candidate.ending,
                 AdverbMorphology{adverb_degree(lexeme, stem)},
-                quantity_match,
+                *quantity_match,
                 derivation,
             });
             continue;
@@ -462,7 +512,7 @@ void append_regular_analyses(const Database &database,
                 candidate.ending,
                 VerbMorphology{conjugation, variant, rule.tense, rule.voice,
                                rule.mood, rule.person, rule.number},
-                quantity_match,
+                *quantity_match,
                 derivation,
             });
             continue;
@@ -478,7 +528,7 @@ void append_regular_analyses(const Database &database,
                 ParticipleMorphology{lexeme.declension, lexeme.variant,
                                      rule.grammatical_case, rule.number,
                                      rule.gender, rule.tense, rule.voice},
-                quantity_match,
+                *quantity_match,
                 derivation,
             });
             continue;
@@ -494,7 +544,7 @@ void append_regular_analyses(const Database &database,
                 SupineMorphology{lexeme.declension, lexeme.variant,
                                  rule.grammatical_case, rule.number,
                                  rule.gender},
-                quantity_match,
+                *quantity_match,
                 derivation,
             });
             continue;
@@ -511,7 +561,7 @@ void append_regular_analyses(const Database &database,
                 candidate.stem,
                 candidate.ending,
                 PrepositionMorphology{rule.grammatical_case},
-                quantity_match,
+                *quantity_match,
                 derivation,
             });
             continue;
@@ -526,7 +576,7 @@ void append_regular_analyses(const Database &database,
                 candidate.stem,
                 candidate.ending,
                 InvariableMorphology{},
-                quantity_match,
+                *quantity_match,
                 derivation,
             });
             continue;
@@ -640,7 +690,6 @@ void add_matching_suffixes(const Database &database,
 void append_prefix_analyses(const Database &database,
                             const SurfaceForm &surface,
                             const std::span<const CandidateIR> candidates,
-                            const QuantityMatch quantity_match,
                             const DerivationIR &initial_derivation,
                             std::vector<AnalysisIR> &output,
                             EnumerationState &state) {
@@ -685,9 +734,9 @@ void append_prefix_analyses(const Database &database,
                     continue;
                 }
                 append_regular_analyses(
-                    database, projected_candidate,
-                    std::span<const StemReference>{&stem, 1U}, quantity_match,
-                    *derivation, output, state);
+                    database, surface, projected_candidate,
+                    std::span<const StemReference>{&stem, 1U}, *derivation,
+                    output, state);
             }
         }
         if (output.size() != output_before ||
@@ -1061,9 +1110,9 @@ void append_word_analyses(const Database &database, const SurfaceForm &surface,
     const auto candidates = enumerate_candidates(database, surface, word);
     for (const auto &candidate : candidates) {
         append_regular_analyses(
-            database, candidate,
+            database, surface, candidate,
             database.lookup_stem(candidate_stem(surface, candidate)),
-            quantity_match, initial_derivation, output, state);
+            initial_derivation, output, state);
     }
     const auto output_after_regular = output.size();
     const auto regular_hit = output_after_regular != output_before;
@@ -1075,7 +1124,7 @@ void append_word_analyses(const Database &database, const SurfaceForm &surface,
                 analysis.morphology);
         });
     if (!had_direct_analysis && !regular_hit && !state.unsupported) {
-        append_prefix_analyses(database, surface, candidates, quantity_match,
+        append_prefix_analyses(database, surface, candidates,
                                initial_derivation, output, state);
     }
     const auto prefix_hit = output.size() != output_after_regular;
@@ -1560,6 +1609,16 @@ struct LexicalBatch final {
     }
     if (!result.state.unsupported) {
         sort_and_deduplicate_analyses(result.analyses);
+        if (has_quantity(surface)) {
+            // WHY: a confirmed marked form is stronger evidence than a row
+            // whose quantity is still absent from the gradually enriched DB.
+            // Stable partitioning preserves every legacy tie inside each tier.
+            std::stable_partition(
+                result.analyses.begin(), result.analyses.end(),
+                [](const AnalysisIR &analysis) {
+                    return analysis.quantity_match == QuantityMatch::exact;
+                });
+        }
     }
     return result;
 }

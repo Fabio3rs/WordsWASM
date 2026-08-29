@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <ranges>
 #include <stdexcept>
 #include <string>
@@ -17,6 +18,21 @@ namespace {
 
 constexpr std::size_t fixed_header_size = 40;
 constexpr std::size_t directory_entry_size = 32;
+constexpr std::uint16_t legacy_wwdb_minor = 6;
+constexpr std::uint16_t quantity_wwdb_minor = 7;
+constexpr std::uint32_t legacy_maximum_section_type = 21;
+constexpr std::uint32_t quantity_maximum_section_type = 23;
+constexpr std::uint32_t inflection_quantity_stride = 2;
+constexpr std::uint32_t stem_quantity_stride = 9;
+constexpr std::size_t maximum_ending_size = 7;
+constexpr std::size_t maximum_stem_size = 18;
+constexpr std::uint16_t inflection_quantity_value_mask = 0x007fU;
+constexpr std::uint16_t inflection_quantity_reserved_mask = 0xc000U;
+constexpr std::uint32_t stem_quantity_lexeme_mask = 0xffffU;
+constexpr std::uint32_t stem_quantity_slot_mask = 0x03U;
+constexpr std::uint32_t stem_quantity_slot_shift = 16U;
+constexpr std::uint32_t stem_quantity_key_width = 18U;
+constexpr std::uint8_t stem_quantity_slot_count = 4U;
 
 enum class SectionType : std::uint32_t {
     stem_strings = 1,
@@ -40,6 +56,8 @@ enum class SectionType : std::uint32_t {
     rewrite_strings = 19,
     rewrite_meanings = 20,
     rewrites = 21,
+    inflection_quantities = 22,
+    stem_quantities = 23,
 };
 
 struct SectionView final {
@@ -181,6 +199,13 @@ find_section(const std::vector<SectionView> &sections, const SectionType type) {
     return *found;
 }
 
+[[nodiscard]] const SectionView *
+find_optional_section(const std::vector<SectionView> &sections,
+                      const SectionType type) noexcept {
+    const auto found = std::ranges::find(sections, type, &SectionView::type);
+    return found == sections.end() ? nullptr : &*found;
+}
+
 void require_shape(const SectionView &section, const std::uint32_t flags,
                    const std::uint32_t stride) {
     if (section.flags != flags || section.stride != stride) {
@@ -224,6 +249,167 @@ void parse_string_pool(const std::span<const std::byte> bytes,
     return value;
 }
 
+[[nodiscard]] constexpr std::uint32_t
+low_bits(const std::size_t width) noexcept {
+    if (width >= std::numeric_limits<std::uint32_t>::digits) {
+        return std::numeric_limits<std::uint32_t>::max();
+    }
+    return width == 0U ? 0U : (std::uint32_t{1U} << width) - 1U;
+}
+
+[[nodiscard]] bool
+quantity_positions_are_vowels(const std::string_view text,
+                              const std::uint32_t known) noexcept {
+    for (std::size_t index = 0; index < text.size(); ++index) {
+        if ((known & (std::uint32_t{1U} << index)) == 0U) {
+            continue;
+        }
+        const auto letter = normalized_char(text[index]);
+        if (letter != 'a' && letter != 'e' && letter != 'i' && letter != 'o' &&
+            letter != 'u' && letter != 'y') {
+            return false;
+        }
+    }
+    return true;
+}
+
+struct ParsedStemQuantity final {
+    std::uint32_t key{};
+    QuantityMask quantity;
+};
+
+[[nodiscard]] std::vector<QuantityMask>
+parse_inflection_quantities(const std::span<const std::byte> image,
+                            const SectionView &section,
+                            const std::span<const InflectionRule> rules,
+                            const std::span<const std::string_view> endings) {
+    if (section.count != rules.size()) {
+        fail("invalid-section-size",
+             "inflection quantity count differs from rule count");
+    }
+    const auto bytes = section_bytes(image, section);
+    std::vector<QuantityMask> output;
+    output.reserve(section.count);
+    for (std::uint32_t ordinal = 0; ordinal < section.count; ++ordinal) {
+        const auto packed =
+            read_u16_le(bytes, static_cast<std::size_t>(ordinal) *
+                                   inflection_quantity_stride);
+        if ((packed & inflection_quantity_reserved_mask) != 0U) {
+            fail("reserved-bits",
+                 "inflection quantity has nonzero reserved bits");
+        }
+        const QuantityMask quantity{
+            static_cast<std::uint32_t>(packed & inflection_quantity_value_mask),
+            static_cast<std::uint32_t>((packed >> maximum_ending_size) &
+                                       inflection_quantity_value_mask),
+        };
+        const auto ending = endings[rules[ordinal].ending.value()];
+        const auto valid_bits = low_bits(ending.size());
+        if (ending.size() > maximum_ending_size ||
+            (quantity.long_vowel & ~quantity.known) != 0U ||
+            ((quantity.known | quantity.long_vowel) & ~valid_bits) != 0U ||
+            !quantity_positions_are_vowels(ending, quantity.known)) {
+            fail("invalid-quantity-mask",
+                 "inflection quantity is inconsistent with its ending");
+        }
+        output.push_back(quantity);
+    }
+    return output;
+}
+
+[[nodiscard]] std::vector<ParsedStemQuantity>
+parse_stem_quantities(const std::span<const std::byte> image,
+                      const SectionView &section,
+                      const std::span<const LexemeRecord> lexemes,
+                      const std::span<const std::string_view> stems) {
+    const auto bytes = section_bytes(image, section);
+    std::vector<ParsedStemQuantity> output;
+    output.reserve(section.count);
+    std::optional<std::uint32_t> previous_key;
+    for (std::uint32_t ordinal = 0; ordinal < section.count; ++ordinal) {
+        const auto offset =
+            static_cast<std::size_t>(ordinal) * stem_quantity_stride;
+        const auto key = read_u24_le(bytes, offset);
+        const auto lexeme_id = key & stem_quantity_lexeme_mask;
+        const auto lexical_slot =
+            (key >> stem_quantity_slot_shift) & stem_quantity_slot_mask;
+        const QuantityMask quantity{
+            read_u24_le(bytes, offset + 3U),
+            read_u24_le(bytes, offset + 6U),
+        };
+        if ((key >> stem_quantity_key_width) != 0U ||
+            lexeme_id >= lexemes.size()) {
+            fail("invalid-reference",
+                 "stem quantity key is outside the lexical table");
+        }
+        if (previous_key && key <= *previous_key) {
+            fail("invalid-order",
+                 "stem quantity keys must be unique and increasing");
+        }
+        previous_key = key;
+        const auto &lexeme = lexemes[lexeme_id];
+        const auto stem =
+            stems[lexeme.stems[static_cast<std::size_t>(lexical_slot)].value()];
+        const auto valid_bits = low_bits(stem.size());
+        if (stem.empty() || stem.size() > maximum_stem_size ||
+            quantity.known == 0U ||
+            (quantity.long_vowel & ~quantity.known) != 0U ||
+            ((quantity.known | quantity.long_vowel) & ~valid_bits) != 0U ||
+            !quantity_positions_are_vowels(stem, quantity.known)) {
+            fail("invalid-quantity-mask",
+                 "stem quantity is inconsistent with its lexical slot");
+        }
+        output.push_back({key, quantity});
+    }
+    return output;
+}
+
+void validate_section_shapes(const std::vector<SectionView> &sections) {
+    require_shape(find_section(sections, SectionType::stem_strings), 0U, 0U);
+    require_shape(find_section(sections, SectionType::meaning_strings), 0U, 0U);
+    require_shape(find_section(sections, SectionType::ending_strings), 0U, 0U);
+    require_shape(find_section(sections, SectionType::lexemes), 1U, 16U);
+    require_shape(find_section(sections, SectionType::stem_references), 1U, 3U);
+    require_shape(find_section(sections, SectionType::stem_prefix_boundaries),
+                  1U, 2U);
+    require_shape(find_section(sections, SectionType::inflections), 1U, 6U);
+    require_shape(
+        find_section(sections, SectionType::inflection_section_boundaries), 1U,
+        2U);
+    require_shape(find_section(sections, SectionType::suffix_strings), 0U, 0U);
+    require_shape(find_section(sections, SectionType::suffix_meanings), 0U, 0U);
+    require_shape(find_section(sections, SectionType::suffixes), 1U, 14U);
+    require_shape(find_section(sections, SectionType::prefix_strings), 0U, 0U);
+    require_shape(find_section(sections, SectionType::prefix_meanings), 0U, 0U);
+    require_shape(find_section(sections, SectionType::prefixes), 1U, 8U);
+    require_shape(find_section(sections, SectionType::tackon_strings), 0U, 0U);
+    require_shape(find_section(sections, SectionType::tackon_meanings), 0U, 0U);
+    require_shape(find_section(sections, SectionType::tackons), 1U, 10U);
+    require_shape(find_section(sections, SectionType::uniques), 1U, 12U);
+    require_shape(find_section(sections, SectionType::rewrite_strings), 0U, 0U);
+    require_shape(find_section(sections, SectionType::rewrite_meanings), 0U,
+                  0U);
+    require_shape(find_section(sections, SectionType::rewrites), 1U, 16U);
+
+    if (const auto *section = find_optional_section(
+            sections, SectionType::inflection_quantities)) {
+        require_shape(*section, 1U, inflection_quantity_stride);
+    }
+    if (const auto *section =
+            find_optional_section(sections, SectionType::stem_quantities)) {
+        require_shape(*section, 1U, stem_quantity_stride);
+    }
+
+    const auto &stem_boundaries =
+        find_section(sections, SectionType::stem_prefix_boundaries);
+    const auto &inflection_boundaries =
+        find_section(sections, SectionType::inflection_section_boundaries);
+    if (stem_boundaries.count != 704U || inflection_boundaries.count != 6U) {
+        fail("invalid-boundaries",
+             "PoC boundary section has an unexpected count");
+    }
+}
+
 } // namespace
 
 std::expected<std::unique_ptr<const Database>, LoadError>
@@ -248,8 +434,11 @@ Database::load_dense_poc(std::vector<std::byte> image) try {
     const auto declared_size = read_u64_le(bytes, 24);
     const auto declared_crc = read_u32_le(bytes, 32);
     const auto reserved = read_u32_le(bytes, 36);
-    if (major != 1U || minor != 6U || header_size != fixed_header_size) {
-        fail("unsupported-version", "only PoC WWDB version 1.6 is supported");
+    if (major != 1U ||
+        (minor != legacy_wwdb_minor && minor != quantity_wwdb_minor) ||
+        header_size != fixed_header_size) {
+        fail("unsupported-version",
+             "only PoC WWDB versions 1.6 and 1.7 are supported");
     }
     if (profile != 2U) {
         fail("unsupported-profile",
@@ -278,7 +467,10 @@ Database::load_dense_poc(std::vector<std::byte> image) try {
             fixed_header_size +
             static_cast<std::size_t>(index) * directory_entry_size;
         const auto raw_type = read_u32_le(bytes, offset);
-        if (raw_type < 1U || raw_type > 21U) {
+        const auto maximum_section_type = minor >= quantity_wwdb_minor
+                                              ? quantity_maximum_section_type
+                                              : legacy_maximum_section_type;
+        if (raw_type < 1U || raw_type > maximum_section_type) {
             fail("unknown-section", "WWDB contains an unknown section type");
         }
         const SectionView section{
@@ -356,33 +548,19 @@ Database::load_dense_poc(std::vector<std::byte> image) try {
     const auto &rewrite_meaning_section =
         find_section(sections, SectionType::rewrite_meanings);
     const auto &rewrite_section = find_section(sections, SectionType::rewrites);
-
-    require_shape(stem_pool_section, 0U, 0U);
-    require_shape(meaning_pool_section, 0U, 0U);
-    require_shape(ending_pool_section, 0U, 0U);
-    require_shape(lexeme_section, 1U, 16U);
-    require_shape(stem_reference_section, 1U, 3U);
-    require_shape(stem_boundary_section, 1U, 2U);
-    require_shape(inflection_section, 1U, 6U);
-    require_shape(inflection_boundary_section, 1U, 2U);
-    require_shape(suffix_string_section, 0U, 0U);
-    require_shape(suffix_meaning_section, 0U, 0U);
-    require_shape(suffix_section, 1U, 14U);
-    require_shape(prefix_string_section, 0U, 0U);
-    require_shape(prefix_meaning_section, 0U, 0U);
-    require_shape(prefix_section, 1U, 8U);
-    require_shape(tackon_string_section, 0U, 0U);
-    require_shape(tackon_meaning_section, 0U, 0U);
-    require_shape(tackon_section, 1U, 10U);
-    require_shape(unique_section, 1U, 12U);
-    require_shape(rewrite_string_section, 0U, 0U);
-    require_shape(rewrite_meaning_section, 0U, 0U);
-    require_shape(rewrite_section, 1U, 16U);
-    if (stem_boundary_section.count != 704U ||
-        inflection_boundary_section.count != 6U) {
-        fail("invalid-boundaries",
-             "PoC boundary section has an unexpected count");
+    const auto *inflection_quantity_section =
+        find_optional_section(sections, SectionType::inflection_quantities);
+    const auto *stem_quantity_section =
+        find_optional_section(sections, SectionType::stem_quantities);
+    if (minor >= quantity_wwdb_minor &&
+        (inflection_quantity_section == nullptr ||
+         stem_quantity_section == nullptr)) {
+        fail("missing-section", "WWDB 1.7 requires both quantity sections");
     }
+
+    // WHY: layout validation belongs to the versioned wire schema and must
+    // finish before any record is decoded into runtime objects.
+    validate_section_shapes(sections);
 
     auto database = std::unique_ptr<Database>{new Database{std::move(image)}};
     const auto owned_bytes = std::span<const std::byte>{database->image_};
@@ -787,6 +965,23 @@ Database::load_dense_poc(std::vector<std::byte> image) try {
             fail("reserved-bits", "invariable inflection payload is nonzero");
         }
         database->rules_.push_back(rule);
+    }
+
+    if (inflection_quantity_section != nullptr) {
+        database->inflection_quantities_ = parse_inflection_quantities(
+            owned_bytes, *inflection_quantity_section, database->rules_,
+            database->ending_strings_);
+    }
+
+    if (stem_quantity_section != nullptr) {
+        const auto parsed =
+            parse_stem_quantities(owned_bytes, *stem_quantity_section,
+                                  database->lexemes_, database->stem_strings_);
+        database->stem_quantities_.reserve(parsed.size());
+        for (const auto &quantity : parsed) {
+            database->stem_quantities_.push_back(
+                {quantity.key, quantity.quantity});
+        }
     }
 
     struct IndexedRule final {
@@ -1492,6 +1687,29 @@ const LexemeRecord &Database::lexeme(const LexemeId id) const {
 
 const InflectionRule &Database::rule(const RuleId id) const {
     return rules_.at(id.value());
+}
+
+QuantityMask Database::inflection_quantity(const RuleId id) const noexcept {
+    const auto ordinal = static_cast<std::size_t>(id.value());
+    return ordinal < inflection_quantities_.size()
+               ? inflection_quantities_[ordinal]
+               : QuantityMask{};
+}
+
+QuantityMask
+Database::stem_quantity(const LexemeId id,
+                        const std::uint8_t lexical_slot) const noexcept {
+    if (lexical_slot >= stem_quantity_slot_count) {
+        return {};
+    }
+    const auto key =
+        static_cast<std::uint32_t>(id.value()) |
+        (static_cast<std::uint32_t>(lexical_slot) << stem_quantity_slot_shift);
+    const auto found = std::ranges::lower_bound(stem_quantities_, key, {},
+                                                &StemQuantityRecord::key);
+    return found != stem_quantities_.end() && found->key == key
+               ? found->quantity
+               : QuantityMask{};
 }
 
 const SuffixRule &Database::suffix(const AddonId id) const {

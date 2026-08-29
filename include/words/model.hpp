@@ -205,6 +205,11 @@ enum class QuantityMatch : std::uint8_t {
     unknown,
 };
 
+struct QuantityMask final {
+    std::uint32_t known{};
+    std::uint32_t long_vowel{};
+};
+
 enum class QueryStatus : std::uint8_t {
     analyzed,
     unknown,
