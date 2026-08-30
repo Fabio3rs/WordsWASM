@@ -73,8 +73,11 @@ data are the work of William Whitaker and their subsequent contributors.
 
 ## License
 
-William Whitaker's original WORDS source code and data retain their original
-permissive license and attribution request. See
+The original WordsWASM code is available under the
+[MIT License](LICENSE), copyright 2026 Fabio R. Sluzala.
+
+William Whitaker's WORDS source code and data under `whitakers-words/` retain
+their original permissive license and attribution request. See
 [`whitakers-words/LICENCE.txt`](whitakers-words/LICENCE.txt) for the complete
 terms.
 
