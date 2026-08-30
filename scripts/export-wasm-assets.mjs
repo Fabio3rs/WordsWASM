@@ -1,4 +1,4 @@
-import {copyFile, mkdir, readFile, stat, writeFile} from "node:fs/promises";
+import {copyFile, mkdir, readFile, rm, stat, writeFile} from "node:fs/promises";
 import {createHash} from "node:crypto";
 import {promisify} from "node:util";
 import {brotliCompress, constants, gzip} from "node:zlib";
@@ -10,6 +10,7 @@ const compressGzip = promisify(gzip);
 function parseArgs(argv) {
   const options = {
     buildDir: "build/wasm",
+    bundle: undefined,
     fullDatabase: "whitakers-words/poc/compact-db/output/words-poc-dense.wwdb",
     searchDatabase: undefined,
     outDir: "dist/words-web",
@@ -19,6 +20,8 @@ function parseArgs(argv) {
     const argument = argv[index];
     if (argument === "--build-dir") {
       options.buildDir = argv[++index];
+    } else if (argument === "--bundle") {
+      options.bundle = argv[++index];
     } else if (argument === "--full-database") {
       options.fullDatabase = argv[++index];
     } else if (argument === "--search-database") {
@@ -39,6 +42,7 @@ function parseArgs(argv) {
 function usage() {
   return [
     "usage: node scripts/export-wasm-assets.mjs [options]",
+    "  --bundle full|search|both  database projections to export",
     "  --build-dir DIR   Emscripten build directory",
     "  --full-database FILE  WWDB with morphology and meanings",
     "  --search-database FILE  optional WWDB without meanings",
@@ -116,10 +120,22 @@ async function main() {
     return;
   }
 
+  const bundle = options.bundle ??
+    (options.searchDatabase === undefined ? "full" : "both");
+  if (!["full", "search", "both"].includes(bundle)) {
+    throw new Error(`unsupported bundle: ${bundle}`);
+  }
+  if ((bundle === "search" || bundle === "both") &&
+      options.searchDatabase === undefined) {
+    throw new Error(`--bundle ${bundle} requires --search-database`);
+  }
+
   const root = process.cwd();
   const buildDir = path.resolve(root, options.buildDir);
   const outDir = path.resolve(root, options.outDir);
-  const fullDatabase = path.resolve(root, options.fullDatabase);
+  const fullDatabase = bundle === "search"
+    ? undefined
+    : path.resolve(root, options.fullDatabase);
   const searchDatabase = options.searchDatabase === undefined
     ? undefined
     : path.resolve(root, options.searchDatabase);
@@ -129,9 +145,12 @@ async function main() {
     [path.join(buildDir, "words_wasm.d.ts"), "words_wasm.d.ts"],
     [path.join(buildDir, "words-engine.mjs"), "words-engine.mjs"],
     [path.join(buildDir, "words-engine.d.ts"), "words-engine.d.ts"],
-    [fullDatabase, "words-full.wwdb"],
+    [path.join(buildDir, "words-engine.d.mts"), "words-engine.d.mts"],
   ];
-  if (searchDatabase !== undefined) {
+  if (fullDatabase !== undefined) {
+    required.push([fullDatabase, "words-full.wwdb"]);
+  }
+  if (bundle !== "full" && searchDatabase !== undefined) {
     required.push([searchDatabase, "words-search.wwdb"]);
   }
   const optional = required.slice(0, 5).flatMap(([source, name]) => [
@@ -145,12 +164,31 @@ async function main() {
     }
   }
   await mkdir(outDir, {recursive: true});
+  // Keep repeated exports exact: switching an existing directory from
+  // `both` to `search` must not leave a stale full database available.
+  const managedNames = [
+    "words_wasm.mjs",
+    "words_wasm.wasm",
+    "words_wasm.d.ts",
+    "words-engine.mjs",
+    "words-engine.d.ts",
+    "words-engine.d.mts",
+    "words-full.wwdb",
+    "words-search.wwdb",
+  ];
+  await Promise.all([
+    "dataset-manifest.json",
+    "manifest.json",
+    ...managedNames.flatMap((name) => [name, `${name}.br`, `${name}.gz`]),
+  ].map((name) => rm(path.join(outDir, name), {force: true})));
 
-  const fullFormat = await inspectWwdb(fullDatabase, 2);
-  const searchFormat = searchDatabase === undefined
+  const fullFormat = fullDatabase === undefined
+    ? undefined
+    : await inspectWwdb(fullDatabase, 2);
+  const searchFormat = bundle === "full" || searchDatabase === undefined
     ? undefined
     : await inspectWwdb(searchDatabase, 4);
-  if (searchFormat !== undefined &&
+  if (fullFormat !== undefined && searchFormat !== undefined &&
       (searchFormat.major !== fullFormat.major ||
        searchFormat.minor !== fullFormat.minor)) {
     throw new Error("full and search WWDB files use different format versions");
@@ -183,13 +221,14 @@ async function main() {
   for (const name of identitySourceNames) {
     sources[name] = await digest(path.resolve(root, name));
   }
+  const wwdbFormat = fullFormat ?? searchFormat;
   const datasetManifest = {
     schema: "whitakers-words.dataset",
     schemaVersion: 1,
     idSpace: "wwdb-dense-ids-v1",
     // WHY: derive this from the artifact so release metadata cannot silently
     // lag behind a compatible format evolution in the native packer.
-    wwdbFormat: {major: fullFormat.major, minor: fullFormat.minor},
+    wwdbFormat: {major: wwdbFormat.major, minor: wwdbFormat.minor},
     sources,
   };
   const datasetId = `sha256:${createHash("sha256")
@@ -227,14 +266,15 @@ async function main() {
   for (const name of [...copied].sort()) {
     files[name] = await digest(path.join(outDir, name));
   }
-  const databases = {
-    full: {
+  const databases = {};
+  if (fullDatabase !== undefined) {
+    databases.full = {
       file: "words-full.wwdb",
       layoutProfile: "dense",
       provides: ["analysis", "search"],
-    },
-  };
-  if (searchDatabase !== undefined) {
+    };
+  }
+  if (bundle !== "full" && searchDatabase !== undefined) {
     databases.search = {
       file: "words-search.wwdb",
       layoutProfile: "search-only",

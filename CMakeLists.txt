@@ -104,6 +104,7 @@ target_sources(words_core PRIVATE
     src/lexeme.cpp
     src/lexer.cpp
     src/model.cpp
+    src/semantics.cpp
 )
 target_include_directories(words_core PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
@@ -179,6 +180,9 @@ if(EMSCRIPTEN)
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/wasmsrc/words-engine.d.ts"
             "${CMAKE_CURRENT_BINARY_DIR}/words-engine.d.ts"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/wasmsrc/words-engine.d.mts"
+            "${CMAKE_CURRENT_BINARY_DIR}/words-engine.d.mts"
         COMMENT "Copying the browser analysis wrapper"
         VERBATIM
     )

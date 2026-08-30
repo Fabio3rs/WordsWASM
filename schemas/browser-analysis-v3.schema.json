@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Whitaker's WORDS browser analysis v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schemaVersion", "datasetId", "query", "status", "hits", "diagnostics", "suggestions"],
+  "properties": {
+    "schema": {"const": "whitakers-words.browser-analysis"},
+    "schemaVersion": {"const": 3},
+    "datasetId": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "query": {"$ref": "browser-search-v3.schema.json#/$defs/query"},
+    "status": {"enum": ["analyzed", "unknown", "error"]},
+    "hits": {"type": "array", "items": {"$ref": "#/$defs/hit"}},
+    "diagnostics": {"type": "array", "items": {"$ref": "browser-search-v3.schema.json#/$defs/diagnostic"}},
+    "suggestions": {"type": "array", "items": {"$ref": "#/$defs/suggestion"}}
+  },
+  "$defs": {
+    "addonStep": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "target", "id", "type", "text", "meaning"],
+      "properties": {
+        "kind": {"const": "addon"}, "target": {"enum": ["form", "source", "auxiliary"]}, "id": {"type": "integer", "minimum": 0},
+        "type": {"enum": ["prefix", "tickon", "suffix", "tackon", "packon"]},
+        "text": {"type": "string"}, "meaning": {"type": "string"}
+      }
+    },
+    "rewriteStep": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "target", "id", "type", "rule", "meaning"],
+      "properties": {
+        "kind": {"const": "rewrite"}, "target": {"enum": ["form", "source", "auxiliary"]}, "id": {"type": "integer", "minimum": 0},
+        "type": {"enum": ["syncope", "orthographic"]}, "rule": {"type": "string"},
+        "before": {"type": "string"}, "after": {"type": "string"}, "meaning": {"type": "string"}
+      }
+    },
+    "derivation": {
+      "type": "object", "additionalProperties": false, "required": ["method", "steps"],
+      "properties": {
+        "method": {"enum": ["regular", "unique", "derived", "syncope", "orthographic", "compound", "roman-numeral"]},
+        "steps": {"type": "array", "items": {"oneOf": [{"$ref": "#/$defs/addonStep"}, {"$ref": "#/$defs/rewriteStep"}]}}
+      }
+    },
+    "lexicalHit": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "lexemeId", "lemma", "lexical", "rule", "quantityMatch", "partOfSpeech", "form", "morphology", "derivation", "meaning"],
+      "properties": {
+        "kind": {"const": "lexical"}, "lexemeId": {"type": "integer", "minimum": 0}, "lemma": {"type": "string"},
+        "lexical": {"$ref": "browser-search-v3.schema.json#/$defs/lexical"},
+        "rule": {"$ref": "browser-search-v3.schema.json#/$defs/rule"},
+        "quantityMatch": {"enum": ["unspecified", "exact", "unknown"]}, "partOfSpeech": {"type": "string"},
+        "form": {"$ref": "browser-search-v3.schema.json#/$defs/form"},
+        "morphology": {"$ref": "browser-search-v3.schema.json#/$defs/morphology"},
+        "derivation": {"$ref": "#/$defs/derivation"}, "meaning": {"type": "string"}
+      }
+    },
+    "compoundHit": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "lexemeId", "lemma", "lexical", "rule", "compound", "partOfSpeech", "form", "morphology", "derivation", "meaning"],
+      "properties": {
+        "kind": {"const": "compound"}, "lexemeId": {"type": "integer", "minimum": 0}, "lemma": {"type": "string"},
+        "lexical": {"$ref": "browser-search-v3.schema.json#/$defs/lexical"},
+        "rule": {"$ref": "browser-search-v3.schema.json#/$defs/rule"}, "partOfSpeech": {"const": "verb"},
+        "form": {"$ref": "browser-search-v3.schema.json#/$defs/form"},
+        "morphology": {"$ref": "browser-search-v3.schema.json#/$defs/morphology"},
+        "derivation": {"$ref": "#/$defs/derivation"}, "meaning": {"type": "string"},
+        "compound": {
+          "type": "object", "additionalProperties": false, "required": ["construction", "auxiliary", "sourceTense", "sourceVoice"],
+          "properties": {
+            "construction": {"enum": ["finite-sum", "esse", "fuisse", "iri"]}, "auxiliary": {"type": "string"},
+            "sourceTense": {"$ref": "browser-search-v3.schema.json#/$defs/nullableString"},
+            "sourceVoice": {"$ref": "browser-search-v3.schema.json#/$defs/nullableString"}
+          }
+        }
+      }
+    },
+    "artificialHit": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "artificial", "partOfSpeech", "form", "morphology", "derivation"],
+      "properties": {
+        "kind": {"const": "artificial"}, "partOfSpeech": {"const": "numeral"},
+        "form": {"$ref": "browser-search-v3.schema.json#/$defs/form"},
+        "morphology": {"$ref": "browser-search-v3.schema.json#/$defs/morphology"},
+        "derivation": {"$ref": "#/$defs/derivation"},
+        "artificial": {"type": "object", "additionalProperties": false, "required": ["method", "value", "wellFormed"], "properties": {"method": {"const": "roman-numeral"}, "value": {"type": "integer", "minimum": 1}, "wellFormed": {"type": "boolean"}}}
+      }
+    },
+    "hit": {"oneOf": [{"$ref": "#/$defs/lexicalHit"}, {"$ref": "#/$defs/compoundHit"}, {"$ref": "#/$defs/artificialHit"}]},
+    "segment": {
+      "type": "object", "additionalProperties": false, "required": ["text", "hits"],
+      "properties": {"text": {"type": "string"}, "hits": {"type": "array", "items": {"$ref": "#/$defs/lexicalHit"}}}
+    },
+    "suggestion": {
+      "type": "object", "additionalProperties": false, "required": ["method", "splitAt", "classification", "segments"],
+      "properties": {"method": {"const": "two-words"}, "splitAt": {"type": "integer", "minimum": 1}, "classification": {"enum": ["number-pair", "unconstrained"]}, "segments": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/segment"}}}
+    }
+  }
+}

@@ -83,7 +83,8 @@ dependência, mas cada chamada ao `gprbuild` recebe o mesmo número de CPUs.
 Uma tag `v*` acrescenta `words-web-VERSAO.tar.gz` e um manifesto SHA-256 a uma
 GitHub Release. O pacote contém:
 
-- `words-engine.mjs` e `words-engine.d.ts`, a API de aplicação;
+- `words-engine.mjs`, `words-engine.d.mts` e `words-engine.d.ts`, a API de
+  aplicação;
 - `words_wasm.mjs`, `words_wasm.wasm` e `words_wasm.d.ts`, a camada gerada;
 - `words-full.wwdb` e `words-search.wwdb`;
 - `dataset-manifest.json` e `manifest.json`;

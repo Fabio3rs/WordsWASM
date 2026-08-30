@@ -382,6 +382,7 @@ struct CompoundAnalysisIR final {
     std::optional<RuleId> source_rule;
     VerbMorphology morphology;
     DerivationIR source_derivation;
+    DerivationIR auxiliary_derivation;
     CompoundKind kind{CompoundKind::finite_sum};
     Tense source_tense{Tense::unknown};
     Voice source_voice{Voice::unknown};

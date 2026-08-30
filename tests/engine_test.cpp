@@ -611,6 +611,20 @@ TEST(EngineTest, AnalyzesBoundedCompoundsWithSum) {
     }
 }
 
+TEST(EngineTest, PreservesAuxiliaryDerivationInCompoundAnalysis) {
+    const auto result = test::engine().analyze_text("amata estque");
+    ASSERT_EQ(result.status, QueryStatus::analyzed);
+    ASSERT_EQ(result.compound_analyses.size(), 1U);
+    const auto &compound = result.compound_analyses.front();
+    EXPECT_EQ(compound.auxiliary, "estque");
+    ASSERT_EQ(compound.auxiliary_derivation.steps().size(), 1U);
+    const auto addon = compound.auxiliary_derivation.steps().front();
+    EXPECT_EQ(test::engine().database().addon_kind(addon), AddonKind::tackon);
+    EXPECT_EQ(test::engine().database().tackon_string(
+                  test::engine().database().tackon(addon).fix),
+              "que");
+}
+
 TEST(EngineTest, RejectsGeneralPhraseParsingOutsideCompoundGrammar) {
     for (const auto text : {"amata amat", "puella amat servum"}) {
         const auto result = test::engine().analyze_text(text);

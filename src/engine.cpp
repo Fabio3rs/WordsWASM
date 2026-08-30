@@ -2186,9 +2186,9 @@ struct TokenizedText final {
     return result;
 }
 
-[[nodiscard]] std::optional<VerbMorphology>
+[[nodiscard]] const AnalysisIR *
 finite_sum_morphology(const Database &database, const QueryResult &auxiliary) {
-    std::optional<VerbMorphology> selected;
+    const AnalysisIR *selected{};
     for (const auto &analysis : auxiliary.analyses) {
         const auto *verb = std::get_if<VerbMorphology>(&analysis.morphology);
         if (verb == nullptr || (verb->mood != Mood::indicative &&
@@ -2208,8 +2208,9 @@ finite_sum_morphology(const Database &database, const QueryResult &auxiliary) {
                               std::to_underlying(value.tense),
                               std::to_underlying(value.number), value.person};
         };
-        if (!selected || key(*verb) < key(*selected)) {
-            selected = *verb;
+        if (selected == nullptr ||
+            key(*verb) < key(std::get<VerbMorphology>(selected->morphology))) {
+            selected = &analysis;
         }
     }
     return selected;
@@ -2240,6 +2241,7 @@ is_compound_participle(const ParticipleMorphology &participle) noexcept {
 void append_compound(const AnalysisIR &source, const CompoundKind kind,
                      const Tense source_tense, const Voice source_voice,
                      const std::string_view auxiliary,
+                     const DerivationIR &auxiliary_derivation,
                      const VerbMorphology morphology,
                      std::vector<CompoundAnalysisIR> &output) {
     output.push_back(CompoundAnalysisIR{
@@ -2247,6 +2249,7 @@ void append_compound(const AnalysisIR &source, const CompoundKind kind,
         source.rule,
         morphology,
         source.derivation,
+        auxiliary_derivation,
         kind,
         source_tense,
         source_voice,
@@ -2257,7 +2260,11 @@ void append_compound(const AnalysisIR &source, const CompoundKind kind,
 void analyze_compound(const Database &database, QueryResult &result,
                       const QueryResult &auxiliary) {
     const auto auxiliary_word = auxiliary.surface.lookup_ascii;
-    const auto finite = finite_sum_morphology(database, auxiliary);
+    const auto *finite_analysis = finite_sum_morphology(database, auxiliary);
+    const auto *finite = finite_analysis == nullptr
+                             ? nullptr
+                             : std::get_if<VerbMorphology>(
+                                   &finite_analysis->morphology);
     const auto kind = auxiliary_word == "esse"     ? CompoundKind::esse
                       : auxiliary_word == "fuisse" ? CompoundKind::fuisse
                       : auxiliary_word == "iri"    ? CompoundKind::iri
@@ -2312,6 +2319,9 @@ void analyze_compound(const Database &database, QueryResult &result,
             }
             append_compound(analysis, kind, participle->tense,
                             participle->voice, auxiliary.surface.normalized_nfc,
+                            finite_analysis == nullptr
+                                ? DerivationIR{}
+                                : finite_analysis->derivation,
                             morphology, result.compound_analyses);
             sources.push_back(std::move(analysis));
             continue;
@@ -2327,6 +2337,7 @@ void analyze_compound(const Database &database, QueryResult &result,
             public_verb_paradigm(supine->conjugation, supine->variant);
         append_compound(analysis, kind, Tense::unknown, Voice::unknown,
                         auxiliary.surface.normalized_nfc,
+                        DerivationIR{},
                         VerbMorphology{conjugation, variant, Tense::future,
                                        Voice::passive, Mood::infinitive, 0U,
                                        GrammaticalNumber::unknown},

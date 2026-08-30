@@ -1,4 +1,5 @@
 #include "words/json.hpp"
+#include "words/semantics.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -36,185 +37,76 @@ dictionary_name(const DictionaryKind dictionary) noexcept {
                                                 : general_dictionary_name;
 }
 
-template <std::size_t Size>
-[[nodiscard]] Json
-nullable_token(const std::uint8_t ordinal,
-               const std::array<std::string_view, Size> &tokens) {
-    if (ordinal == 0U || ordinal >= tokens.size()) {
-        return nullptr;
-    }
-    return tokens[ordinal];
+[[nodiscard]] Json nullable_semantic(const std::string_view value) {
+    return value.empty() ? Json(nullptr) : Json(value);
 }
 
 [[nodiscard]] Json age_json(const std::uint8_t value) {
-    constexpr std::array<std::string_view, 9> values{
-        "",      "archaic",  "early",     "classical", "late",
-        "later", "medieval", "scholarly", "modern",
-    };
-    return nullable_token(value, values);
+    return nullable_semantic(age_name(value));
 }
 
 [[nodiscard]] Json lexical_frequency_json(const std::uint8_t value) {
-    constexpr std::array<std::string_view, 10> values{
-        "",         "very-frequent", "frequent",    "common",   "lesser",
-        "uncommon", "very-rare",     "inscription", "graffiti", "pliny",
-    };
-    return nullable_token(value, values);
+    return nullable_semantic(lexical_frequency_name(value));
 }
 
 [[nodiscard]] Json rule_frequency_json(const std::uint8_t value) {
-    constexpr std::array<std::string_view, 10> values{
-        "",     "most-frequent", "sometimes",   "uncommon",   "infrequent",
-        "rare", "very-rare",     "inscription", "reserved-m", "reserved-n",
-    };
-    return nullable_token(value, values);
+    return nullable_semantic(rule_frequency_name(value));
 }
 
 [[nodiscard]] Json subject_json(const std::uint8_t value) {
-    constexpr std::array<std::string_view, 12> values{
-        "",
-        "agriculture",
-        "biological-medical",
-        "drama-arts",
-        "ecclesiastic",
-        "grammar-literature",
-        "legal-government",
-        "poetic",
-        "science-philosophy",
-        "technical",
-        "military",
-        "mythology",
-    };
-    return nullable_token(value, values);
+    return nullable_semantic(subject_name(value));
 }
 
 [[nodiscard]] Json geography_json(const std::uint8_t value) {
-    constexpr std::array<std::string_view, 18> values{
-        "",       "africa",       "britain",        "china",  "scandinavia",
-        "egypt",  "france-gaul",  "germany",        "greece", "italy-rome",
-        "india",  "balkans",      "netherlands",    "persia", "near-east",
-        "russia", "spain-iberia", "eastern-europe",
-    };
-    return nullable_token(value, values);
+    return nullable_semantic(geography_name(value));
 }
 
 [[nodiscard]] Json source_json(const std::uint8_t value) {
-    constexpr std::array<std::string_view, 26> values{
-        "",
-        "source-a",
-        "beeson",
-        "cassells",
-        "adams-latin-sexual-vocabulary",
-        "stelten-ecclesiastical-latin",
-        "deferrari-aquinas",
-        "gildersleeve-lodge",
-        "collatinus",
-        "leverett",
-        "bracton",
-        "calepinus-novus",
-        "lewis-elementary-latin-dictionary",
-        "latham-medieval-word-list",
-        "lynn-nelson",
-        "oxford-latin-dictionary",
-        "souter",
-        "other-dictionaries",
-        "plater-white",
-        "lewis-short",
-        "found-in-translation",
-        "source-u",
-        "saxonis-vademecum",
-        "whitaker",
-        "temporary",
-        "user-submitted",
-    };
-    return nullable_token(value, values);
+    return nullable_semantic(source_name(value));
 }
 
 [[nodiscard]] Json noun_kind_json(const std::uint8_t value) {
-    constexpr std::array<std::string_view, 10> values{
-        "",       "singular-only", "plural-only", "abstract",
-        "group",  "proper-name",   "person",      "thing",
-        "locale", "place",
-    };
-    return nullable_token(value, values);
+    return nullable_semantic(noun_kind_name(value));
 }
 
 [[nodiscard]] Json pronoun_kind_json(const PronounKind value) {
-    constexpr std::array<std::string_view, 8> values{
-        "",           "personal",      "relative",
-        "reflexive",  "demonstrative", "interrogative",
-        "indefinite", "adjectival",
-    };
-    return nullable_token(std::to_underlying(value), values);
+    return nullable_semantic(pronoun_kind_name(value));
 }
 
 [[nodiscard]] Json gender_json(const Gender value) {
-    constexpr std::array<std::string_view, 5> values{
-        "", "masculine", "feminine", "neuter", "common",
-    };
-    return nullable_token(std::to_underlying(value), values);
+    return nullable_semantic(gender_name(value));
 }
 
 [[nodiscard]] Json case_json(const GrammaticalCase value) {
-    constexpr std::array<std::string_view, 8> values{
-        "",         "nominative", "vocative", "genitive",
-        "locative", "dative",     "ablative", "accusative",
-    };
-    return nullable_token(std::to_underlying(value), values);
+    return nullable_semantic(case_name(value));
 }
 
 [[nodiscard]] Json number_json(const GrammaticalNumber value) {
-    constexpr std::array<std::string_view, 3> values{"", "singular", "plural"};
-    return nullable_token(std::to_underlying(value), values);
+    return nullable_semantic(number_name(value));
 }
 
 [[nodiscard]] Json degree_json(const Degree value) {
-    constexpr std::array<std::string_view, 4> values{
-        "", "positive", "comparative", "superlative"};
-    return nullable_token(std::to_underlying(value), values);
+    return nullable_semantic(degree_name(value));
 }
 
 [[nodiscard]] Json numeral_type_json(const NumeralType value) {
-    constexpr std::array<std::string_view, 5> values{
-        "", "cardinal", "ordinal", "distributive", "adverbial"};
-    return nullable_token(std::to_underlying(value), values);
+    return nullable_semantic(numeral_type_name(value));
 }
 
 [[nodiscard]] Json tense_json(const Tense value) {
-    constexpr std::array<std::string_view, 7> values{
-        "",        "present",    "imperfect",     "future",
-        "perfect", "pluperfect", "future-perfect"};
-    return nullable_token(std::to_underlying(value), values);
+    return nullable_semantic(tense_name(value));
 }
 
 [[nodiscard]] Json voice_json(const Voice value) {
-    constexpr std::array<std::string_view, 3> values{"", "active", "passive"};
-    return nullable_token(std::to_underlying(value), values);
+    return nullable_semantic(voice_name(value));
 }
 
 [[nodiscard]] Json mood_json(const Mood value) {
-    constexpr std::array<std::string_view, 6> values{
-        "",           "indicative", "subjunctive",
-        "imperative", "infinitive", "participle"};
-    return nullable_token(std::to_underlying(value), values);
+    return nullable_semantic(mood_name(value));
 }
 
 [[nodiscard]] Json verb_kind_json(const VerbKind value) {
-    constexpr std::array<std::string_view, 12> values{
-        "",
-        "to-be",
-        "compound-of-to-be",
-        "governs-genitive",
-        "governs-dative",
-        "governs-ablative",
-        "transitive",
-        "intransitive",
-        "impersonal",
-        "deponent",
-        "semideponent",
-        "perfect-definite",
-    };
-    return nullable_token(std::to_underlying(value), values);
+    return nullable_semantic(verb_kind_name(value));
 }
 
 [[nodiscard]] Json paradigm_json(const std::uint8_t value) {
@@ -222,24 +114,6 @@ nullable_token(const std::uint8_t ordinal,
         return nullptr;
     }
     return static_cast<std::uint32_t>(value);
-}
-
-[[nodiscard]] std::string normalized_meaning(const std::string_view meaning) {
-    auto clean = meaning;
-    while (!clean.empty() && static_cast<unsigned char>(clean.front()) <= ' ') {
-        clean.remove_prefix(1U);
-    }
-    while (!clean.empty() && static_cast<unsigned char>(clean.back()) <= ' ') {
-        clean.remove_suffix(1U);
-    }
-    if (!clean.empty() && clean.front() == '|') {
-        clean.remove_prefix(1U);
-        while (!clean.empty() &&
-               static_cast<unsigned char>(clean.front()) <= ' ') {
-            clean.remove_prefix(1U);
-        }
-    }
-    return std::string{clean};
 }
 
 [[nodiscard]] std::string
@@ -775,16 +649,6 @@ simple_dictionary_form(const Database &database, const LexemeRecord &lexeme,
     };
 }
 
-[[nodiscard]] std::string_view status_name(const QueryStatus status) noexcept {
-    constexpr std::array<std::string_view, 3> names{"analyzed", "unknown",
-                                                    "error"};
-    const auto ordinal = static_cast<std::size_t>(std::to_underlying(status));
-    if (ordinal >= names.size()) {
-        return "error";
-    }
-    return names[ordinal];
-}
-
 [[nodiscard]] Json query_json(const QueryResult &result) {
     const auto text =
         result.multi_token_query
@@ -887,17 +751,6 @@ simple_dictionary_form(const Database &database, const LexemeRecord &lexeme,
 
 [[nodiscard]] Json morphology_json(const InvariableMorphology &) {
     return Json::object();
-}
-
-[[nodiscard]] std::string_view
-lexical_part_name(const PartOfSpeech part) noexcept {
-    constexpr std::array<std::string_view, 13> names{
-        "unknown",     "noun",        "pronoun",      "pronoun", "adjective",
-        "numeral",     "adverb",      "verb",         "verb",    "verb",
-        "preposition", "conjunction", "interjection",
-    };
-    const auto ordinal = static_cast<std::size_t>(std::to_underlying(part));
-    return ordinal < names.size() ? names[ordinal] : "unknown";
 }
 
 [[nodiscard]] std::string_view
@@ -1092,14 +945,6 @@ derivation_json(const Database &database, const DerivationIR &derivation,
                     : (derivation.count == 0U ? "regular" : "derived"))},
         {"steps", std::move(steps)},
     };
-}
-
-[[nodiscard]] std::string_view
-compound_kind_name(const CompoundKind kind) noexcept {
-    constexpr std::array<std::string_view, 5> names{"unknown", "finite-sum",
-                                                    "esse", "fuisse", "iri"};
-    const auto ordinal = static_cast<std::size_t>(std::to_underlying(kind));
-    return ordinal < names.size() ? names[ordinal] : names.front();
 }
 
 [[nodiscard]] std::string_view

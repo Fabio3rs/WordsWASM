@@ -1,6 +1,6 @@
 # Engine de análise no navegador
 
-Data do corte: 2026-08-29.
+Data do corte: 2026-08-30.
 
 A mesma `words::Engine` C++23 usada pelo CLI está disponível no navegador por
 uma fronteira Embind pequena. A camada WebAssembly não reimplementa lexer,
@@ -83,10 +83,15 @@ console.log(searchEngine.databaseKind); // "search"
 const compactOnly = searchEngine.search("cuique");
 ```
 
-`analyze` e `search` devolvem o contrato tipado Embind versão 2. Cada hit
-carrega IDs, `lemma`, classe efetiva, morfologia, flags lexicais e flags da
-regra. `analyze` acrescenta `meaning` e exige o banco full; `search` nunca
-acessa nem devolve definições e funciona com os dois perfis. O segundo argumento
+`analyze` e `search` devolvem, respectivamente, os contratos
+`whitakers-words.browser-analysis` e `whitakers-words.browser-search`, versão
+3. Hits são uma união discriminada por `kind`: `lexical`, `compound` ou
+`artificial`. Cada leitura contém a forma resolvida (`stem`, `ending`,
+`recognized`) e passos semânticos ordenados de addon e reescrita. Um passo
+indica seu `target` (`form`, `source` ou `auxiliary`) e resolve IDs para tipo e
+texto; por exemplo, `studiisque` expõe `studiis` e o tackon `que`.
+`analyze` acrescenta `meaning` e exige o banco full; `search` nunca acessa nem
+devolve definições e funciona com os dois perfis. O segundo argumento
 `{twoWords: true}` habilita somente a sugestão legada opt-in. Consultas de dois
 tokens pertencentes à gramática fechada de compostos continuam sendo
 reconhecidas normalmente pelo núcleo.
@@ -124,7 +129,8 @@ O diretório contém:
 - `words_wasm.wasm`: engine e bindings nativos;
 - `words_wasm.d.ts`: interface Embind de baixo nível gerada;
 - `words-engine.mjs`: wrapper estável de alto nível;
-- `words-engine.d.ts`: interface de alto nível da aplicação;
+- `words-engine.d.mts`: interface de alto nível associada ao módulo `.mjs`;
+- `words-engine.d.ts`: entrada de compatibilidade para consumo explícito;
 - `words-full.wwdb`: morfologia, metadados e significados;
 - `words-search.wwdb`: morfologia e índices, sem textos editoriais;
 - `dataset-manifest.json`: fontes canônicas que definem o espaço de IDs;
@@ -179,7 +185,7 @@ O smoke test
 artefatos compilados e o WWDB real:
 
 ```bash
-node scripts/export-wasm-assets.mjs \
+node scripts/export-wasm-assets.mjs --bundle both \
   --search-database \
     whitakers-words/poc/compact-db/output/words-poc-search-only.wwdb \
   --out-dir dist/words-web
@@ -196,8 +202,27 @@ reload transacional e equivalência de busca entre full e search. Também
 confere que `_malloc`/`HEAPU8` não fazem parte da API pública e que o banco
 search recusa análise rica.
 
+Os objetos reais também são validados contra
+`schemas/browser-analysis-v3.schema.json` e
+`schemas/browser-search-v3.schema.json`. A união TypeScript é verificada por
+um fixture de narrowing:
+
+```bash
+python tests/wasm_schema_test.py --root . \
+  --module build/wasm/words_wasm.mjs \
+  --database whitakers-words/poc/compact-db/output/words-poc-dense.wwdb \
+  --dataset-id "${dataset_id}"
+npx tsc --noEmit --strict --lib ES2022,DOM \
+  --module NodeNext --moduleResolution NodeNext \
+  tests/words_engine_types_test.mts
+```
+
+O exportador aceita `--bundle full`, `--bundle search` e `--bundle both`. O
+modo `search` não exige nem publica `words-full.wwdb`, sendo o pacote indicado
+para consumidores que só chamam `search()`.
+
 O smoke cobre ainda `amamus → lexemeId 2870 / ruleId 1312 / lemma amo` com
 presente, ativo, indicativo, primeira pessoa plural, e confirma que nenhum hit
 de `search()` contém `meaning`. No build Release medido neste corte,
-`words_wasm.wasm` tem 772.792 bytes RAW, 146.376 em Brotli 11 e 212.798 em
+`words_wasm.wasm` tem 767.066 bytes RAW, 149.448 em Brotli 11 e 218.268 em
 gzip 9.

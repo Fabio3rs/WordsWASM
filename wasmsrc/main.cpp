@@ -1,5 +1,6 @@
 #include "words/engine.hpp"
 #include "words/lexeme.hpp"
+#include "words/semantics.hpp"
 
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
@@ -97,24 +98,56 @@ struct BrowserRuleFlags final {
     auto operator<=>(const BrowserRuleFlags &) const = default;
 };
 
+struct BrowserForm final {
+    std::string stem;
+    bool has_stem_key{};
+    std::uint32_t stem_key{};
+    std::string ending;
+    std::string recognized;
+    auto operator<=>(const BrowserForm &) const = default;
+};
+
+struct BrowserDerivationStep final {
+    std::string kind;
+    std::string target;
+    std::uint32_t id{};
+    std::string type;
+    std::string text;
+    std::string rule;
+    std::string before;
+    std::string after;
+    bool has_meaning{};
+    std::string meaning;
+    auto operator<=>(const BrowserDerivationStep &) const = default;
+};
+
+struct BrowserDerivation final {
+    std::string method;
+    std::vector<BrowserDerivationStep> steps;
+    auto operator<=>(const BrowserDerivation &) const = default;
+};
+
 struct BrowserSearchHit final {
     bool has_lexeme{true};
+    std::string kind{"lexical"};
     std::uint32_t lexeme_id{};
     bool has_rule{};
     std::uint32_t rule_id{};
-    std::vector<std::uint32_t> addon_ids;
-    std::vector<std::uint32_t> rewrite_ids;
-    std::uint32_t score_flags{};
     std::string lemma;
     bool has_meaning{};
     std::string meaning;
     std::string part_of_speech;
+    BrowserForm form;
+    std::string quantity_match;
     BrowserMorphology morphology;
     BrowserLexicalFlags lexical;
     BrowserRuleFlags rule;
+    BrowserDerivation derivation;
     bool compound{};
     std::string compound_construction;
     std::string compound_auxiliary;
+    std::string compound_source_tense;
+    std::string compound_source_voice;
     bool artificial{};
     std::string artificial_method;
     std::uint32_t artificial_value{};
@@ -135,8 +168,8 @@ struct BrowserSearchSuggestion final {
 };
 
 struct BrowserSearchResult final {
-    std::string schema{"whitakers-words.search"};
-    std::uint32_t schema_version{2U};
+    std::string schema{"whitakers-words.browser-search"};
+    std::uint32_t schema_version{3U};
     std::string dataset_id;
     BrowserQuery query;
     std::string status;
@@ -145,192 +178,30 @@ struct BrowserSearchResult final {
     std::vector<BrowserSearchSuggestion> suggestions;
 };
 
-template <std::size_t Size>
-[[nodiscard]] std::string token(
-    const std::uint8_t ordinal,
-    const std::array<std::string_view, Size> &values) {
-    return ordinal == 0U || ordinal >= values.size()
-               ? std::string{}
-               : std::string{values[ordinal]};
-}
-
-[[nodiscard]] std::string age_name(const std::uint8_t value) {
-    constexpr std::array<std::string_view, 9> values{
-        "",      "archaic",  "early",     "classical", "late",
-        "later", "medieval", "scholarly", "modern",
-    };
-    return token(value, values);
-}
-
-[[nodiscard]] std::string lexical_frequency_name(const std::uint8_t value) {
-    constexpr std::array<std::string_view, 10> values{
-        "",         "very-frequent", "frequent",    "common",   "lesser",
-        "uncommon", "very-rare",     "inscription", "graffiti", "pliny",
-    };
-    return token(value, values);
-}
-
-[[nodiscard]] std::string rule_frequency_name(const std::uint8_t value) {
-    constexpr std::array<std::string_view, 10> values{
-        "",     "most-frequent", "sometimes",   "uncommon",   "infrequent",
-        "rare", "very-rare",     "inscription", "reserved-m", "reserved-n",
-    };
-    return token(value, values);
-}
-
-[[nodiscard]] std::string subject_name(const std::uint8_t value) {
-    constexpr std::array<std::string_view, 12> values{
-        "",                    "agriculture",
-        "biological-medical",  "drama-arts",
-        "ecclesiastic",        "grammar-literature",
-        "legal-government",    "poetic",
-        "science-philosophy",  "technical",
-        "military",            "mythology",
-    };
-    return token(value, values);
-}
-
-[[nodiscard]] std::string geography_name(const std::uint8_t value) {
-    constexpr std::array<std::string_view, 18> values{
-        "",       "africa",       "britain",        "china",  "scandinavia",
-        "egypt",  "france-gaul",  "germany",        "greece", "italy-rome",
-        "india",  "balkans",      "netherlands",    "persia", "near-east",
-        "russia", "spain-iberia", "eastern-europe",
-    };
-    return token(value, values);
-}
-
-[[nodiscard]] std::string source_name(const std::uint8_t value) {
-    constexpr std::array<std::string_view, 26> values{
-        "", "source-a", "beeson", "cassells",
-        "adams-latin-sexual-vocabulary", "stelten-ecclesiastical-latin",
-        "deferrari-aquinas", "gildersleeve-lodge", "collatinus", "leverett",
-        "bracton", "calepinus-novus", "lewis-elementary-latin-dictionary",
-        "latham-medieval-word-list", "lynn-nelson", "oxford-latin-dictionary",
-        "souter", "other-dictionaries", "plater-white", "lewis-short",
-        "found-in-translation", "source-u", "saxonis-vademecum", "whitaker",
-        "temporary", "user-submitted",
-    };
-    return token(value, values);
-}
-
-[[nodiscard]] std::string noun_kind_name(const std::uint8_t value) {
-    constexpr std::array<std::string_view, 10> values{
-        "",       "singular-only", "plural-only", "abstract", "group",
-        "proper-name", "person", "thing", "locale", "place",
-    };
-    return token(value, values);
-}
-
-template <class Enum, std::size_t Size>
-[[nodiscard]] std::string enum_name(
-    const Enum value, const std::array<std::string_view, Size> &values) {
-    return token(static_cast<std::uint8_t>(std::to_underlying(value)), values);
-}
-
-[[nodiscard]] std::string gender_name(const words::Gender value) {
-    constexpr std::array<std::string_view, 5> values{
-        "", "masculine", "feminine", "neuter", "common"};
-    return enum_name(value, values);
-}
-
-[[nodiscard]] std::string case_name(const words::GrammaticalCase value) {
-    constexpr std::array<std::string_view, 8> values{
-        "", "nominative", "vocative", "genitive", "locative", "dative",
-        "ablative", "accusative"};
-    return enum_name(value, values);
-}
-
-[[nodiscard]] std::string number_name(const words::GrammaticalNumber value) {
-    constexpr std::array<std::string_view, 3> values{"", "singular", "plural"};
-    return enum_name(value, values);
-}
-
-[[nodiscard]] std::string degree_name(const words::Degree value) {
-    constexpr std::array<std::string_view, 4> values{
-        "", "positive", "comparative", "superlative"};
-    return enum_name(value, values);
-}
-
-[[nodiscard]] std::string numeral_type_name(const words::NumeralType value) {
-    constexpr std::array<std::string_view, 5> values{
-        "", "cardinal", "ordinal", "distributive", "adverbial"};
-    return enum_name(value, values);
-}
-
-[[nodiscard]] std::string tense_name(const words::Tense value) {
-    constexpr std::array<std::string_view, 7> values{
-        "", "present", "imperfect", "future", "perfect", "pluperfect",
-        "future-perfect"};
-    return enum_name(value, values);
-}
-
-[[nodiscard]] std::string voice_name(const words::Voice value) {
-    constexpr std::array<std::string_view, 3> values{"", "active", "passive"};
-    return enum_name(value, values);
-}
-
-[[nodiscard]] std::string mood_name(const words::Mood value) {
-    constexpr std::array<std::string_view, 6> values{
-        "", "indicative", "subjunctive", "imperative", "infinitive",
-        "participle"};
-    return enum_name(value, values);
-}
-
-[[nodiscard]] std::string pronoun_kind_name(const words::PronounKind value) {
-    constexpr std::array<std::string_view, 8> values{
-        "", "personal", "relative", "reflexive", "demonstrative",
-        "interrogative", "indefinite", "adjectival"};
-    return enum_name(value, values);
-}
-
-[[nodiscard]] std::string verb_kind_name(const words::VerbKind value) {
-    constexpr std::array<std::string_view, 12> values{
-        "", "to-be", "compound-of-to-be", "governs-genitive",
-        "governs-dative", "governs-ablative", "transitive", "intransitive",
-        "impersonal", "deponent", "semideponent", "perfect-definite"};
-    return enum_name(value, values);
-}
-
-[[nodiscard]] std::string lexical_part_name(const words::PartOfSpeech part) {
-    constexpr std::array<std::string_view, 13> values{
-        "unknown", "noun", "pronoun", "pronoun", "adjective", "numeral",
-        "adverb", "verb", "verb", "verb", "preposition", "conjunction",
-        "interjection"};
-    const auto ordinal = static_cast<std::size_t>(std::to_underlying(part));
-    return std::string{ordinal < values.size() ? values[ordinal] : values[0]};
-}
-
-[[nodiscard]] std::string normalized_meaning(const std::string_view meaning) {
-    auto clean = meaning;
-    while (!clean.empty() && static_cast<unsigned char>(clean.front()) <= ' ') {
-        clean.remove_prefix(1U);
-    }
-    while (!clean.empty() && static_cast<unsigned char>(clean.back()) <= ' ') {
-        clean.remove_suffix(1U);
-    }
-    if (!clean.empty() && clean.front() == '|') {
-        clean.remove_prefix(1U);
-        while (!clean.empty() &&
-               static_cast<unsigned char>(clean.front()) <= ' ') {
-            clean.remove_prefix(1U);
-        }
-    }
-    return std::string{clean};
-}
-
-[[nodiscard]] std::string compound_kind_name(const words::CompoundKind kind) {
-    constexpr std::array<std::string_view, 5> values{
-        "", "finite-sum", "esse", "fuisse", "iri"};
-    return enum_name(kind, values);
-}
-
-[[nodiscard]] std::string status_name(const words::QueryStatus status) {
-    constexpr std::array<std::string_view, 3> values{
-        "analyzed", "unknown", "error"};
-    const auto ordinal = static_cast<std::size_t>(std::to_underlying(status));
-    return std::string{ordinal < values.size() ? values[ordinal] : values[2]};
-}
+using words::addon_kind_name;
+using words::age_name;
+using words::case_name;
+using words::compound_kind_name;
+using words::degree_name;
+using words::gender_name;
+using words::geography_name;
+using words::lexical_frequency_name;
+using words::lexical_part_name;
+using words::mood_name;
+using words::normalized_meaning;
+using words::noun_kind_name;
+using words::number_name;
+using words::numeral_type_name;
+using words::pronoun_kind_name;
+using words::quantity_match_name;
+using words::rewrite_kind_name;
+using words::rule_frequency_name;
+using words::source_name;
+using words::status_name;
+using words::subject_name;
+using words::tense_name;
+using words::verb_kind_name;
+using words::voice_name;
 
 [[nodiscard]] BrowserMorphology
 browser_morphology(const words::Morphology &morphology,
@@ -403,10 +274,19 @@ browser_morphology(const words::Morphology &morphology,
                                      Value, words::PrepositionMorphology>) {
                 output.kind = "preposition";
                 output.governs = case_name(value.governs);
-            } else {
+            } else if constexpr (std::is_same_v<
+                                     Value, words::InvariableMorphology>) {
+                if (lexical_part != words::PartOfSpeech::conjunction &&
+                    lexical_part != words::PartOfSpeech::interjection) {
+                    throw std::logic_error{
+                        "invariable morphology has an invalid lexical class"};
+                }
                 output.kind = lexical_part == words::PartOfSpeech::interjection
                                   ? "interjection"
                                   : "conjunction";
+            } else {
+                static_assert(sizeof(Value) == 0U,
+                              "new Morphology variant requires browser projection");
             }
         },
         morphology);
@@ -468,19 +348,123 @@ browser_lexical_flags(const words::LexemeRecord &lexeme) {
     return flags;
 }
 
-void append_derivation(BrowserSearchHit &hit,
-                       const words::DerivationIR &derivation) {
-    hit.addon_ids.reserve(derivation.count);
-    std::ranges::transform(derivation.steps(),
-                           std::back_inserter(hit.addon_ids),
-                           [](const words::AddonId id) { return id.value(); });
-    if (derivation.rewritten_form) {
-        hit.rewrite_ids.reserve(derivation.rewritten_form->count);
-        std::ranges::transform(
-            derivation.rewritten_form->steps(),
-            std::back_inserter(hit.rewrite_ids),
-            [](const words::RewriteId id) { return id.value(); });
+[[nodiscard]] BrowserDerivationStep
+browser_addon_step(const words::Database &database, const words::AddonId id,
+                   const bool include_meaning, const std::string_view target) {
+    BrowserDerivationStep step;
+    step.kind = "addon";
+    step.target = target;
+    step.id = id.value();
+    const auto kind = database.addon_kind(id);
+    step.type = addon_kind_name(kind);
+    if (kind == words::AddonKind::prefix ||
+        kind == words::AddonKind::tickon) {
+        const auto &prefix = database.prefix(id);
+        step.text = database.prefix_string(prefix.fix);
+        if (include_meaning) {
+            step.has_meaning = true;
+            step.meaning = database.prefix_meaning(prefix.meaning);
+        }
+    } else if (kind == words::AddonKind::suffix) {
+        const auto &suffix = database.suffix(id);
+        step.text = database.suffix_string(suffix.fix);
+        if (include_meaning) {
+            step.has_meaning = true;
+            step.meaning = database.suffix_meaning(suffix.meaning);
+        }
+    } else {
+        const auto &tackon = database.tackon(id);
+        step.text = database.tackon_string(tackon.fix);
+        if (include_meaning) {
+            step.has_meaning = true;
+            step.meaning = database.tackon_meaning(tackon.meaning);
+        }
     }
+    return step;
+}
+
+[[nodiscard]] BrowserDerivationStep
+browser_rewrite_step(const words::Database &database,
+                     const words::RewriteId id,
+                     const bool include_meaning,
+                     const std::string_view target) {
+    const auto &rewrite = database.rewrite(id);
+    BrowserDerivationStep step;
+    step.kind = "rewrite";
+    step.target = target;
+    step.id = id.value();
+    step.type = rewrite_kind_name(rewrite.kind);
+    step.rule = database.rewrite_string(rewrite.name);
+    step.before = database.rewrite_string(rewrite.before);
+    step.after = database.rewrite_string(rewrite.after);
+    if (include_meaning) {
+        step.has_meaning = true;
+        step.meaning = database.rewrite_meaning(rewrite.meaning);
+    }
+    return step;
+}
+
+[[nodiscard]] BrowserDerivation
+browser_derivation(const words::Database &database,
+                   const words::DerivationIR &derivation,
+                   const words::DictionaryKind dictionary,
+                   const bool include_meaning,
+                   const std::string_view method_override = {},
+                   const std::string_view target = "form") {
+    BrowserDerivation output;
+    const auto addons = derivation.steps();
+    const auto leading = derivation.rewritten_form
+                             ? std::min<std::size_t>(
+                                   derivation.rewritten_form->leading_addon_count,
+                                   addons.size())
+                             : 0U;
+    output.steps.reserve(addons.size() +
+                         (derivation.rewritten_form
+                              ? derivation.rewritten_form->steps().size()
+                              : 0U));
+    for (const auto id : addons.first(leading)) {
+        output.steps.push_back(
+            browser_addon_step(database, id, include_meaning, target));
+    }
+    if (derivation.rewritten_form) {
+        for (const auto id : derivation.rewritten_form->steps()) {
+            output.steps.push_back(
+                browser_rewrite_step(database, id, include_meaning, target));
+        }
+    }
+    for (const auto id : addons.subspan(leading)) {
+        output.steps.push_back(
+            browser_addon_step(database, id, include_meaning, target));
+    }
+
+    if (!method_override.empty()) {
+        output.method = method_override;
+    } else if (derivation.rewritten_form &&
+               !derivation.rewritten_form->steps().empty()) {
+        output.method = rewrite_kind_name(
+            database.rewrite(derivation.rewritten_form->steps().front()).kind);
+    } else if (dictionary == words::DictionaryKind::unique) {
+        output.method = "unique";
+    } else {
+        output.method = derivation.count == 0U ? "regular" : "derived";
+    }
+    return output;
+}
+
+[[nodiscard]] BrowserForm
+browser_form(const words::SurfaceForm &surface,
+             const words::AnalysisIR &analysis) {
+    BrowserForm form;
+    form.has_stem_key = analysis.stem_key != 0U;
+    form.stem_key = analysis.stem_key;
+    form.stem = analysis.derivation.rewritten_form
+                    ? analysis.derivation.rewritten_form->stem
+                    : std::string{surface.slice(analysis.stem)};
+    form.ending = analysis.derivation.rewritten_form
+                      ? analysis.derivation.rewritten_form->ending
+                      : std::string{surface.slice(analysis.ending)};
+    form.recognized = form.stem + form.ending;
+    return form;
 }
 
 [[nodiscard]] BrowserSearchHit
@@ -492,7 +476,9 @@ browser_hit(const words::Database &database, const words::SurfaceForm &surface,
     if (analysis.rule) {
         hit.rule_id = analysis.rule->value();
         const auto &rule = database.rule(*analysis.rule);
-        hit.rule = {true, age_name(rule.age), rule_frequency_name(rule.frequency)};
+        hit.rule = BrowserRuleFlags{
+            true, std::string{age_name(rule.age)},
+            std::string{rule_frequency_name(rule.frequency)}};
     }
     const auto &lexeme = database.lexeme(analysis.lexeme);
     hit.lemma = words::citation_lemma(database, lexeme, surface.normalized_nfc);
@@ -503,22 +489,29 @@ browser_hit(const words::Database &database, const words::SurfaceForm &surface,
     hit.morphology = browser_morphology(analysis.morphology,
                                         lexeme.part_of_speech);
     hit.part_of_speech = hit.morphology.kind;
+    hit.form = browser_form(surface, analysis);
+    hit.quantity_match = quantity_match_name(analysis.quantity_match);
     hit.lexical = browser_lexical_flags(lexeme);
-    append_derivation(hit, analysis.derivation);
+    hit.derivation = browser_derivation(database, analysis.derivation,
+                                        lexeme.dictionary, include_meaning);
     return hit;
 }
 
 [[nodiscard]] BrowserSearchHit
 browser_hit(const words::Database &database, const words::SurfaceForm &surface,
             const words::CompoundAnalysisIR &analysis,
-            const bool include_meaning) {
+            const bool include_meaning,
+            const std::string_view recognized) {
     BrowserSearchHit hit;
+    hit.kind = "compound";
     hit.lexeme_id = analysis.lexeme.value();
     hit.has_rule = analysis.source_rule.has_value();
     if (analysis.source_rule) {
         hit.rule_id = analysis.source_rule->value();
         const auto &rule = database.rule(*analysis.source_rule);
-        hit.rule = {true, age_name(rule.age), rule_frequency_name(rule.frequency)};
+        hit.rule = BrowserRuleFlags{
+            true, std::string{age_name(rule.age)},
+            std::string{rule_frequency_name(rule.frequency)}};
     }
     const auto &lexeme = database.lexeme(analysis.lexeme);
     hit.lemma = words::citation_lemma(database, lexeme, surface.normalized_nfc);
@@ -530,10 +523,25 @@ browser_hit(const words::Database &database, const words::SurfaceForm &surface,
                                         words::PartOfSpeech::verb);
     hit.part_of_speech = "verb";
     hit.lexical = browser_lexical_flags(lexeme);
-    append_derivation(hit, analysis.source_derivation);
+    hit.form.stem = analysis.kind == words::CompoundKind::iri ? "SUPINE + "
+                                                               : "PPL+";
+    hit.form.stem.append(analysis.auxiliary);
+    hit.form.recognized = recognized;
+    hit.derivation = browser_derivation(
+        database, analysis.source_derivation, lexeme.dictionary,
+        include_meaning, "compound", "source");
+    auto auxiliary_derivation = browser_derivation(
+        database, analysis.auxiliary_derivation,
+        words::DictionaryKind::general, include_meaning, {}, "auxiliary");
+    hit.derivation.steps.insert(
+        hit.derivation.steps.end(),
+        std::make_move_iterator(auxiliary_derivation.steps.begin()),
+        std::make_move_iterator(auxiliary_derivation.steps.end()));
     hit.compound = true;
     hit.compound_construction = compound_kind_name(analysis.kind);
     hit.compound_auxiliary = analysis.auxiliary;
+    hit.compound_source_tense = tense_name(analysis.source_tense);
+    hit.compound_source_voice = voice_name(analysis.source_voice);
     return hit;
 }
 
@@ -557,7 +565,7 @@ browser_search_result(const words::Engine &engine,
                       const bool include_meanings) {
     BrowserSearchResult output;
     if (include_meanings) {
-        output.schema = "whitakers-words.analysis";
+        output.schema = "whitakers-words.browser-analysis";
     }
     output.dataset_id = engine.dataset_id();
     output.query.text = result.multi_token_query
@@ -580,27 +588,28 @@ browser_search_result(const words::Engine &engine,
         for (const auto &analysis : result.compound_analyses) {
             output.hits.push_back(
                 browser_hit(engine.database(), result.surface, analysis,
-                            include_meanings));
+                            include_meanings, output.query.normalized));
         }
         for (const auto &artificial : result.artificial_analyses) {
             std::visit(
                 [&](const auto &analysis) {
                     BrowserSearchHit hit;
                     hit.has_lexeme = false;
+                    hit.kind = "artificial";
                     hit.part_of_speech = "numeral";
                     hit.morphology.kind = "numeral";
+                    hit.morphology.declension = 2U;
+                    hit.morphology.numeral_type = "cardinal";
+                    hit.form.stem = result.surface.slice(analysis.stem);
+                    hit.form.recognized = hit.form.stem;
+                    hit.derivation = browser_derivation(
+                        engine.database(), analysis.derivation,
+                        words::DictionaryKind::general, include_meanings,
+                        "roman-numeral");
                     hit.artificial = true;
                     hit.artificial_method = "roman-numeral";
                     hit.artificial_value = analysis.value;
                     hit.artificial_well_formed = analysis.well_formed;
-                    if (include_meanings) {
-                        hit.has_meaning = true;
-                        hit.meaning = std::to_string(analysis.value);
-                        hit.meaning.append(analysis.well_formed
-                                               ? " as a Roman numeral"
-                                               : " as an ill-formed Roman numeral");
-                    }
-                    append_derivation(hit, analysis.derivation);
                     output.hits.push_back(std::move(hit));
                 },
                 artificial);
@@ -829,25 +838,55 @@ EMSCRIPTEN_BINDINGS(words_analysis_engine) {
         .field("age", &BrowserRuleFlags::age)
         .field("frequency", &BrowserRuleFlags::frequency);
 
+    emscripten::value_object<BrowserForm>("SearchForm")
+        .field("stem", &BrowserForm::stem)
+        .field("hasStemKey", &BrowserForm::has_stem_key)
+        .field("stemKey", &BrowserForm::stem_key)
+        .field("ending", &BrowserForm::ending)
+        .field("recognized", &BrowserForm::recognized);
+
+    emscripten::value_object<BrowserDerivationStep>("SearchDerivationStep")
+        .field("kind", &BrowserDerivationStep::kind)
+        .field("target", &BrowserDerivationStep::target)
+        .field("id", &BrowserDerivationStep::id)
+        .field("type", &BrowserDerivationStep::type)
+        .field("text", &BrowserDerivationStep::text)
+        .field("rule", &BrowserDerivationStep::rule)
+        .field("before", &BrowserDerivationStep::before)
+        .field("after", &BrowserDerivationStep::after)
+        .field("hasMeaning", &BrowserDerivationStep::has_meaning)
+        .field("meaning", &BrowserDerivationStep::meaning);
+    emscripten::register_vector<BrowserDerivationStep>(
+        "VectorSearchDerivationStep");
+
+    emscripten::value_object<BrowserDerivation>("SearchDerivation")
+        .field("method", &BrowserDerivation::method)
+        .field("steps", &BrowserDerivation::steps);
+
     emscripten::value_object<BrowserSearchHit>("ResolvedSearchHit")
         .field("hasLexeme", &BrowserSearchHit::has_lexeme)
+        .field("kind", &BrowserSearchHit::kind)
         .field("lexemeId", &BrowserSearchHit::lexeme_id)
         .field("hasRule", &BrowserSearchHit::has_rule)
         .field("ruleId", &BrowserSearchHit::rule_id)
-        .field("addonIds", &BrowserSearchHit::addon_ids)
-        .field("rewriteIds", &BrowserSearchHit::rewrite_ids)
-        .field("scoreFlags", &BrowserSearchHit::score_flags)
         .field("lemma", &BrowserSearchHit::lemma)
         .field("hasMeaning", &BrowserSearchHit::has_meaning)
         .field("meaning", &BrowserSearchHit::meaning)
         .field("partOfSpeech", &BrowserSearchHit::part_of_speech)
+        .field("form", &BrowserSearchHit::form)
+        .field("quantityMatch", &BrowserSearchHit::quantity_match)
         .field("morphology", &BrowserSearchHit::morphology)
         .field("lexical", &BrowserSearchHit::lexical)
         .field("rule", &BrowserSearchHit::rule)
+        .field("derivation", &BrowserSearchHit::derivation)
         .field("compound", &BrowserSearchHit::compound)
         .field("compoundConstruction",
                &BrowserSearchHit::compound_construction)
         .field("compoundAuxiliary", &BrowserSearchHit::compound_auxiliary)
+        .field("compoundSourceTense",
+               &BrowserSearchHit::compound_source_tense)
+        .field("compoundSourceVoice",
+               &BrowserSearchHit::compound_source_voice)
         .field("artificial", &BrowserSearchHit::artificial)
         .field("artificialMethod", &BrowserSearchHit::artificial_method)
         .field("artificialValue", &BrowserSearchHit::artificial_value)

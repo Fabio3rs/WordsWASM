@@ -50,81 +50,265 @@ async function resolveModuleFactory(moduleFactory, moduleUrl) {
   return factory;
 }
 
+function deleteHandle(value) {
+  if (!Array.isArray(value) && typeof value?.delete === "function") {
+    value.delete();
+  }
+}
+
 function copyVector(values, map = (value) => value) {
   if (Array.isArray(values)) {
     return values.map(map);
   }
   const output = [];
-  try {
-    for (let index = 0; index < values.size(); ++index) {
-      output.push(map(values.get(index)));
-    }
-  } finally {
-    values.delete();
+  for (let index = 0; index < values.size(); ++index) {
+    output.push(map(values.get(index)));
   }
   return output;
 }
 
+function copyOwnedVector(values, map = (value) => value) {
+  try {
+    return copyVector(values, map);
+  } finally {
+    deleteHandle(values);
+  }
+}
+
+const nullableString = (value) => value === "" ? null : value;
+const nullableNumber = (value) => value === 0 ? null : value;
+
+function copyMorphology(raw) {
+  const nominal = () => ({
+    declension: nullableNumber(raw.declension),
+    variant: nullableNumber(raw.variant),
+    case: nullableString(raw.case),
+    number: nullableString(raw.number),
+    gender: nullableString(raw.gender),
+  });
+  switch (raw.kind) {
+    case "noun":
+    case "pronoun":
+      return {kind: raw.kind, ...nominal()};
+    case "adjective":
+      return {kind: raw.kind, ...nominal(), degree: nullableString(raw.degree)};
+    case "numeral":
+      return {
+        kind: raw.kind,
+        ...nominal(),
+        numeralType: nullableString(raw.numeralType),
+      };
+    case "adverb":
+      return {kind: raw.kind, degree: nullableString(raw.degree)};
+    case "verb":
+      return {
+        kind: raw.kind,
+        conjugation: nullableNumber(raw.conjugation),
+        variant: nullableNumber(raw.variant),
+        tense: nullableString(raw.tense),
+        voice: nullableString(raw.voice),
+        mood: nullableString(raw.mood),
+        person: nullableNumber(raw.person),
+        number: nullableString(raw.number),
+      };
+    case "participle":
+      return {
+        kind: raw.kind,
+        conjugation: nullableNumber(raw.conjugation),
+        variant: nullableNumber(raw.variant),
+        case: nullableString(raw.case),
+        number: nullableString(raw.number),
+        gender: nullableString(raw.gender),
+        tense: nullableString(raw.tense),
+        voice: nullableString(raw.voice),
+      };
+    case "supine":
+      return {
+        kind: raw.kind,
+        conjugation: nullableNumber(raw.conjugation),
+        variant: nullableNumber(raw.variant),
+        case: nullableString(raw.case),
+        number: nullableString(raw.number),
+        gender: nullableString(raw.gender),
+      };
+    case "preposition":
+      return {kind: raw.kind, governs: nullableString(raw.governs)};
+    case "conjunction":
+    case "interjection":
+      return {kind: raw.kind};
+    default:
+      throw new TypeError(`unsupported morphology kind: ${raw.kind}`);
+  }
+}
+
+function copyLexical(raw) {
+  const output = {
+    dictionary: raw.dictionary,
+    entryId: raw.entryId,
+    partOfSpeech: raw.partOfSpeech,
+    age: nullableString(raw.age),
+    subject: nullableString(raw.subject),
+    geography: nullableString(raw.geography),
+    frequency: nullableString(raw.frequency),
+    source: nullableString(raw.source),
+  };
+  switch (raw.partOfSpeech) {
+    case "noun":
+      return Object.assign(output, {
+        declension: nullableNumber(raw.declension),
+        variant: nullableNumber(raw.variant),
+        gender: nullableString(raw.gender),
+        nounKind: nullableString(raw.nounKind),
+      });
+    case "pronoun":
+      return Object.assign(output, {
+        declension: nullableNumber(raw.declension),
+        variant: nullableNumber(raw.variant),
+        pronounKind: nullableString(raw.pronounKind),
+      });
+    case "adjective":
+      return Object.assign(output, {
+        declension: nullableNumber(raw.declension),
+        variant: nullableNumber(raw.variant),
+        degree: nullableString(raw.degree),
+      });
+    case "numeral":
+      return Object.assign(output, {
+        declension: nullableNumber(raw.declension),
+        variant: nullableNumber(raw.variant),
+        numeralType: nullableString(raw.numeralType),
+        numeralValue: nullableNumber(raw.numeralValue),
+      });
+    case "adverb":
+      return Object.assign(output, {degree: nullableString(raw.degree)});
+    case "verb":
+      return Object.assign(output, {
+        conjugation: nullableNumber(raw.conjugation),
+        variant: nullableNumber(raw.variant),
+        verbKind: nullableString(raw.verbKind),
+      });
+    case "preposition":
+      return Object.assign(output, {governs: nullableString(raw.governs)});
+    default:
+      return output;
+  }
+}
+
+function copyForm(raw) {
+  return {
+    stem: raw.stem,
+    stemKey: raw.hasStemKey ? raw.stemKey : null,
+    ending: raw.ending,
+    recognized: raw.recognized,
+  };
+}
+
+function copyDerivation(raw) {
+  return {
+    method: raw.method,
+    steps: copyOwnedVector(raw.steps, (step) => {
+      const output = {
+        kind: step.kind,
+        target: step.target,
+        id: step.id,
+        type: step.type,
+      };
+      if (step.kind === "addon") {
+        output.text = step.text;
+      } else {
+        output.rule = step.rule;
+        if (step.before !== "") output.before = step.before;
+        if (step.after !== "") output.after = step.after;
+      }
+      if (step.hasMeaning) output.meaning = step.meaning;
+      return output;
+    }),
+  };
+}
+
 function copyHit(raw) {
   const hit = {
-    lexemeId: raw.hasLexeme ? raw.lexemeId : null,
-    ruleId: raw.hasRule ? raw.ruleId : null,
-    addonIds: copyVector(raw.addonIds),
-    rewriteIds: copyVector(raw.rewriteIds),
-    scoreFlags: raw.scoreFlags,
-    lemma: raw.lemma,
+    kind: raw.kind,
     partOfSpeech: raw.partOfSpeech,
-    morphology: raw.morphology,
-    lexical: raw.lexical,
-    rule: raw.rule.present ? {
-      age: raw.rule.age || null,
-      frequency: raw.rule.frequency || null,
-    } : null,
+    form: copyForm(raw.form),
+    morphology: copyMorphology(raw.morphology),
+    derivation: copyDerivation(raw.derivation),
   };
-  if (raw.hasMeaning) {
-    hit.meaning = raw.meaning;
-  }
-  if (raw.compound) {
-    hit.compound = {
-      construction: raw.compoundConstruction,
-      auxiliary: raw.compoundAuxiliary,
-    };
-  }
-  if (raw.artificial) {
+  if (raw.kind === "artificial") {
     hit.artificial = {
       method: raw.artificialMethod,
       value: raw.artificialValue,
       wellFormed: raw.artificialWellFormed,
     };
+    return hit;
+  }
+
+  hit.lexemeId = raw.lexemeId;
+  hit.lemma = raw.lemma;
+  hit.lexical = copyLexical(raw.lexical);
+  hit.rule = raw.rule.present ? {
+    id: raw.ruleId,
+    age: nullableString(raw.rule.age),
+    frequency: nullableString(raw.rule.frequency),
+  } : null;
+  if (raw.hasMeaning) hit.meaning = raw.meaning;
+  if (raw.kind === "lexical") {
+    hit.quantityMatch = raw.quantityMatch;
+  } else if (raw.kind === "compound") {
+    hit.compound = {
+      construction: raw.compoundConstruction,
+      auxiliary: raw.compoundAuxiliary,
+      sourceTense: nullableString(raw.compoundSourceTense),
+      sourceVoice: nullableString(raw.compoundSourceVoice),
+    };
   }
   return hit;
 }
 
-function copyResult(raw) {
+function copySegment(segment) {
   return {
-    schema: raw.schema,
-    schemaVersion: raw.schemaVersion,
-    datasetId: raw.datasetId,
-    query: raw.query,
-    status: raw.status,
-    hits: copyVector(raw.hits, copyHit),
-    diagnostics: copyVector(raw.diagnostics, (diagnostic) => ({
-      code: diagnostic.code,
-      severity: diagnostic.severity,
-      parameters: diagnostic.partOfSpeech === ""
-        ? {}
-        : {partOfSpeech: diagnostic.partOfSpeech},
-    })),
-    suggestions: copyVector(raw.suggestions, (suggestion) => ({
-      method: suggestion.method,
-      splitAt: suggestion.splitAt,
-      classification: suggestion.classification,
-      segments: copyVector(suggestion.segments, (segment) => ({
-        text: segment.text,
-        hits: copyVector(segment.hits, copyHit),
-      })),
-    })),
+    text: segment.text,
+    hits: copyOwnedVector(segment.hits, copyHit),
   };
+}
+
+function copySuggestion(suggestion) {
+  return {
+    method: suggestion.method,
+    splitAt: suggestion.splitAt,
+    classification: suggestion.classification,
+    segments: copyOwnedVector(suggestion.segments, copySegment),
+  };
+}
+
+function copyResult(raw) {
+  const handles = [];
+  try {
+    const hits = raw.hits;
+    handles.push(hits);
+    const diagnostics = raw.diagnostics;
+    handles.push(diagnostics);
+    const suggestions = raw.suggestions;
+    handles.push(suggestions);
+    return {
+      schema: raw.schema,
+      schemaVersion: raw.schemaVersion,
+      datasetId: raw.datasetId,
+      query: raw.query,
+      status: raw.status,
+      hits: copyVector(hits, copyHit),
+      diagnostics: copyVector(diagnostics, (diagnostic) => ({
+        code: diagnostic.code,
+        severity: diagnostic.severity,
+        parameters: diagnostic.partOfSpeech === ""
+          ? {}
+          : {partOfSpeech: diagnostic.partOfSpeech},
+      })),
+      suggestions: copyVector(suggestions, copySuggestion),
+    };
+  } finally {
+    for (const handle of handles) deleteHandle(handle);
+  }
 }
 
 /**
@@ -143,18 +327,25 @@ export async function createWordsAnalysisEngine({
   fetchImpl = globalThis.fetch,
 } = {}) {
   requireDatasetId(datasetId);
+  const hasDatabaseBytes = databaseBytes !== undefined;
+  const hasDatabaseUrl = databaseUrl !== undefined;
+  if (hasDatabaseBytes === hasDatabaseUrl) {
+    throw new TypeError(
+      "pass exactly one of databaseUrl or databaseBytes",
+    );
+  }
+  const bytesPromise = hasDatabaseBytes
+    ? Promise.resolve(databaseView(databaseBytes))
+    : downloadDatabase(databaseUrl, fetchImpl);
   const resolvedModuleUrl = new URL(moduleUrl, import.meta.url);
-  const factory = await resolveModuleFactory(moduleFactory, resolvedModuleUrl);
   const locateFile = moduleOptions.locateFile ??
     ((path) => new URL(path, resolvedModuleUrl).href);
-  const module = await factory({...moduleOptions, locateFile});
+  const modulePromise = resolveModuleFactory(moduleFactory, resolvedModuleUrl)
+    .then((factory) => factory({...moduleOptions, locateFile}));
+  const [module, bytes] = await Promise.all([modulePromise, bytesPromise]);
   if (typeof module.AnalysisEngine !== "function") {
     throw new TypeError("WebAssembly module has no AnalysisEngine binding");
   }
-
-  const bytes = databaseBytes === undefined
-    ? await downloadDatabase(databaseUrl, fetchImpl)
-    : databaseView(databaseBytes);
   const native = new module.AnalysisEngine();
   try {
     const loaded = native.loadDatabase(bytes, datasetId);

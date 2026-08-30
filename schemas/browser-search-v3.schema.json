@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Whitaker's WORDS browser search v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schemaVersion", "datasetId", "query", "status", "hits", "diagnostics", "suggestions"],
+  "properties": {
+    "schema": {"const": "whitakers-words.browser-search"},
+    "schemaVersion": {"const": 3},
+    "datasetId": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "query": {"$ref": "#/$defs/query"},
+    "status": {"enum": ["analyzed", "unknown", "error"]},
+    "hits": {"type": "array", "items": {"$ref": "#/$defs/hit"}},
+    "diagnostics": {"type": "array", "items": {"$ref": "#/$defs/diagnostic"}},
+    "suggestions": {"type": "array", "items": {"$ref": "#/$defs/suggestion"}}
+  },
+  "$defs": {
+    "nullableString": {"type": ["string", "null"]},
+    "nullableNumber": {"type": ["integer", "null"], "minimum": 1},
+    "query": {
+      "type": "object", "additionalProperties": false,
+      "required": ["text", "normalized", "mode"],
+      "properties": {"text": {"type": "string"}, "normalized": {"type": "string"}, "mode": {"const": "latin"}}
+    },
+    "diagnostic": {
+      "type": "object", "additionalProperties": false,
+      "required": ["code", "severity", "parameters"],
+      "properties": {
+        "code": {"type": "string"},
+        "severity": {"enum": ["info", "warning", "error"]},
+        "parameters": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "form": {
+      "type": "object", "additionalProperties": false,
+      "required": ["stem", "stemKey", "ending", "recognized"],
+      "properties": {
+        "stem": {"type": "string"}, "stemKey": {"$ref": "#/$defs/nullableNumber"},
+        "ending": {"type": "string"}, "recognized": {"type": "string"}
+      }
+    },
+    "morphology": {
+      "type": "object", "additionalProperties": false, "required": ["kind"],
+      "properties": {
+        "kind": {"enum": ["noun", "pronoun", "adjective", "numeral", "adverb", "verb", "participle", "supine", "preposition", "conjunction", "interjection"]},
+        "declension": {"$ref": "#/$defs/nullableNumber"}, "conjugation": {"$ref": "#/$defs/nullableNumber"},
+        "variant": {"$ref": "#/$defs/nullableNumber"}, "case": {"$ref": "#/$defs/nullableString"},
+        "number": {"$ref": "#/$defs/nullableString"}, "gender": {"$ref": "#/$defs/nullableString"},
+        "degree": {"$ref": "#/$defs/nullableString"}, "numeralType": {"$ref": "#/$defs/nullableString"},
+        "tense": {"$ref": "#/$defs/nullableString"}, "voice": {"$ref": "#/$defs/nullableString"},
+        "mood": {"$ref": "#/$defs/nullableString"}, "person": {"$ref": "#/$defs/nullableNumber"},
+        "governs": {"$ref": "#/$defs/nullableString"}
+      }
+    },
+    "lexical": {
+      "type": "object", "additionalProperties": false,
+      "required": ["dictionary", "entryId", "partOfSpeech", "age", "subject", "geography", "frequency", "source"],
+      "properties": {
+        "dictionary": {"enum": ["general", "unique"]}, "entryId": {"type": "integer", "minimum": 1},
+        "partOfSpeech": {"enum": ["noun", "pronoun", "adjective", "numeral", "adverb", "verb", "preposition", "conjunction", "interjection"]},
+        "age": {"$ref": "#/$defs/nullableString"}, "subject": {"$ref": "#/$defs/nullableString"},
+        "geography": {"$ref": "#/$defs/nullableString"}, "frequency": {"$ref": "#/$defs/nullableString"},
+        "source": {"$ref": "#/$defs/nullableString"}, "declension": {"$ref": "#/$defs/nullableNumber"},
+        "conjugation": {"$ref": "#/$defs/nullableNumber"}, "variant": {"$ref": "#/$defs/nullableNumber"},
+        "gender": {"$ref": "#/$defs/nullableString"}, "nounKind": {"$ref": "#/$defs/nullableString"},
+        "pronounKind": {"$ref": "#/$defs/nullableString"}, "degree": {"$ref": "#/$defs/nullableString"},
+        "numeralType": {"$ref": "#/$defs/nullableString"}, "numeralValue": {"$ref": "#/$defs/nullableNumber"},
+        "verbKind": {"$ref": "#/$defs/nullableString"}, "governs": {"$ref": "#/$defs/nullableString"}
+      }
+    },
+    "rule": {
+      "type": ["object", "null"],
+      "required": ["id", "age", "frequency"], "additionalProperties": false,
+      "properties": {"id": {"type": "integer", "minimum": 0}, "age": {"$ref": "#/$defs/nullableString"}, "frequency": {"$ref": "#/$defs/nullableString"}}
+    },
+    "addonStep": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "target", "id", "type", "text"],
+      "properties": {"kind": {"const": "addon"}, "target": {"enum": ["form", "source", "auxiliary"]}, "id": {"type": "integer", "minimum": 0}, "type": {"enum": ["prefix", "tickon", "suffix", "tackon", "packon"]}, "text": {"type": "string"}}
+    },
+    "rewriteStep": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "target", "id", "type", "rule"],
+      "properties": {"kind": {"const": "rewrite"}, "target": {"enum": ["form", "source", "auxiliary"]}, "id": {"type": "integer", "minimum": 0}, "type": {"enum": ["syncope", "orthographic"]}, "rule": {"type": "string"}, "before": {"type": "string"}, "after": {"type": "string"}}
+    },
+    "derivation": {
+      "type": "object", "additionalProperties": false, "required": ["method", "steps"],
+      "properties": {
+        "method": {"enum": ["regular", "unique", "derived", "syncope", "orthographic", "compound", "roman-numeral"]},
+        "steps": {"type": "array", "items": {"oneOf": [{"$ref": "#/$defs/addonStep"}, {"$ref": "#/$defs/rewriteStep"}]}}
+      }
+    },
+    "lexicalHit": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "lexemeId", "lemma", "lexical", "rule", "quantityMatch", "partOfSpeech", "form", "morphology", "derivation"],
+      "properties": {
+        "kind": {"const": "lexical"}, "lexemeId": {"type": "integer", "minimum": 0}, "lemma": {"type": "string"},
+        "lexical": {"$ref": "#/$defs/lexical"}, "rule": {"$ref": "#/$defs/rule"},
+        "quantityMatch": {"enum": ["unspecified", "exact", "unknown"]}, "partOfSpeech": {"type": "string"},
+        "form": {"$ref": "#/$defs/form"}, "morphology": {"$ref": "#/$defs/morphology"}, "derivation": {"$ref": "#/$defs/derivation"}
+      }
+    },
+    "compoundHit": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "lexemeId", "lemma", "lexical", "rule", "compound", "partOfSpeech", "form", "morphology", "derivation"],
+      "properties": {
+        "kind": {"const": "compound"}, "lexemeId": {"type": "integer", "minimum": 0}, "lemma": {"type": "string"},
+        "lexical": {"$ref": "#/$defs/lexical"}, "rule": {"$ref": "#/$defs/rule"}, "partOfSpeech": {"const": "verb"},
+        "form": {"$ref": "#/$defs/form"}, "morphology": {"$ref": "#/$defs/morphology"}, "derivation": {"$ref": "#/$defs/derivation"},
+        "compound": {
+          "type": "object", "additionalProperties": false, "required": ["construction", "auxiliary", "sourceTense", "sourceVoice"],
+          "properties": {"construction": {"enum": ["finite-sum", "esse", "fuisse", "iri"]}, "auxiliary": {"type": "string"}, "sourceTense": {"$ref": "#/$defs/nullableString"}, "sourceVoice": {"$ref": "#/$defs/nullableString"}}
+        }
+      }
+    },
+    "artificialHit": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "artificial", "partOfSpeech", "form", "morphology", "derivation"],
+      "properties": {
+        "kind": {"const": "artificial"}, "partOfSpeech": {"const": "numeral"}, "form": {"$ref": "#/$defs/form"},
+        "morphology": {"$ref": "#/$defs/morphology"}, "derivation": {"$ref": "#/$defs/derivation"},
+        "artificial": {"type": "object", "additionalProperties": false, "required": ["method", "value", "wellFormed"], "properties": {"method": {"const": "roman-numeral"}, "value": {"type": "integer", "minimum": 1}, "wellFormed": {"type": "boolean"}}}
+      }
+    },
+    "hit": {"oneOf": [{"$ref": "#/$defs/lexicalHit"}, {"$ref": "#/$defs/compoundHit"}, {"$ref": "#/$defs/artificialHit"}]},
+    "segment": {
+      "type": "object", "additionalProperties": false, "required": ["text", "hits"],
+      "properties": {"text": {"type": "string"}, "hits": {"type": "array", "items": {"$ref": "#/$defs/lexicalHit"}}}
+    },
+    "suggestion": {
+      "type": "object", "additionalProperties": false, "required": ["method", "splitAt", "classification", "segments"],
+      "properties": {"method": {"const": "two-words"}, "splitAt": {"type": "integer", "minimum": 1}, "classification": {"enum": ["number-pair", "unconstrained"]}, "segments": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/segment"}}}
+    }
+  }
+}
