@@ -5,6 +5,12 @@ banco WWDB. Ela identifica resultados dentro de uma build do conjunto de dados,
 mas não transporta forma de citação, significado, metadados editoriais nem a
 morfologia completa.
 
+Este é o backend textual do CLI e dos testes de aceitação. A API WebAssembly
+não serializa esse JSON: `search()` retorna structs Embind versão 2 que resolvem
+lema, classe, morfologia e flags diretamente, ainda sem definições. Assim o
+contrato enxuto persistível por IDs permanece disponível sem impor JSON à
+engine ou ao navegador.
+
 O schema correspondente está em
 [`../../schemas/search-v1.schema.json`](../../schemas/search-v1.schema.json).
 Uma interface que precise apresentar ou comparar a análise completa deve usar

@@ -199,8 +199,7 @@
           ]
         },
         "properties": {
-          "type": "object",
-          "minProperties": 1
+          "type": "object"
         },
         "stems": {
           "type": "array",

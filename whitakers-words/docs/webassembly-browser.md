@@ -4,8 +4,10 @@ Data do corte: 2026-08-29.
 
 A mesma `words::Engine` C++23 usada pelo CLI está disponível no navegador por
 uma fronteira Embind pequena. A camada WebAssembly não reimplementa lexer,
-morfologia, quantidade vocálica ou serialização: ela carrega um snapshot WWDB
-e chama os exportadores canônico e de busca do núcleo.
+morfologia ou quantidade vocálica: ela carrega um snapshot WWDB e projeta a IR
+em `struct`s registradas no Embind. JSON é backend de apresentação exclusivo
+do CLI e dos testes de aceitação nativos; `nlohmann_json` não participa do
+grafo de build WebAssembly.
 
 ## Fluxo e ownership
 
@@ -16,10 +18,9 @@ flowchart LR
     V --> D[Database imutável]
     D --> E[words::Engine]
     Q[string UTF-8] --> E
-    E --> A[analysis JSON string]
-    E --> S[search JSON string]
-    A --> P1[JSON.parse]
-    S --> P2[JSON.parse]
+    E --> R[ResolvedSearchResult C++]
+    R --> B[value_object + register_vector]
+    B --> J[objeto JavaScript tipado]
 ```
 
 O único bloco binário da API é o dataset serializado. O JavaScript entrega um
@@ -33,6 +34,12 @@ allocator e a memória linear continuam existindo internamente no módulo, mas
 o host não administra ponteiros. Isso elimina pares públicos `pointer +
 length` e a possibilidade de consulta depois de `free`.
 
+Resultados também não trafegam por ponteiro nem por texto JSON. `SearchQuery`,
+`ResolvedSearchHit`, `SearchMorphology`, flags lexicais, diagnósticos e
+sugestões são `value_object`; vetores têm registro explícito no Embind. A
+wrapper copia esses vetores para arrays JavaScript e libera imediatamente cada
+handle Embind.
+
 O carregamento nativo é transacional: um candidato só substitui a base ativa
 depois de `Engine::create` validar a imagem completa. Uma tentativa de reload
 inválida não descarta o snapshot anterior.
@@ -41,8 +48,8 @@ inválida não descarta o snapshot anterior.
 
 [`wasmsrc/words-engine.mjs`](../../wasmsrc/words-engine.mjs) expõe
 `createWordsAnalysisEngine`. Ela carrega o módulo, busca ou recebe o banco,
-verifica o resultado do loader e converte os JSONs do C++ em objetos
-JavaScript.
+verifica o resultado do loader e converte somente containers Embind em arrays
+JavaScript; não chama `JSON.parse`.
 
 ```javascript
 import {createWordsAnalysisEngine} from "./words-engine.mjs";
@@ -55,6 +62,10 @@ const engine = await createWordsAnalysisEngine({
 
 const complete = engine.analyze("mālum");
 const compact = engine.search("anaticulus");
+const love = engine.search("amamus");
+console.log(love.hits[0].lemma);             // "amo"
+console.log(love.hits[0].morphology.tense);  // "present"
+console.log(love.hits[0].morphology.person); // 1
 const suggestion = engine.analyze("texto", {twoWords: true});
 
 engine.dispose();
@@ -72,8 +83,10 @@ console.log(searchEngine.databaseKind); // "search"
 const compactOnly = searchEngine.search("cuique");
 ```
 
-`analyze` devolve o contrato `whitakers-words.analysis`, versão 1;
-`search` devolve `whitakers-words.search`, versão 1. O segundo argumento
+`analyze` e `search` devolvem o contrato tipado Embind versão 2. Cada hit
+carrega IDs, `lemma`, classe efetiva, morfologia, flags lexicais e flags da
+regra. `analyze` acrescenta `meaning` e exige o banco full; `search` nunca
+acessa nem devolve definições e funciona com os dois perfis. O segundo argumento
 `{twoWords: true}` habilita somente a sugestão legada opt-in. Consultas de dois
 tokens pertencentes à gramática fechada de compostos continuam sendo
 reconhecidas normalmente pelo núcleo.
@@ -81,6 +94,8 @@ reconhecidas normalmente pelo núcleo.
 `databaseKind` informa `"full"` ou `"search"`. `analyze()` exige o banco
 full e falha antes de consultar o núcleo quando a projeção search está ativa;
 `search()` funciona nas duas projeções com o mesmo contrato e espaço de IDs.
+Presença de lexema, regra e significado usa booleano explícito no C++; a
+wrapper converte IDs ausentes para `null`, sem reservar sentinelas.
 
 `dispose()` é idempotente e deve ser chamado quando a aplicação não precisar
 mais do snapshot. A wrapper bloqueia consultas depois do descarte. Erros
@@ -116,9 +131,9 @@ O diretório contém:
 - `manifest.json`: mapa, tamanhos e hashes dos artefatos publicados.
 
 `words-full.wwdb` é o perfil denso atual renomeado pela finalidade e pode
-produzir análise completa ou busca enxuta. `words-search.wwdb` é a projeção
-física `search-only`, sem significados, para clientes que só consomem
-`search-v1`. O loader lê suas colunas diretamente. Os dois bancos WWDB 1.8
+produzir análise completa ou busca resolvida. `words-search.wwdb` é a projeção
+física `search-only`, sem significados, para clientes que resolvem lema e
+morfologia sem carregar definições. O loader lê suas colunas diretamente. Os dois bancos WWDB 1.8
 compartilham IDs e regras; metadados tipados de PACKON evitam qualquer
 dependência indireta dos textos omitidos.
 
@@ -143,7 +158,10 @@ Tipos MIME recomendados:
 O `datasetId` é o SHA-256 de um manifesto canônico de fontes e semântica do
 packer, não o hash de `words-full.wwdb`. Assim `words-full.wwdb`,
 `words-search.wwdb` e o índice externo compartilham o mesmo espaço de
-IDs. Cada arquivo também tem seu SHA-256 físico em `manifest.json`.
+IDs. Quando a projeção editorial opcional `LEXEMES.LAT` existe, seu hash passa
+a integrar esse manifesto; uma base enriquecida não pode reutilizar a
+identidade do snapshot legado. Cada arquivo também tem seu SHA-256 físico em
+`manifest.json`.
 
 O módulo foi gerado para `web`, `worker` e `node`. Análises isoladas podem ser
 feitas na thread principal; uma interface interativa com lotes deve hospedar
@@ -173,7 +191,13 @@ node tests/wasm_smoke_test.mjs \
   dist/words-web/words-search.wwdb
 ```
 
-Ele cobre `mālum`, `anaticulus`, os dois contratos JSON, a rejeição de `ß`,
+Ele cobre `mālum`, `anaticulus`, os dois contratos tipados, a rejeição de `ß`,
 reload transacional e equivalência de busca entre full e search. Também
 confere que `_malloc`/`HEAPU8` não fazem parte da API pública e que o banco
 search recusa análise rica.
+
+O smoke cobre ainda `amamus → lexemeId 2870 / ruleId 1312 / lemma amo` com
+presente, ativo, indicativo, primeira pessoa plural, e confirma que nenhum hit
+de `search()` contém `meaning`. No build Release medido neste corte,
+`words_wasm.wasm` tem 772.792 bytes RAW, 146.376 em Brotli 11 e 212.798 em
+gzip 9.

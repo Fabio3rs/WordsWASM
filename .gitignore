@@ -19,6 +19,9 @@ __pycache__/
 .coverage
 coverage.xml
 
+# Deterministic projections of versioned editorial decisions.
+/whitakers-words/LEXEMES.LAT
+
 # Host metadata and editor leftovers.
 .DS_Store
 *~

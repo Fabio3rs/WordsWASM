@@ -45,9 +45,11 @@ Os nomes de distribuição descrevem capacidade, não layout:
 | `words-full.wwdb` | morfologia, metadados e significados | implementado; layout `dense` PoC 1.8 |
 | `words-search.wwdb` | morfologia e IDs, sem definições | implementado; layout `search-only` PoC 1.8 |
 
-O banco full produz `analysis-v1` e `search-v1`. O banco search produz somente
-`search-v1`; uma tentativa de análise completa falha explicitamente. Ambos
-usam o mesmo `datasetId`, calculado
+No CLI, o banco full produz os JSONs `analysis-v1` e `search-v1`; o banco
+search produz somente `search-v1`. No navegador, ambos expõem a projeção
+tipada Embind v2, mas somente o full admite `analyze()` e inclui `meaning`.
+Uma tentativa de análise completa no search falha explicitamente. Ambos usam
+o mesmo `datasetId`, calculado
 sobre o manifesto canônico de fontes e atribuição de IDs. Cada projeção tem
 também seu próprio hash físico para integridade e cache.
 
@@ -105,3 +107,6 @@ manifesto identificam cada representação física.
 calcula hashes e o `datasetId` sem timestamps nem caminhos absolutos no
 manifesto. O pacote tar também fixa ordem, proprietário e timestamp para
 reduzir variação entre builds equivalentes.
+O manifesto inclui `LEXEMES.LAT` quando a projeção editorial está presente,
+de modo que full e search enriquecidos compartilhem uma identidade nova e não
+colidam com o banco legado.

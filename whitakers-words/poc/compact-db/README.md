@@ -14,9 +14,11 @@ Este diretório materializa a aproximação descrita em
 - `columnar`: os mesmos registros densos, organizados em colunas de bytes;
 - `search-only`: perfil colunar sem definições nem `meaning_id`, com lexemas de
   14 bytes para autocomplete/busca de um site que resolve o conteúdo fora do
-  WWDB. Esse perfil usa o
-  [JSON enxuto de busca](../../docs/formato-json-busca.md); ele não produz
-  sozinho o [JSON completo de análise](../../docs/formato-json-canonico.md).
+  WWDB. No CLI esse perfil pode ser apresentado como
+  [JSON enxuto de busca](../../docs/formato-json-busca.md); no navegador ele
+  alimenta diretamente as structs Embind com lema, classe e morfologia. Ele
+  não produz sozinho o [JSON completo de análise](../../docs/formato-json-canonico.md)
+  nem qualquer `meaning`.
 
 No perfil colunar, IDs densos são posições nos vetores e cada coluna pode ser
 acessada diretamente; não é necessário reconstruir um array de structs. Ainda
@@ -143,11 +145,16 @@ resumido como baseline de cobertura e recebe hash próprio, sem participar da
 decisão de identidade ou significado.
 
 [`validate_lexeme_decisions.py`](validate_lexeme_decisions.py) é a barreira
-entre a fila e o futuro compilador. Ele valida o ledger contra a revisão exata,
+entre a fila e o compilador. Ele valida o ledger contra a revisão exata,
 confere estrutura, proveniência, sobreposição de sentidos, alvos de merge e
 referências quantitativas e produz um relatório completo. Candidatos ainda sem
 decisão são permitidos e reportados; uma decisão inválida faz o processo
 retornar código diferente de zero. O validador não produz microdados.
+
+[`compile_lexemes.py`](compile_lexemes.py) repete essa validação e projeta
+somente `accept_new` no JSONL numérico `LEXEMES.LAT`. O packer lê o arquivo
+quando presente, acrescenta os mesmos IDs ao full e ao search e rejeita
+colisão ou overflow do perfil `u16`. Sem o arquivo, o snapshot legado não muda.
 
 [`import_ada_rewrites.py`](import_ada_rewrites.py) lê as tabelas
 `words_engine-trick_tables.ad[bs]`, gera o bloco ortográfico delimitado em
@@ -161,7 +168,7 @@ bits com classe, paradigma, morfologia e metadados editoriais. O perfil
 compartilham os pools lexicais existentes.
 
 - lê os binários legados específicos desta cópia, `REWRITES.LAT` e
-  `QUANTITIES.LAT`;
+  `QUANTITIES.LAT`, além do `LEXEMES.LAT` opcional;
 - inclui e valida as 76 entradas de `UNIQUES.LAT`;
 - não contém o leitor do runtime WebAssembly;
 - usa IDs de 16 bits;
@@ -227,6 +234,13 @@ python3 poc/compact-db/validate_lexeme_decisions.py \
   --quantity-evidence QUANTITY_EVIDENCE.jsonl \
   --report /tmp/lexeme-decision-validation-report.json
 
+python3 poc/compact-db/compile_lexemes.py \
+  /tmp/lexeme-review.jsonl \
+  LEXEME_DECISIONS.jsonl \
+  --quantity-evidence QUANTITY_EVIDENCE.jsonl \
+  --output LEXEMES.LAT \
+  --report /tmp/lexeme-compilation-report.json
+
 /tmp/wwdb_poc_pack . poc/compact-db/output/words-poc.wwdb simple
 /tmp/wwdb_poc_pack . poc/compact-db/output/words-poc-dense.wwdb dense
 /tmp/wwdb_poc_pack . poc/compact-db/output/words-poc-columnar.wwdb columnar
@@ -272,9 +286,9 @@ continua pendente.
 | --- | ---: | ---: | ---: | ---: |
 | original, soma de 4 arquivos | 10.704.174 | 1.608.344 | 1.699.489 | 1.216.351 |
 | PoC simples 1.8 | 2.977.659 | 1.339.354 | 1.415.050 | 1.160.544 |
-| PoC denso por linhas 1.8 | 2.731.900 | 1.256.992 | 1.295.059 | 1.091.956 |
-| PoC denso por colunas 1.8 | 2.731.900 | 1.041.849 | 1.058.053 | 880.996 |
-| PoC busca sem definições 1.8 | 1.200.341 | 417.429 | 442.742 | 359.459 |
+| PoC denso por linhas 1.8 | 2.731.900 | 1.251.212 | 1.295.059 | 1.091.956 |
+| PoC denso por colunas 1.8 | 2.731.900 | 1.042.735 | 1.058.053 | 880.996 |
+| PoC busca sem definições 1.8 | 1.200.341 | 416.259 | 442.742 | 359.459 |
 
 O original é comprimido como quatro arquivos independentes; cada perfil PoC é
 um único WWDB. Todos os registros ativos de `ADDONS.LAT` e `UNIQUES.LAT`, além
@@ -284,3 +298,6 @@ incluídos.
 Os arquivos de `output/` são regeneráveis e não ficam no Git. Em releases, os
 hashes físicos de full, search, Brotli e gzip são publicados em
 `manifest.json` e no asset `words-assets-VERSAO.sha256`.
+Medições adicionais de Brotli/XZ, alternativas para IDs e o efeito da ordem
+física estão em
+[`docs/compressao-ids-e-ordem.md`](../../docs/compressao-ids-e-ordem.md).

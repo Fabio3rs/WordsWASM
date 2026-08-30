@@ -12,23 +12,89 @@ export interface Diagnostic {
   parameters: Record<string, string>;
 }
 
-export interface AnalysisDocument {
-  schema: "whitakers-words.analysis";
-  schemaVersion: 1;
-  query: QueryIdentity;
-  status: QueryStatus;
-  analyses: unknown[];
-  diagnostics: Diagnostic[];
+export interface MorphologyFlags {
+  kind: string;
+  declension: number;
+  conjugation: number;
+  variant: number;
+  case: string;
+  number: string;
+  gender: string;
+  degree: string;
+  numeralType: string;
+  tense: string;
+  voice: string;
+  mood: string;
+  person: number;
+  governs: string;
 }
 
-export interface SearchDocument {
-  schema: "whitakers-words.search";
-  schemaVersion: 1;
+export interface LexicalFlags {
+  dictionary: "general" | "unique";
+  entryId: number;
+  partOfSpeech: string;
+  declension: number;
+  conjugation: number;
+  variant: number;
+  gender: string;
+  nounKind: string;
+  pronounKind: string;
+  degree: string;
+  numeralType: string;
+  numeralValue: number;
+  verbKind: string;
+  governs: string;
+  age: string;
+  subject: string;
+  geography: string;
+  frequency: string;
+  source: string;
+}
+
+export interface RuleFlags {
+  age: string | null;
+  frequency: string | null;
+}
+
+export interface ResolvedHit {
+  lexemeId: number | null;
+  ruleId: number | null;
+  addonIds: number[];
+  rewriteIds: number[];
+  scoreFlags: number;
+  lemma: string;
+  partOfSpeech: string;
+  morphology: MorphologyFlags;
+  lexical: LexicalFlags;
+  rule: RuleFlags | null;
+  meaning?: string;
+  compound?: {
+    construction: string;
+    auxiliary: string;
+  };
+  artificial?: {
+    method: "roman-numeral";
+    value: number;
+    wellFormed: boolean;
+  };
+}
+
+export interface SearchSuggestion {
+  method: "two-words";
+  splitAt: number;
+  classification: "number-pair" | "unconstrained";
+  segments: Array<{text: string; hits: ResolvedHit[]}>;
+}
+
+export interface EngineDocument {
+  schema: "whitakers-words.analysis" | "whitakers-words.search";
+  schemaVersion: 2;
   datasetId: string;
   query: QueryIdentity;
   status: QueryStatus;
-  hits: unknown[];
+  hits: ResolvedHit[];
   diagnostics: Diagnostic[];
+  suggestions: SearchSuggestion[];
 }
 
 export interface AnalyzeOptions {
@@ -39,8 +105,8 @@ export interface WordsAnalysisEngine {
   readonly datasetId: string;
   readonly databaseBytes: number;
   readonly databaseKind: "full" | "search";
-  analyze(text: string, options?: AnalyzeOptions): AnalysisDocument;
-  search(text: string, options?: AnalyzeOptions): SearchDocument;
+  analyze(text: string, options?: AnalyzeOptions): EngineDocument;
+  search(text: string, options?: AnalyzeOptions): EngineDocument;
   dispose(): void;
 }
 

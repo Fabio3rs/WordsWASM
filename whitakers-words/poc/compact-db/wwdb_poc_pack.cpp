@@ -28,6 +28,8 @@
 #include <utility>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 namespace {
 
 using Bytes = std::vector<std::byte>;
@@ -167,11 +169,24 @@ struct QuantitySources final {
     std::vector<StemQuantitySource> stems;
 };
 
+struct CompiledLexeme final {
+    std::string decision_id;
+    std::array<std::string, 4> stems;
+    std::string meaning;
+    std::uint8_t part_of_speech{};
+    std::uint8_t paradigm{};
+    std::uint16_t class_payload{};
+    std::uint16_t numeric_value{};
+    std::uint32_t translation{};
+};
+
 std::uint8_t pack_paradigm(std::uint32_t which, std::uint32_t variant);
 
 [[noreturn]] void fail(std::string message) {
     throw std::runtime_error(std::move(message));
 }
+
+std::string_view trim(std::string_view value);
 
 Bytes read_file(const std::filesystem::path &path) {
     std::ifstream input(path, std::ios::binary | std::ios::ate);
@@ -189,6 +204,161 @@ Bytes read_file(const std::filesystem::path &path) {
     input.read(reinterpret_cast<char *>(result.data()),
                static_cast<std::streamsize>(result.size()));
     if (!input) {
+        fail("cannot read input: " + path.string());
+    }
+    return result;
+}
+
+std::uint32_t json_u32(const nlohmann::json &record,
+                       const std::string_view field,
+                       const std::uint32_t maximum,
+                       const std::string_view context) {
+    const auto found = record.find(field);
+    if (found == record.end() || !found->is_number_unsigned()) {
+        fail(std::string(context) + ": " + std::string(field) +
+             " must be an unsigned integer");
+    }
+    const auto value = found->get<std::uint64_t>();
+    if (value > maximum) {
+        fail(std::string(context) + ": " + std::string(field) +
+             " exceeds the microformat range");
+    }
+    return static_cast<std::uint32_t>(value);
+}
+
+std::vector<CompiledLexeme>
+read_compiled_lexemes(const std::filesystem::path &path) {
+    if (!std::filesystem::exists(path)) {
+        return {};
+    }
+    std::ifstream input(path);
+    if (!input) {
+        fail("cannot open input: " + path.string());
+    }
+
+    constexpr std::string_view expected_schema{
+        "whitakers-words.compiled-lexeme.v1"};
+    std::vector<CompiledLexeme> result;
+    std::unordered_map<std::string, std::size_t> decisions;
+    std::string line;
+    std::size_t line_number = 0;
+    while (std::getline(input, line)) {
+        ++line_number;
+        if (trim(line).empty()) {
+            continue;
+        }
+        const auto context = path.string() + ':' + std::to_string(line_number);
+        nlohmann::json record;
+        try {
+            record = nlohmann::json::parse(line);
+        } catch (const nlohmann::json::exception &error) {
+            fail(context + ": invalid JSON: " + error.what());
+        }
+        constexpr std::array<std::string_view, 9> fields{
+            "schema",          "decision_id", "stems",
+            "meaning",         "part_of_speech", "paradigm",
+            "class_payload",   "numeric_value", "translation",
+        };
+        if (!record.is_object() || record.size() != fields.size() ||
+            !std::ranges::all_of(fields, [&](const std::string_view field) {
+                return record.contains(field);
+            })) {
+            fail(context + ": compiled lexeme has an unexpected shape");
+        }
+        if (!record["schema"].is_string() ||
+            record["schema"].get<std::string>() != expected_schema ||
+            !record["decision_id"].is_string() ||
+            !record["meaning"].is_string()) {
+            fail(context + ": invalid compiled lexeme identity/text fields");
+        }
+
+        CompiledLexeme lexeme;
+        lexeme.decision_id = record["decision_id"].get<std::string>();
+        lexeme.meaning = record["meaning"].get<std::string>();
+        if (lexeme.decision_id.empty() || lexeme.meaning.empty() ||
+            lexeme.meaning.size() > std::numeric_limits<std::uint8_t>::max()) {
+            fail(context + ": empty ID/meaning or meaning exceeds 255 UTF-8 bytes");
+        }
+        if (!decisions.emplace(lexeme.decision_id, line_number).second) {
+            fail(context + ": duplicate decision_id " + lexeme.decision_id);
+        }
+        if (!record["stems"].is_array() || record["stems"].size() != 4U) {
+            fail(context + ": stems must contain exactly four strings");
+        }
+        bool has_stem = false;
+        for (std::size_t slot = 0; slot < lexeme.stems.size(); ++slot) {
+            const auto &source = record["stems"][slot];
+            if (!source.is_string()) {
+                fail(context + ": stems must contain only strings");
+            }
+            lexeme.stems[slot] = source.get<std::string>();
+            const auto valid = std::ranges::all_of(
+                lexeme.stems[slot], [](const char character) {
+                    return character >= 'a' && character <= 'z';
+                });
+            if (lexeme.stems[slot].size() > 18U || !valid) {
+                fail(context + ": stem must contain at most 18 lowercase ASCII letters");
+            }
+            has_stem = has_stem || !lexeme.stems[slot].empty();
+        }
+        if (!has_stem) {
+            fail(context + ": compiled lexeme has no radical");
+        }
+
+        lexeme.part_of_speech = static_cast<std::uint8_t>(
+            json_u32(record, "part_of_speech", 15U, context));
+        lexeme.paradigm = static_cast<std::uint8_t>(
+            json_u32(record, "paradigm", 0xffU, context));
+        lexeme.class_payload = static_cast<std::uint16_t>(
+            json_u32(record, "class_payload", 0x1fffU, context));
+        lexeme.numeric_value = static_cast<std::uint16_t>(
+            json_u32(record, "numeric_value", 1000U, context));
+        lexeme.translation =
+            json_u32(record, "translation", 0x3f'ffffU, context);
+        if (lexeme.part_of_speech != 1U && lexeme.part_of_speech != 2U &&
+            lexeme.part_of_speech != 4U && lexeme.part_of_speech != 5U &&
+            lexeme.part_of_speech != 6U && lexeme.part_of_speech != 7U &&
+            lexeme.part_of_speech != 10U && lexeme.part_of_speech != 11U &&
+            lexeme.part_of_speech != 12U) {
+            fail(context + ": part_of_speech is not importable");
+        }
+        const auto declension = static_cast<std::uint8_t>(lexeme.paradigm >> 4U);
+        const auto variant = static_cast<std::uint8_t>(lexeme.paradigm & 0x0fU);
+        if (declension > 9U || variant > 9U) {
+            fail(context + ": paradigm component exceeds 0..9");
+        }
+        const auto age = lexeme.translation & 0x0fU;
+        const auto subject = (lexeme.translation >> 4U) & 0x0fU;
+        const auto geography = (lexeme.translation >> 8U) & 0x1fU;
+        const auto frequency = (lexeme.translation >> 13U) & 0x0fU;
+        const auto source = (lexeme.translation >> 17U) & 0x1fU;
+        if (age > 8U || subject > 11U || geography > 17U || frequency > 9U ||
+            source != 17U) {
+            fail(context + ": translation metadata is outside the import policy");
+        }
+        if ((lexeme.part_of_speech == 1U &&
+             ((lexeme.class_payload & 0x07U) > 4U ||
+              (lexeme.class_payload >> 3U) > 9U)) ||
+            (lexeme.part_of_speech == 2U && lexeme.class_payload > 7U) ||
+            ((lexeme.part_of_speech == 4U || lexeme.part_of_speech == 6U) &&
+             lexeme.class_payload > 3U) ||
+            (lexeme.part_of_speech == 7U && lexeme.class_payload > 11U) ||
+            (lexeme.part_of_speech == 10U && lexeme.class_payload > 7U) ||
+            (lexeme.part_of_speech == 5U &&
+             ((lexeme.class_payload & 0x07U) > 4U ||
+              (lexeme.class_payload >> 3U) > 1000U)) ||
+            ((lexeme.part_of_speech == 11U || lexeme.part_of_speech == 12U) &&
+             lexeme.class_payload != 0U)) {
+            fail(context + ": class_payload is invalid for part_of_speech");
+        }
+        if ((lexeme.part_of_speech == 5U &&
+             lexeme.numeric_value != (lexeme.class_payload >> 3U)) ||
+            (lexeme.part_of_speech != 5U && lexeme.numeric_value != 0U)) {
+            fail(context + ": numeric_value disagrees with class_payload");
+        }
+        result.push_back(std::move(lexeme));
+    }
+    if (!input.eof()) {
         fail("cannot read input: " + path.string());
     }
     return result;
@@ -1188,6 +1358,7 @@ int main(int argc, char **argv) try {
     const auto uniques = read_uniques(root / "UNIQUES.LAT");
     const auto rewrites = read_rewrites(root / "REWRITES.LAT");
     const auto quantities = read_quantities(root / "QUANTITIES.LAT");
+    const auto compiled_lexemes = read_compiled_lexemes(root / "LEXEMES.LAT");
 
     if (dictionary.size() % dictionary_record_size != 0 ||
         stems.size() % stem_record_size != 0 ||
@@ -1196,12 +1367,23 @@ int main(int argc, char **argv) try {
         fail("unexpected legacy file size");
     }
 
-    const auto lexeme_count = dictionary.size() / dictionary_record_size;
-    const auto stem_reference_count = stems.size() / stem_record_size;
+    const auto legacy_lexeme_count = dictionary.size() / dictionary_record_size;
+    const auto imported_stem_reference_count = std::ranges::fold_left(
+        compiled_lexemes, std::size_t{0}, [](const std::size_t count,
+                                             const CompiledLexeme &lexeme) {
+            return count + static_cast<std::size_t>(std::ranges::count_if(
+                               lexeme.stems, [](const std::string &stem) {
+                                   return !stem.empty();
+                               }));
+        });
+    const auto legacy_stem_reference_count = stems.size() / stem_record_size;
+    const auto lexeme_count = legacy_lexeme_count + compiled_lexemes.size();
+    const auto stem_reference_count =
+        legacy_stem_reference_count + imported_stem_reference_count;
     if (lexeme_count + uniques.size() >
             std::numeric_limits<std::uint16_t>::max() + 1ULL ||
         stem_reference_count > std::numeric_limits<std::uint16_t>::max()) {
-        fail("PoC u16 record/reference capacity exceeded");
+        fail("WWDB u16 lexeme/reference capacity exceeded after LEXEMES.LAT import");
     }
 
     StringPool stem_pool;
@@ -1223,16 +1405,43 @@ int main(int argc, char **argv) try {
     const std::size_t lexeme_stride =
         !use_dense_records ? 19 : (include_meanings ? 16 : 14);
     lexeme_records.reserve(lexeme_count * lexeme_stride);
+    const auto structural_signature = [](
+                                          const auto &stem_spellings,
+                                          const std::uint8_t part,
+                                          const std::uint8_t paradigm_value,
+                                          const std::uint8_t attribute_0,
+                                          const std::uint8_t attribute_1,
+                                          const std::uint16_t numeric_value) {
+        std::string signature;
+        for (const auto &stem : stem_spellings) {
+            signature.append(stem);
+            signature.push_back('\x1f');
+        }
+        signature.append(std::to_string(part));
+        signature.push_back(':');
+        signature.append(std::to_string(paradigm_value));
+        signature.push_back(':');
+        signature.append(std::to_string(attribute_0));
+        signature.push_back(':');
+        signature.append(std::to_string(attribute_1));
+        signature.push_back(':');
+        signature.append(std::to_string(numeric_value));
+        return signature;
+    };
+    std::unordered_map<std::string, std::size_t> lexical_structures;
+    lexical_structures.reserve(lexeme_count);
 
-    for (std::size_t index = 0; index < lexeme_count; ++index) {
+    for (std::size_t index = 0; index < legacy_lexeme_count; ++index) {
         const auto record = std::span{dictionary}.subspan(
             index * dictionary_record_size, dictionary_record_size);
 
+        std::array<std::string, 4> stem_spellings;
         std::array<std::uint16_t, 4> stem_ids{};
         for (std::size_t stem_index = 0; stem_index < stem_ids.size();
              ++stem_index) {
-            stem_ids[stem_index] =
-                stem_pool.intern(fixed_string(record, stem_index * 18, 18));
+            stem_spellings[stem_index] =
+                fixed_string(record, stem_index * 18, 18);
+            stem_ids[stem_index] = stem_pool.intern(stem_spellings[stem_index]);
         }
         const auto meaning = fixed_string(record, 97, 80);
         std::uint16_t meaning_id = 0;
@@ -1274,6 +1483,10 @@ int main(int argc, char **argv) try {
             break;
         }
         const auto translation = pack_translation(record);
+        lexical_structures.try_emplace(
+            structural_signature(stem_spellings, pofs, paradigm, attribute_0,
+                                 attribute_1, numeric_value),
+            index);
         if (!use_dense_records) {
             for (const auto stem_id : stem_ids) {
                 append_u16_le(lexeme_records, stem_id);
@@ -1367,15 +1580,84 @@ int main(int argc, char **argv) try {
         }
     }
 
+    for (std::size_t imported_index = 0;
+         imported_index < compiled_lexemes.size(); ++imported_index) {
+        const auto &lexeme = compiled_lexemes[imported_index];
+        std::uint8_t attribute_0 = 0;
+        std::uint8_t attribute_1 = 0;
+        if (lexeme.part_of_speech == 1U) {
+            attribute_0 =
+                static_cast<std::uint8_t>(lexeme.class_payload & 0x07U);
+            attribute_1 =
+                static_cast<std::uint8_t>(lexeme.class_payload >> 3U);
+        } else if (lexeme.part_of_speech == 5U) {
+            attribute_0 =
+                static_cast<std::uint8_t>(lexeme.class_payload & 0x07U);
+        } else if (lexeme.part_of_speech == 2U ||
+                   lexeme.part_of_speech == 4U ||
+                   lexeme.part_of_speech == 6U ||
+                   lexeme.part_of_speech == 7U ||
+                   lexeme.part_of_speech == 10U) {
+            attribute_0 = static_cast<std::uint8_t>(lexeme.class_payload);
+        }
+        const auto signature = structural_signature(
+            lexeme.stems, lexeme.part_of_speech, lexeme.paradigm, attribute_0,
+            attribute_1, lexeme.numeric_value);
+        const auto [collision, inserted] = lexical_structures.try_emplace(
+            signature, legacy_lexeme_count + imported_index);
+        if (!inserted) {
+            fail("LEXEMES.LAT decision " + lexeme.decision_id +
+                 " collides with lexical entry " +
+                 std::to_string(collision->second + 1U));
+        }
+
+        std::array<std::uint16_t, 4> stem_ids{};
+        std::ranges::transform(lexeme.stems, stem_ids.begin(),
+                               [&](const std::string &stem) {
+                                   return stem_pool.intern(stem);
+                               });
+        std::uint16_t meaning_id = 0;
+        if (include_meanings) {
+            meaning_id = meaning_pool.intern(lexeme.meaning);
+        }
+        for (const auto stem_id : stem_ids) {
+            append_u16_le(lexeme_records, stem_id);
+        }
+        if (include_meanings) {
+            append_u16_le(lexeme_records, meaning_id);
+        }
+        if (!use_dense_records) {
+            append_u8(lexeme_records, lexeme.part_of_speech);
+            append_u8(lexeme_records, lexeme.paradigm);
+            append_u8(lexeme_records, attribute_0);
+            append_u8(lexeme_records, attribute_1);
+            append_u16_le(lexeme_records, lexeme.numeric_value);
+            append_u24_le(lexeme_records, lexeme.translation);
+        } else {
+            const std::uint64_t metadata =
+                static_cast<std::uint64_t>(lexeme.part_of_speech) |
+                (static_cast<std::uint64_t>(lexeme.paradigm) << 4U) |
+                (static_cast<std::uint64_t>(lexeme.translation) << 12U) |
+                (static_cast<std::uint64_t>(lexeme.class_payload) << 34U);
+            append_u48_le(lexeme_records, metadata);
+        }
+    }
+
     Bytes stem_reference_records;
     const std::size_t stem_reference_stride = use_dense_records ? 3 : 5;
     stem_reference_records.reserve(stem_reference_count *
                                    stem_reference_stride);
-    std::array<std::uint16_t, 703> stem_bucket_counts{};
+    struct PendingStemReference final {
+        std::string stem;
+        std::uint16_t lexeme_id{};
+        std::uint8_t lexical_slot{};
+        std::uint8_t stem_key{};
+    };
+    std::array<std::vector<PendingStemReference>, 703> stem_buckets;
     std::size_t previous_bucket = 0;
     std::string previous_stem;
 
-    for (std::size_t index = 0; index < stem_reference_count; ++index) {
+    for (std::size_t index = 0; index < legacy_stem_reference_count; ++index) {
         const auto record = std::span{stems}.subspan(index * stem_record_size,
                                                      stem_record_size);
         const auto stem = fixed_string(record, 0, 18);
@@ -1388,10 +1670,9 @@ int main(int argc, char **argv) try {
         }
         previous_bucket = bucket;
         previous_stem = stem;
-        ++stem_bucket_counts.at(bucket);
 
         const auto mnpc = read_u64_le(record, 48);
-        if (mnpc == 0 || mnpc > lexeme_count) {
+        if (mnpc == 0 || mnpc > legacy_lexeme_count) {
             fail("STEMFILE MNPC outside dictionary range");
         }
         const auto key = read_u32_le(record, 40);
@@ -1400,35 +1681,68 @@ int main(int argc, char **argv) try {
         }
 
         const auto lexeme_id = static_cast<std::uint16_t>(mnpc - 1);
-        if (!use_dense_records) {
-            append_u16_le(stem_reference_records, stem_pool.id_of(stem));
-            append_u16_le(stem_reference_records, lexeme_id);
-            append_u8(stem_reference_records, static_cast<std::uint8_t>(key));
+        const auto dictionary_record = std::span{dictionary}.subspan(
+            static_cast<std::size_t>(lexeme_id) * dictionary_record_size,
+            dictionary_record_size);
+        std::size_t lexical_slot = 4;
+        if (key >= 1 && key <= 4 &&
+            fixed_string(dictionary_record, (key - 1) * 18, 18) == stem) {
+            lexical_slot = key - 1;
         } else {
-            const auto dictionary_record = std::span{dictionary}.subspan(
-                static_cast<std::size_t>(lexeme_id) * dictionary_record_size,
-                dictionary_record_size);
-            std::size_t lexical_slot = 4;
-            if (key >= 1 && key <= 4 &&
-                fixed_string(dictionary_record, (key - 1) * 18, 18) == stem) {
-                lexical_slot = key - 1;
-            } else {
-                for (std::size_t candidate = 0; candidate < 4; ++candidate) {
-                    if (fixed_string(dictionary_record, candidate * 18, 18) ==
-                        stem) {
-                        lexical_slot = candidate;
-                        break;
-                    }
+            for (std::size_t candidate = 0; candidate < 4; ++candidate) {
+                if (fixed_string(dictionary_record, candidate * 18, 18) == stem) {
+                    lexical_slot = candidate;
+                    break;
                 }
             }
-            if (lexical_slot == 4) {
-                fail("STEMFILE stem is absent from referenced lexeme: " + stem);
-            }
+        }
+        if (lexical_slot == 4) {
+            fail("STEMFILE stem is absent from referenced lexeme: " + stem);
+        }
+        stem_buckets.at(bucket).push_back(PendingStemReference{
+            stem, lexeme_id, static_cast<std::uint8_t>(lexical_slot),
+            static_cast<std::uint8_t>(key)});
+    }
 
+    for (std::size_t imported_index = 0;
+         imported_index < compiled_lexemes.size(); ++imported_index) {
+        const auto lexeme_id_value = legacy_lexeme_count + imported_index;
+        if (lexeme_id_value > std::numeric_limits<std::uint16_t>::max()) {
+            fail("LEXEMES.LAT lexeme ID exceeds u16");
+        }
+        const auto lexeme_id = static_cast<std::uint16_t>(lexeme_id_value);
+        const auto &lexeme = compiled_lexemes[imported_index];
+        for (std::size_t lexical_slot = 0; lexical_slot < lexeme.stems.size();
+             ++lexical_slot) {
+            const auto &stem = lexeme.stems[lexical_slot];
+            if (stem.empty()) {
+                continue;
+            }
+            stem_buckets.at(stem_bucket(stem)).push_back(PendingStemReference{
+                stem, lexeme_id, static_cast<std::uint8_t>(lexical_slot),
+                static_cast<std::uint8_t>(lexical_slot + 1U)});
+        }
+    }
+
+    for (auto &bucket : stem_buckets) {
+        const auto imported = std::ranges::find_if(
+            bucket, [&](const PendingStemReference &reference) {
+                return reference.lexeme_id >= legacy_lexeme_count;
+            });
+        std::ranges::sort(imported, bucket.end(), {},
+                          &PendingStemReference::stem);
+        for (const auto &reference : bucket) {
+            if (!use_dense_records) {
+                append_u16_le(stem_reference_records,
+                              stem_pool.id_of(reference.stem));
+                append_u16_le(stem_reference_records, reference.lexeme_id);
+                append_u8(stem_reference_records, reference.stem_key);
+                continue;
+            }
             const auto packed_reference =
-                static_cast<std::uint32_t>(lexeme_id) |
-                (static_cast<std::uint32_t>(lexical_slot) << 16U) |
-                (key << 18U);
+                static_cast<std::uint32_t>(reference.lexeme_id) |
+                (static_cast<std::uint32_t>(reference.lexical_slot) << 16U) |
+                (static_cast<std::uint32_t>(reference.stem_key) << 18U);
             append_u24_le(stem_reference_records, packed_reference);
         }
     }
@@ -1436,8 +1750,8 @@ int main(int argc, char **argv) try {
     Bytes stem_boundaries;
     std::uint32_t stem_boundary = 0;
     append_u16_le(stem_boundaries, 0);
-    for (const auto count : stem_bucket_counts) {
-        stem_boundary += count;
+    for (const auto &bucket : stem_buckets) {
+        stem_boundary += static_cast<std::uint32_t>(bucket.size());
         if (stem_boundary > std::numeric_limits<std::uint16_t>::max()) {
             fail("stem prefix boundary exceeds u16");
         }

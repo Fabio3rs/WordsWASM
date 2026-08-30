@@ -50,14 +50,81 @@ async function resolveModuleFactory(moduleFactory, moduleUrl) {
   return factory;
 }
 
-function parseEngineJson(json, operation) {
-  try {
-    return JSON.parse(json);
-  } catch (error) {
-    throw new Error(`analysis engine returned invalid ${operation} JSON`, {
-      cause: error,
-    });
+function copyVector(values, map = (value) => value) {
+  if (Array.isArray(values)) {
+    return values.map(map);
   }
+  const output = [];
+  try {
+    for (let index = 0; index < values.size(); ++index) {
+      output.push(map(values.get(index)));
+    }
+  } finally {
+    values.delete();
+  }
+  return output;
+}
+
+function copyHit(raw) {
+  const hit = {
+    lexemeId: raw.hasLexeme ? raw.lexemeId : null,
+    ruleId: raw.hasRule ? raw.ruleId : null,
+    addonIds: copyVector(raw.addonIds),
+    rewriteIds: copyVector(raw.rewriteIds),
+    scoreFlags: raw.scoreFlags,
+    lemma: raw.lemma,
+    partOfSpeech: raw.partOfSpeech,
+    morphology: raw.morphology,
+    lexical: raw.lexical,
+    rule: raw.rule.present ? {
+      age: raw.rule.age || null,
+      frequency: raw.rule.frequency || null,
+    } : null,
+  };
+  if (raw.hasMeaning) {
+    hit.meaning = raw.meaning;
+  }
+  if (raw.compound) {
+    hit.compound = {
+      construction: raw.compoundConstruction,
+      auxiliary: raw.compoundAuxiliary,
+    };
+  }
+  if (raw.artificial) {
+    hit.artificial = {
+      method: raw.artificialMethod,
+      value: raw.artificialValue,
+      wellFormed: raw.artificialWellFormed,
+    };
+  }
+  return hit;
+}
+
+function copyResult(raw) {
+  return {
+    schema: raw.schema,
+    schemaVersion: raw.schemaVersion,
+    datasetId: raw.datasetId,
+    query: raw.query,
+    status: raw.status,
+    hits: copyVector(raw.hits, copyHit),
+    diagnostics: copyVector(raw.diagnostics, (diagnostic) => ({
+      code: diagnostic.code,
+      severity: diagnostic.severity,
+      parameters: diagnostic.partOfSpeech === ""
+        ? {}
+        : {partOfSpeech: diagnostic.partOfSpeech},
+    })),
+    suggestions: copyVector(raw.suggestions, (suggestion) => ({
+      method: suggestion.method,
+      splitAt: suggestion.splitAt,
+      classification: suggestion.classification,
+      segments: copyVector(suggestion.segments, (segment) => ({
+        text: segment.text,
+        hits: copyVector(segment.hits, copyHit),
+      })),
+    })),
+  };
 }
 
 /**
@@ -111,7 +178,9 @@ export async function createWordsAnalysisEngine({
         throw new Error("analysis requires words-full.wwdb");
       }
       const twoWords = options?.twoWords === true;
-      return parseEngineJson(native[operation](text, twoWords), operation);
+      // WHY: Embind transports typed value objects.  Only the CLI owns JSON
+      // presentation; browser callers receive normal JavaScript structures.
+      return copyResult(native[operation](text, twoWords));
     };
 
     return Object.freeze({

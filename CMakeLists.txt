@@ -30,7 +30,9 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 add_subdirectory(vendor/utf8proc SYSTEM)
-add_subdirectory(vendor/json SYSTEM)
+if(NOT EMSCRIPTEN)
+    add_subdirectory(vendor/json SYSTEM)
+endif()
 
 if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
     message(STATUS "Setting G++ flags")
@@ -99,7 +101,7 @@ target_sources(words_core PRIVATE
     src/artificial.cpp
     src/database.cpp
     src/engine.cpp
-    src/json.cpp
+    src/lexeme.cpp
     src/lexer.cpp
     src/model.cpp
 )
@@ -108,15 +110,25 @@ target_include_directories(words_core PUBLIC
 )
 target_link_libraries(words_core
     PUBLIC utf8proc::utf8proc
-    PRIVATE nlohmann_json::nlohmann_json
 )
 add_library(WordsWASM_lib ALIAS words_core)
+
+if(NOT EMSCRIPTEN)
+    # WHY: JSON is a presentation backend for the CLI and acceptance fixtures,
+    # not part of the analysis engine or its WebAssembly build graph.
+    add_library(words_json STATIC src/json.cpp)
+    target_link_libraries(words_json
+        PUBLIC words_core
+        PRIVATE nlohmann_json::nlohmann_json
+    )
+endif()
 if(NOT EMSCRIPTEN)
     # The packer is explicit because its output is a release/test fixture, not
     # a prerequisite for consumers that link only the analysis library.
     add_executable(wwdb_poc_pack EXCLUDE_FROM_ALL
         whitakers-words/poc/compact-db/wwdb_poc_pack.cpp
     )
+    target_link_libraries(wwdb_poc_pack PRIVATE nlohmann_json::nlohmann_json)
 endif()
 
 if(EMSCRIPTEN)
@@ -157,6 +169,7 @@ if(EMSCRIPTEN)
         -sFILESYSTEM=0
         -sDISABLE_EXCEPTION_CATCHING=0
         --emit-tsd words_wasm.d.ts
+        -flto
     )
 
     add_custom_target(WordsWASM_browser_wrapper ALL
@@ -195,7 +208,7 @@ if(EMSCRIPTEN)
     endif()
 else()
     add_executable(words_cli src/main.cpp)
-    target_link_libraries(words_cli PRIVATE words_core)
+    target_link_libraries(words_cli PRIVATE words_json)
 endif()
 
 if(ENABLE_TESTS AND GTest_FOUND)

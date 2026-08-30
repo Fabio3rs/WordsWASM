@@ -16,7 +16,8 @@ WebAssembly. O primeiro corte vertical já existe no diretório raiz do projeto:
 - aplica prefixos, sufixos, tickons, tackons e packons tipados de `ADDONS.LAT`;
 - recupera perfeitos sincopados com regras tipadas de `REWRITES.LAT`;
 - reproduz os truques ortográficos Ada com regras importadas e tipadas;
-- produz o JSON completo e o JSON enxuto de busca a partir da mesma IR;
+- devolve estruturas tipadas e permite ao CLI produzir JSON completo ou
+  enxuto a partir da mesma IR;
 - compara formas regulares e derivadas automaticamente com o executável Ada.
 
 O perfil WWDB lido atualmente é uma ponte para usar os dados reais. Ele não é
@@ -43,7 +44,7 @@ O latim não é uma linguagem de programação, mas a divisão de um compilador 
 | tabela de símbolos | índice de radicais e lexemas |
 | análise semântica | compatibilidade de classe, paradigma, chave e gênero |
 | IR | candidato e análise morfológica tipados |
-| backend | JSON completo ou search |
+| backend | structs Embind ou apresentação JSON do CLI |
 
 Não há AST sintática tradicional nem geração de código. Também não há uma VM
 de regras: a engine é tabular e direcionada às estruturas do latim registradas
@@ -102,8 +103,8 @@ flowchart LR
     L2 --> E
     UA --> A[AnalysisIR]
     S --> A
-    A --> F[analysis-v1]
-    A --> J[search-v1]
+    A --> T[structs tipadas]
+    A --> P[apresentação JSON do CLI]
 ```
 
 O parser morfológico não interpreta expressões. Ele encontra todas as
@@ -492,22 +493,27 @@ que as tabelas tipadas são insuficientes.
 
 ```mermaid
 flowchart LR
-    A[AnalysisIR lexical] --> F[Full projector]
-    A --> S[Search projector]
-    R[ArtificialAnalysisIR] --> F
-    R --> S
-    D[Database] --> F
-    F --> AJ[whitakers-words.analysis v1]
-    S --> SJ[whitakers-words.search v1]
+    A[AnalysisIR lexical] --> T[projeção tipada]
+    R[ArtificialAnalysisIR] --> T
+    D[Database] --> T
+    T --> E[value_object Embind v2]
+    A --> J[backend JSON do CLI]
+    R --> J
+    D --> J
+    J --> AJ[analysis/search JSON v1]
 ```
 
-O backend completo resolve forma de dicionário, meaning e metadados. O backend
-search emite `lexemeId`, `ruleId`, `addonIds`, `scoreFlags` e, quando houver
-reescrita lexical, `rewriteIds`, com um ou dois elementos. Compostos incluem um
-discriminador pequeno com construção e auxiliar. Para um resultado
-artificial sem registro persistido, emite IDs nulos e um pequeno discriminador
-`artificial`; isso evita reservar IDs sentinela no namespace do dataset.
-Parsing e semântica não dependem de `nlohmann_json`.
+A engine e o adaptador WebAssembly retornam estruturas. A projeção `search`
+resolve `lemma`, classe, morfologia, propriedades/metadados lexicais e flags da
+regra, além de `lexemeId`, `ruleId`, `addonIds`, `rewriteIds` e `scoreFlags`;
+ela não toca no pool de meanings. `analyze` usa a mesma forma tipada e
+acrescenta `meaning` quando o WWDB é full. Presença é representada por booleano
+explícito no C++ e por `null`/campo ausente na wrapper, nunca por ID sentinela.
+
+`src/json.cpp` pertence à biblioteca separada `words_json`, ligada pelo CLI e
+pelos testes de aceitação. `words_core` e o binário WebAssembly não compilam
+nem ligam `nlohmann_json`; JSON é apresentação, não representação interna nem
+ABI da engine.
 
 Para Unicode:
 
@@ -699,21 +705,21 @@ Os testes cobrem:
 
 ## Próximas etapas
 
-1. revisar por lotes os 66 candidatos de
-   `prepare_lexeme_review.py` e versionar somente decisões editoriais fixadas a
-   `draft_id + revision`; o validador do ledger já está implementado;
-2. migrar contagens/offsets de referências de radical do packer para `u32`
-   antes de tentar incorporar a fila lexical de milhares de itens;
-3. gerar `LEXEMES.LAT` somente de decisões `accept_new` e medir colisões e
-   crescimento antes de conectá-lo ao WWDB final, mantendo o importador Ada
-   como fonte de migração verificável;
-4. separar fisicamente `words-full.wwdb` e `words-search.wwdb` com o mesmo
-   `datasetId`;
-5. revisar por lotes a fila produzida por `suggest_quantity_evidence.py`,
+1. revisar por lotes os candidatos de `prepare_lexeme_review.py` e versionar
+   somente decisões editoriais fixadas a `draft_id + revision`; validador,
+   compilador `accept_new → LEXEMES.LAT` e importação full/search já estão
+   implementados;
+2. medir o primeiro lote curado dentro do limite estreito e migrar somente as
+   contagens/fronteiras de radical que precisarem de `u32`;
+3. habilitar o perfil full colunar no loader e comparar startup/heap com o
+   perfil por linhas; detalhes em
+   [`compressao-ids-e-ordem.md`](compressao-ids-e-ordem.md);
+4. revisar por lotes a fila produzida por `suggest_quantity_evidence.py`,
    ampliar `QUANTITY_EVIDENCE.jsonl` somente com locators confirmados e
    estender o mesmo modelo a addons/uniques;
-6. implementar a ABI C e o adaptador WebAssembly;
-7. medir startup, memória e latência no navegador antes de trocar os índices.
+5. medir startup, memória e latência no navegador antes de trocar os índices;
+6. criar ABI C somente se surgir consumidor que não possa usar o adaptador
+   WebAssembly/Embind já implementado.
 
 ## Decisões adiadas
 

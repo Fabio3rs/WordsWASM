@@ -5,6 +5,20 @@ import {createWordsAnalysisEngine} from "../wasmsrc/words-engine.mjs";
 
 const datasetId = `sha256:${"a".repeat(64)}`;
 
+function fakeResult(schema, text, twoWords) {
+  return {
+    schema,
+    schemaVersion: 2,
+    datasetId,
+    query: {text, normalized: text, mode: "latin"},
+    status: "analyzed",
+    hits: [],
+    diagnostics: [],
+    suggestions: [],
+    twoWords,
+  };
+}
+
 function fakeFactory(
   log,
   loadResult = {ok: true, code: "", message: ""},
@@ -23,12 +37,12 @@ function fakeFactory(
 
       analyze(text, twoWords) {
         log.push(["analyze", text, twoWords]);
-        return JSON.stringify({schema: "analysis-v1", text, twoWords});
+        return fakeResult("whitakers-words.analysis", text, twoWords);
       }
 
       search(text, twoWords) {
         log.push(["search", text, twoWords]);
-        return JSON.stringify({schema: "search-v1", text, twoWords});
+        return fakeResult("whitakers-words.search", text, twoWords);
       }
 
       delete() { log.push(["delete"]); }
@@ -36,7 +50,7 @@ function fakeFactory(
   });
 }
 
-test("loads bytes once and exposes parsed analysis/search contracts", async () => {
+test("loads bytes once and exposes typed analysis/search contracts", async () => {
   const log = [];
   const engine = await createWordsAnalysisEngine({
     datasetId,
@@ -47,12 +61,11 @@ test("loads bytes once and exposes parsed analysis/search contracts", async () =
   assert.equal(engine.datasetId, datasetId);
   assert.equal(engine.databaseBytes, 3);
   assert.equal(engine.databaseKind, "full");
-  assert.deepEqual(engine.analyze("mālum"), {
-    schema: "analysis-v1", text: "mālum", twoWords: false,
-  });
-  assert.deepEqual(engine.search("anaticulus", {twoWords: true}), {
-    schema: "search-v1", text: "anaticulus", twoWords: true,
-  });
+  assert.equal(engine.analyze("mālum").schema, "whitakers-words.analysis");
+  assert.equal(
+    engine.search("anaticulus", {twoWords: true}).schema,
+    "whitakers-words.search",
+  );
   engine.dispose();
   engine.dispose();
 
@@ -95,7 +108,7 @@ test("search database exposes search but refuses the full contract", async () =>
   });
 
   assert.equal(engine.databaseKind, "search");
-  assert.equal(engine.search("puella").schema, "search-v1");
+  assert.equal(engine.search("puella").schema, "whitakers-words.search");
   assert.throws(() => engine.analyze("puella"), /words-full\.wwdb/);
   engine.dispose();
 });

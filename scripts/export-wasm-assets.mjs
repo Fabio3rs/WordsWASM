@@ -168,6 +168,17 @@ async function main() {
     "whitakers-words/QUANTITIES.LAT",
     "whitakers-words/poc/compact-db/wwdb_poc_pack.cpp",
   ];
+  const optionalIdentitySourceNames = [
+    "whitakers-words/LEXEMES.LAT",
+  ];
+  // WHY: an enriched full/search pair must never reuse the identity of its
+  // legacy-only predecessor. LEXEMES.LAT is optional so an uncurated checkout
+  // continues to reproduce the original dataset exactly.
+  for (const name of optionalIdentitySourceNames) {
+    if (await exists(path.resolve(root, name))) {
+      identitySourceNames.push(name);
+    }
+  }
   const sources = {};
   for (const name of identitySourceNames) {
     sources[name] = await digest(path.resolve(root, name));

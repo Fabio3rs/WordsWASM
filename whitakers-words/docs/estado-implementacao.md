@@ -11,12 +11,12 @@ continuam sendo a referência para detalhes de formato e algoritmos.
 
 A engine nativa C++23 já executa um corte vertical completo: recebe latim em
 UTF-8, normaliza quantidade vocálica, consulta um snapshot WWDB imutável,
-reproduz os caminhos morfológicos relevantes do Words Ada e emite JSON
-canônico completo ou JSON enxuto de busca.
+reproduz os caminhos morfológicos relevantes do Words Ada e devolve IR tipada.
+O CLI pode apresentá-la como JSON canônico completo ou JSON enxuto de busca.
 
 Esse mesmo corte já é compilado para WebAssembly. A fronteira Embind recebe o
-WWDB como `Uint8Array`, conserva-o no snapshot C++ e devolve os dois JSONs por
-uma API de alto nível, sem allocator ou ponteiros públicos. O wrapper de
+WWDB como `Uint8Array`, conserva-o no snapshot C++ e devolve `value_object`s e
+vetores registrados, sem JSON, allocator ou ponteiros públicos. O wrapper de
 navegador e o procedimento de publicação estão em
 [`webassembly-browser.md`](webassembly-browser.md).
 As regras de versionamento, artefatos regeneráveis e publicação por tag estão
@@ -26,10 +26,11 @@ Os bancos atuais são duas projeções WWDB PoC 1.8 dos mesmos dados legados:
 `words-full.wwdb`, com significados, e `words-search.wwdb`, sem textos
 editoriais. A arquitetura de
 revisão para enriquecimento lexical já existe — auditoria, fila, schemas e
-validador de decisões —, mas nenhum dos novos lexemas externos foi promovido
-ao runtime. Ainda não existem `LEXEME_DECISIONS.jsonl` curado,
-`LEXEMES.LAT`, compilador de novos lexemas ou integração dessa camada com o
-packer.
+validador de decisões —, e agora inclui o compilador `accept_new →
+LEXEMES.LAT` e a importação opcional pelo packer. Nenhum lexema externo foi
+promovido ao snapshot oficial porque ainda não existe um
+`LEXEME_DECISIONS.jsonl` curado; `LEXEMES.LAT` é uma projeção regenerável e
+deliberadamente ausente nesse caso.
 
 ```mermaid
 flowchart LR
@@ -38,19 +39,22 @@ flowchart LR
     P --> SDB[words-search.wwdb]
     F --> E[engine C++23]
     SDB --> E
-    E --> J1[analysis-v1]
-    E --> J2[search-v1]
-    E --> W[WebAssembly/Embind]
+    E --> T[structs tipadas]
+    T --> W[WebAssembly/Embind v2]
+    E --> PJ[words_json do CLI]
+    PJ --> J1[analysis-v1]
+    PJ --> J2[search-v1]
 
     X[dicionários externos] --> AU[auditoria lexical]
     AU --> Q[fila de revisão]
     Q --> V[validador do ledger]
-    V -. pendente .-> L[LEXEMES.LAT]
-    L -. pendente .-> P
+    V --> C[compilador accept_new]
+    C --> L[LEXEMES.LAT]
+    L --> P
 ```
 
-As setas contínuas representam caminhos implementados. As tracejadas são os
-próximos estágios, ainda sem código de produção.
+Todas as setas representam caminhos implementados. A ausência de uma decisão
+humana válida produz zero lexemas novos, não uma promoção automática.
 
 ## Engine C++23 implementada
 
@@ -87,7 +91,8 @@ diretório de seções, strides, cobertura, sobreposição, IDs, enums, bits
 reservados, pools e ordenação dos índices. Ele mantém compatibilidade com o
 perfil denso por linha WWDB 1.6/1.7, aceita `dense` e `search-only` no WWDB
 1.8 e rejeita explicitamente os demais perfis. O perfil enxuto não possui
-pools de significados e, por isso, só autoriza `search-v1`.
+pools de significados e, por isso, só autoriza busca tipada ou sua apresentação
+CLI `search-v1`.
 
 Os índices em memória são vetores ordenados consultados com algoritmos de
 ranges e retornam views não proprietárias. Não há árvore de nós, ownership
@@ -146,12 +151,19 @@ O JSON de revisão editorial não é misturado com nenhum desses contratos.
 [`wasmsrc/main.cpp`](../../wasmsrc/main.cpp) publica uma classe Embind
 `AnalysisEngine`. O load do banco é transacional, aceita `Uint8Array` e não
 expõe `_malloc`, `_free` ou a heap ao host. `analyze` e `search` recebem texto
-UTF-8 e devolvem os mesmos JSONs produzidos pelo CLI.
+UTF-8 e devolvem structs tipadas versão 2. `search` resolve lema, classe,
+morfologia e flags sem carregar meanings; `analyze` acrescenta meaning no
+perfil full.
 
 [`wasmsrc/words-engine.mjs`](../../wasmsrc/words-engine.mjs) resolve o módulo,
-busca ou recebe o WWDB, converte os JSONs em objetos e controla descarte. O
+busca ou recebe o WWDB, copia/libera os vetores Embind e controla descarte. O
 build Emscripten gera ES modules para browser, Worker e Node, TypeScript de
 baixo nível e, quando as ferramentas existem, variantes Brotli/Gzip.
+
+`words_core` não contém o backend JSON nem depende de `nlohmann_json`.
+`src/json.cpp` é compilado na biblioteca nativa separada `words_json`, usada
+somente pelo CLI e pelos testes de apresentação. O WASM Release medido ocupa
+772.792 bytes RAW, 146.376 em Brotli 11 e 212.798 em gzip 9.
 
 ## Dados compactos implementados
 
@@ -184,21 +196,24 @@ Tamanhos medidos no snapshot atual:
 | Perfil | RAW | gzip -9 | zstd -19 |
 | --- | ---: | ---: | ---: |
 | simples | 2.977.659 | 1.339.354 | 1.160.544 |
-| denso por linhas | 2.731.900 | 1.256.992 | 1.091.956 |
-| denso por colunas | 2.731.900 | 1.041.849 | 880.996 |
-| search-only | 1.200.341 | 417.429 | 359.459 |
+| denso por linhas | 2.731.900 | 1.251.212 | 1.091.956 |
+| denso por colunas | 2.731.900 | 1.042.735 | 880.996 |
+| search-only | 1.200.341 | 416.259 | 359.459 |
 
 Para a distribuição web real, o exportador Node 22 mediu:
 
 | Artefato | RAW | Brotli 11 (`.br`) | gzip 9 (`.gz`) |
 | --- | ---: | ---: | ---: |
 | `words-full.wwdb` | 2.731.900 | 1.009.235 | 1.251.212 |
+| full colunar experimental | 2.731.900 | 841.556 | 1.042.735 |
 | `words-search.wwdb` | 1.200.341 | 340.452 | 416.259 |
 
 Brotli e gzip são representações HTTP do mesmo arquivo, não novos formatos de
 banco. O navegador negocia `Content-Encoding` e entrega ao loader os bytes
-WWDB descomprimidos. Zstd permanece no estudo comparativo; a release prioriza
-Brotli com fallback gzip por interoperabilidade.
+WWDB descomprimidos. A release prioriza Brotli com fallback gzip; Zstd pode ser
+uma terceira representação negociada, mas ficou maior que Brotli neste banco.
+O detalhamento por seção, IDs e alternativas está em
+[`compressao-ids-e-ordem.md`](compressao-ids-e-ordem.md).
 
 Esses números são resultados do PoC, não promessa do container final. O
 formato e os hashes estão documentados em
@@ -286,6 +301,14 @@ o baseline e colisões entre novas entradas aceitas. Ledger parcial é válido;
 o relatório separa candidatos decididos, resolvidos, adiados e ainda não
 revisados.
 
+[`compile_lexemes.py`](../poc/compact-db/compile_lexemes.py) repete a validação
+do ledger e compila somente decisões `accept_new` em registros JSONL numéricos
+`whitakers-words.compiled-lexeme.v1`. A ordem é canônica e não depende da ordem
+do ledger. O packer lê `LEXEMES.LAT` quando presente, acrescenta os lexemas e
+suas referências ao mesmo espaço de IDs do full e do search, e rejeita
+colisões estruturais ou overflow antes de escrever o banco. Sem o arquivo, os
+WWDB continuam byte a byte idênticos ao snapshot legado.
+
 A política de fontes, os 66 casos e o contrato da decisão estão em
 [`revisao-editorial-lexemas.md`](revisao-editorial-lexemas.md).
 
@@ -310,27 +333,31 @@ As regressões cobrem, entre outros pontos:
 - UTF-8 válido/inválido, NFC/NFD, mácron, breve e rejeição de `ß`;
 - separação de homógrafos por quantidade, incluindo `malum`;
 - importação e sugestão de quantidades;
-- auditoria lexical, fila editorial e validação do ledger.
+- auditoria lexical, fila editorial e validação do ledger;
+- compilação determinística, importação full/search, colisão com o legado,
+  precedência sobre `Two_Words` e overflow explícito do perfil `u16`;
+- contrato Embind sem JSON, inclusive `amamus → amo` com flags verbais, e
+  ausência de meaning na busca full/search.
 
 ## Limites e trabalho ainda não implementado
 
 Os itens seguintes permanecem pendentes:
 
 1. revisar e versionar decisões editoriais reais para o primeiro lote;
-2. implementar o compilador que transforma somente `accept_new` em
-   `LEXEMES.LAT`;
-3. integrar `LEXEMES.LAT` ao packer e testar precedência de entrada exata sobre
-   `Two_Words`, reparos e derivações artificiais;
-4. migrar contagens/offsets de referências de radical para `u32`: o índice
+2. acrescentar máscaras de quantidade por slot ao microformato antes de
+   promover homógrafos novos cuja identidade dependa somente de longa × breve;
+3. migrar contagens/offsets de referências de radical para `u32`: o índice
    `u16` já usa 62.086 posições e só deixa 3.449 livres;
-5. estabilizar o formato além do PoC e decidir, com benchmarks, se o perfil
-   `columnar` completo merece suporte adicional;
+4. estabilizar o formato além do PoC e habilitar o perfil full colunar no
+   loader; ele economizou 167.679 bytes em Brotli 11 sem renumerar IDs;
+5. decidir, com benchmarks de startup e heap, se delta de referências merece
+   uma nova codificação de seção;
 6. definir uma ABI C estável somente se surgir consumidor que não possa usar
    a interface Embind já implementada;
 7. medir startup, memória, latência e tráfego em navegadores/dispositivos
    reais;
-8. implementar leitura nativa dos perfis experimentais `simple` e
-   `columnar`, somente se continuarem úteis após os benchmarks.
+8. implementar leitura nativa do perfil experimental `simple` somente se ele
+   ainda tiver utilidade medida.
 
 Não estão planejados sem uma necessidade medida: VM genérica, linguagem de
 microcódigo arbitrária, AST sintática geral, hot reload concorrente, trie,
@@ -341,12 +368,10 @@ MPHF ou alocação PMR para palavras curtas.
 O próximo corte deve ser pequeno e verificável:
 
 1. criar o primeiro `LEXEME_DECISIONS.jsonl` com decisões de baixa ambiguidade;
-2. validar o ledger e manter os 66 candidatos não decididos visíveis no
-   relatório;
-3. implementar a projeção `accept_new → LEXEMES.LAT` sem tocar ainda no packer;
-4. testar saída determinística, revisão obsoleta e colisões;
-5. só então migrar os índices para `u32` e conectar os novos registros ao
-   WWDB;
+2. compilar o ledger e manter candidatos não decididos visíveis no relatório;
+3. gerar os dois WWDB e revisar o diff de IDs/tamanho do lote real;
+4. habilitar o full colunar no loader sem alterar o espaço lógico de IDs;
+5. só então versionar uma largura maior ou delta para o índice de radicais;
 6. medir o artefato enriquecido no navegador antes de decidir sobre proxy de
    Web Worker, cache offline ou ABI C adicional.
 

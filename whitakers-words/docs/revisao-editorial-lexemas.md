@@ -17,6 +17,12 @@ O ledger é verificado por
 Esse programa também é somente leitura em relação às fontes: escreve apenas o
 relatório solicitado e nunca gera `LEXEMES.LAT` ou modifica o WWDB.
 
+A projeção executável é feita separadamente por
+[`../poc/compact-db/compile_lexemes.py`](../poc/compact-db/compile_lexemes.py).
+Ela repete a validação completa e só então grava `LEXEMES.LAT`; o packer trata
+esse arquivo como entrada opcional. Assim, validar uma hipótese editorial não
+equivale a publicá-la.
+
 ## Separação das camadas
 
 ```mermaid
@@ -25,7 +31,7 @@ flowchart LR
     A --> D[rascunhos gerados\ndescartáveis]
     D --> Q[fila de revisão\ncom revisão SHA-256]
     Q --> H[decisões editoriais\nversionadas]
-    H --> C[compilador de lexemas\nfuturo]
+    H --> C[compilador de lexemas]
     C --> L[LEXEMES.LAT\nmicrodados completos]
     L --> P[packer WWDB]
     P --> R[JSON canônico\nde análise]
@@ -42,7 +48,7 @@ Há três contratos editoriais distintos:
 2. `whitakers-words.lexeme-review-candidate.v1`: fila reproduzível com chave
    estável, revisão do conteúdo, evidência por fonte e triagem;
 3. `whitakers-words.lexeme-editorial-decision.v1`: decisão humana que fixa
-   `draft_id + revision` e poderá autorizar o compilador futuro.
+   `draft_id + revision` e pode autorizar o compilador.
 
 Os schemas da fila e da decisão são, respectivamente,
 [`../../schemas/lexeme-review-candidate-v1.schema.json`](../../schemas/lexeme-review-candidate-v1.schema.json)
@@ -174,7 +180,7 @@ o SHA-256 do rascunho completo; qualquer mudança de evidência ou estrutura
 torna a decisão anterior obsoleta. Uma decisão trata um ou mais `sense_ids` e
 usa uma disposição fechada:
 
-- `accept_new`: gera no futuro uma entrada nova;
+- `accept_new`: gera uma entrada nova quando o ledger é compilado;
 - `merge_existing`: liga o sentido a uma entrada Words existente;
 - `variant_of`: registra relação explícita com uma entrada existente;
 - `reject`: documenta um falso candidato;
@@ -185,7 +191,7 @@ Somente `accept_new` pode conter o bloco canônico. `merge_existing` e
 para o mesmo rascunho para separar homógrafos, desde que seus sentidos aceitos
 sejam disjuntos.
 
-Outras invariantes do compilador futuro:
+Invariantes do compilador:
 
 - não aceitar uma decisão cuja revisão não corresponda à fila atual;
 - exigir significado curto próprio e proveniência por campo;
@@ -224,6 +230,11 @@ O banco já usa 62.086 dessas referências, deixando 3.449 posições. Os 66 ou
 não cabe. Antes de ampliação em massa, essa seção precisa migrar para `u32` ou
 ser dividida em uma extensão própria. A contagem de lexemas também usa limite
 de 65.536, mas ainda não é o gargalo imediato.
+
+O corte implementado conserva esse limite e falha explicitamente antes de
+escrever qualquer WWDB que exceda a capacidade. A análise de quais IDs são
+implícitos, quais precisam permanecer e quais seções podem usar delta está em
+[`compressao-ids-e-ordem.md`](compressao-ids-e-ordem.md).
 
 ## Reprodução
 
@@ -266,6 +277,38 @@ python3 whitakers-words/poc/compact-db/validate_lexeme_decisions.py \
 
 `--quantity-evidence` pode ser omitido apenas quando nenhuma decisão referencia
 `quantity_evidence_ids`.
+
+Depois da revisão humana, a mesma fila e o ledger são compilados para a entrada
+estreita do packer:
+
+```bash
+python3 whitakers-words/poc/compact-db/compile_lexemes.py \
+  /tmp/lexeme-review.jsonl \
+  LEXEME_DECISIONS.jsonl \
+  --quantity-evidence whitakers-words/QUANTITY_EVIDENCE.jsonl \
+  --output whitakers-words/LEXEMES.LAT \
+  --report /tmp/lexeme-compilation-report.json
+```
+
+`LEXEMES.LAT` usa JSONL numérico
+`whitakers-words.compiled-lexeme.v1`: quatro slots ASCII, meaning curto, POS,
+paradigma, payload de classe e metadados já compactáveis. A ordenação canônica
+independe da ordem do ledger. O arquivo é derivado e ignorado pelo Git; o
+ledger humano permanece a fonte versionada.
+
+Neste corte, `quantity_evidence_ids` conserva e valida a trilha editorial, mas
+não é convertido automaticamente em máscaras por slot. Todo radical importado
+entra com quantidade `unknown`, preservando o comportamento ASCII legado.
+Antes de publicar dois lexemas cuja distinção dependa somente de longa × breve,
+o microformato precisa receber `known_mask`/`long_mask` por slot e o compilador
+deve resolver consenso confirmado para essas máscaras. Não se infere breve de
+uma vogal sem marca.
+
+Ao gerar os perfis full e search, o packer acrescenta exatamente os mesmos
+lexemas na mesma ordem e, portanto, preserva o espaço de IDs entre as duas
+projeções. Sem `LEXEMES.LAT`, a saída continua byte a byte igual à base
+legada. Colisão estrutural com uma entrada existente, perda de propriedade,
+radical inválido, meaning acima de 255 bytes ou overflow `u16` são erros.
 
 Para o snapshot deste corte, a saída contém 66 candidatos, todos com
 `decision.status = needs_review` e

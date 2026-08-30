@@ -32,10 +32,14 @@ try {
     false,
   );
   assert.equal(reloadable.ready(), true);
-  assert.equal(
-    JSON.parse(reloadable.search("anaticulus", false)).status,
-    "analyzed",
-  );
+  const rawSearch = reloadable.search("anaticulus", false);
+  try {
+    assert.equal(rawSearch.status, "analyzed");
+  } finally {
+    rawSearch.hits.delete();
+    rawSearch.diagnostics.delete();
+    rawSearch.suggestions.delete();
+  }
 } finally {
   reloadable.delete();
 }
@@ -51,14 +55,29 @@ let expectedSearch;
 try {
   const macron = engine.analyze("mālum");
   assert.equal(macron.schema, "whitakers-words.analysis");
-  assert.equal(macron.schemaVersion, 1);
+  assert.equal(macron.schemaVersion, 2);
   assert.equal(macron.query.normalized, "mālum");
+  assert.ok(macron.hits.some((hit) => typeof hit.meaning === "string"));
 
   const diminutive = engine.search("anaticulus");
   assert.equal(diminutive.schema, "whitakers-words.search");
-  assert.equal(diminutive.schemaVersion, 1);
+  assert.equal(diminutive.schemaVersion, 2);
   assert.equal(diminutive.status, "analyzed");
+  assert.ok(diminutive.hits.every((hit) => hit.meaning === undefined));
   expectedSearch = diminutive;
+
+  const firstPlural = engine.search("amamus");
+  assert.ok(firstPlural.hits.some((hit) =>
+    hit.lexemeId === 2870 &&
+    hit.ruleId === 1312 &&
+    hit.lemma === "amo" &&
+    hit.partOfSpeech === "verb" &&
+    hit.morphology.tense === "present" &&
+    hit.morphology.voice === "active" &&
+    hit.morphology.mood === "indicative" &&
+    hit.morphology.person === 1 &&
+    hit.morphology.number === "plural"
+  ));
 
   const invalid = engine.analyze("ß");
   assert.equal(invalid.status, "error");

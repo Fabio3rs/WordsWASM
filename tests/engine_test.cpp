@@ -1,6 +1,7 @@
 #include "test_support.hpp"
 
 #include "words/json.hpp"
+#include "words/lexeme.hpp"
 
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
@@ -34,6 +35,38 @@ TEST(EngineTest, SearchDatabasePreservesTheFullDatabaseHitContract) {
     const auto result = test::search_engine().analyze("puella");
     EXPECT_THROW(static_cast<void>(analysis_json(test::search_engine(), result)),
                  std::logic_error);
+}
+
+TEST(EngineTest, SearchDatabaseResolvesCanonicalLemmaWithoutMeanings) {
+    constexpr LexemeId amo{2870U};
+    const auto &full_database = test::engine().database();
+    const auto &search_database = test::search_engine().database();
+
+    EXPECT_EQ(citation_lemma(full_database, full_database.lexeme(amo)), "amo");
+    EXPECT_EQ(citation_lemma(search_database, search_database.lexeme(amo)),
+              "amo");
+
+    constexpr std::array<std::pair<std::string_view, std::string_view>, 9>
+        fixtures{{
+            {"puella", "puella"},
+            {"servus", "servus"},
+            {"rex", "rex"},
+            {"bonus", "bonus"},
+            {"fortis", "fortis"},
+            {"bene", "bene"},
+            {"cum", "cum"},
+            {"et", "et"},
+            {"quis", "quis"},
+        }};
+    for (const auto &[surface, expected] : fixtures) {
+        const auto result = test::search_engine().analyze(surface);
+        EXPECT_TRUE(std::ranges::any_of(
+            result.analyses, [&](const AnalysisIR &analysis) {
+                const auto &lexeme = search_database.lexeme(analysis.lexeme);
+                return citation_lemma(search_database, lexeme, surface) ==
+                       expected;
+            })) << surface;
+    }
 }
 
 TEST(EngineTest, AnalyzesNounOnlyFixtures) {

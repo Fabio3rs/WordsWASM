@@ -4,11 +4,10 @@ add_executable(words_tests
     engine_test.cpp
     lexer_test.cpp
 )
-# The test inspects both JSON contracts directly. words_core intentionally
-# keeps its serializer dependency private because no public header exposes it,
-# so the test must declare its own compile-time dependency.
+# The test inspects the CLI-only JSON projection directly.  The analysis core
+# and WebAssembly graph deliberately do not depend on that presentation layer.
 target_link_libraries(words_tests PRIVATE
-    words_core
+    words_json
     nlohmann_json::nlohmann_json
     GTest::GTest
     GTest::Main
@@ -70,5 +69,19 @@ if(NOT EMSCRIPTEN)
             COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/lexeme_decision_validation_test.py"
         )
+        add_test(
+            NAME words_lexeme_compilation
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/lexeme_compilation_test.py"
+        )
+        add_test(
+            NAME words_lexeme_import_integration
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/lexeme_import_integration_test.py"
+                --root "${CMAKE_SOURCE_DIR}"
+                --packer "$<TARGET_FILE:wwdb_poc_pack>"
+                --cli "$<TARGET_FILE:words_cli>"
+        )
+        add_dependencies(words_tests wwdb_poc_pack)
     endif()
 endif()
