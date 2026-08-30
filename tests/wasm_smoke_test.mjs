@@ -86,6 +86,21 @@ try {
     hit.morphology.number === "plural"
   ));
 
+  const resDocument = engine.search("res");
+  expectedSearches.set("res", resDocument);
+  assert.ok(resDocument.hits.every((hit) => hit.lemma !== "reor"));
+
+  for (const [surface, person] of [["reor", 1], ["reris", 2]]) {
+    const document = engine.search(surface);
+    expectedSearches.set(surface, document);
+    assert.ok(document.hits.some((hit) =>
+      hit.lemma === "reor" &&
+      hit.lexical.verbKind === "deponent" &&
+      hit.morphology.voice === "passive" &&
+      hit.morphology.person === person
+    ));
+  }
+
   const studies = engine.search("studiisque");
   expectedSearches.set("studiisque", studies);
   const study = studies.hits.find((hit) =>
@@ -199,7 +214,10 @@ if (searchDatabasePath !== undefined) {
   try {
     assert.equal(searchEngine.databaseKind, "search");
     assert.deepEqual(searchEngine.search("anaticulus"), expectedSearch);
-    for (const fixture of ["studiisque", "pretoribusque", "ivque", "IV", "amata est"]) {
+    for (const fixture of [
+      "res", "reor", "reris", "studiisque", "pretoribusque", "ivque", "IV",
+      "amata est",
+    ]) {
       assert.deepEqual(searchEngine.search(fixture), expectedSearches.get(fixture));
     }
     assert.throws(

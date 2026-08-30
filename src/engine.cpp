@@ -78,6 +78,18 @@ transformed_key_matches(const std::uint8_t target_key,
            lexical == inflected;
 }
 
+[[nodiscard]] bool deponent_verb_matches(const LexemeRecord &lexeme,
+                                         const InflectionRule &rule) noexcept {
+    if (lexeme.verb_kind != VerbKind::deponent || rule.voice != Voice::active) {
+        return true;
+    }
+
+    // Deponents use passive morphology throughout the finite system.  The
+    // active future infinitive is the one legacy exception (for example,
+    // secuturum esse), and is explicitly retained by List_Sweep in WORDS.
+    return rule.mood == Mood::infinitive && rule.tense == Tense::future;
+}
+
 [[nodiscard]] constexpr std::pair<std::uint8_t, std::uint8_t>
 public_verb_paradigm(const std::uint8_t conjugation,
                      const std::uint8_t variant) noexcept {
@@ -505,6 +517,9 @@ void append_regular_analyses(const Database &database,
         }
         if (lexeme.part_of_speech == PartOfSpeech::verb &&
             rule.part_of_speech == PartOfSpeech::verb) {
+            if (!deponent_verb_matches(lexeme, rule)) {
+                continue;
+            }
             const auto [conjugation, variant] =
                 public_verb_paradigm(lexeme.declension, lexeme.variant);
             output.push_back(AnalysisIR{

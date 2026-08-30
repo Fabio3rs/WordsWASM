@@ -143,6 +143,46 @@ TEST(EngineTest, AnalyzesEveryRegularSemanticClass) {
     }
 }
 
+TEST(EngineTest, RequiresPassiveMorphologyForDeponentVerbs) {
+    constexpr std::uint32_t reor_entry = 32909U;
+    const auto is_reor = [](const Engine &engine,
+                            const AnalysisIR &analysis) {
+        const auto &lexeme = engine.database().lexeme(analysis.lexeme);
+        return lexeme.dictionary == DictionaryKind::general &&
+               lexeme.dictionary_entry + 1U == reor_entry &&
+               lexeme.verb_kind == VerbKind::deponent;
+    };
+
+    const auto expects_person = [&](const Engine &engine,
+                                    const std::string_view surface,
+                                    const std::uint8_t person) {
+        const auto result = engine.analyze(surface);
+        return std::ranges::any_of(
+            result.analyses, [&](const AnalysisIR &analysis) {
+                const auto *verb =
+                    std::get_if<VerbMorphology>(&analysis.morphology);
+                return is_reor(engine, analysis) && verb != nullptr &&
+                       verb->tense == Tense::present &&
+                       verb->voice == Voice::passive &&
+                       verb->mood == Mood::indicative &&
+                       verb->person == person &&
+                       verb->number == GrammaticalNumber::singular;
+            });
+    };
+
+    const std::array engines{&test::engine(), &test::search_engine()};
+    for (const auto *engine : engines) {
+        const auto res = engine->analyze("res");
+        ASSERT_EQ(res.status, QueryStatus::analyzed);
+        EXPECT_TRUE(std::ranges::none_of(
+            res.analyses, [&](const AnalysisIR &analysis) {
+                return is_reor(*engine, analysis);
+            }));
+        EXPECT_TRUE(expects_person(*engine, "reor", 1U));
+        EXPECT_TRUE(expects_person(*engine, "reris", 2U));
+    }
+}
+
 TEST(EngineTest, EmitsTypedRemainingMorphologies) {
     const auto contains = []<class T>(const QueryResult &result, const T &) {
         return std::ranges::any_of(

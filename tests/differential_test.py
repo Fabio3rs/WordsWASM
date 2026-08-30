@@ -8,6 +8,8 @@ from pathlib import Path
 
 import jsonschema
 
+from oracle_projection import with_deponent_constraints
+
 
 DATASET_ID = "sha256:" + "0" * 64
 NOUN_FIXTURES = ("puella", "servus", "regina", "rex", "manus", "dies")
@@ -66,7 +68,7 @@ def load_json(command: list[str], cwd: Path | None = None) -> dict:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    return json.loads(completed.stdout)
+    return with_deponent_constraints(json.loads(completed.stdout))
 
 
 def load_json_lines(command: list[str], queries: tuple[str, ...],

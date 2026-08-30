@@ -11,6 +11,8 @@ from pathlib import Path
 
 import jsonschema
 
+from oracle_projection import with_deponent_constraints
+
 
 DATASET_ID = "sha256:" + "0" * 64
 EXPECTED_CORPUS_FORMS = 2726
@@ -185,6 +187,7 @@ def main() -> None:
             words, ada_documents, native_documents, search_documents,
             search_only_documents,
             strict=True):
+        ada = with_deponent_constraints(ada)
         validate(native, analysis_validator, f"native analysis for {word}")
         # Equal JSON values have the same schema result. Most Ada/native
         # envelopes are identical, so only validate the oracle separately when
