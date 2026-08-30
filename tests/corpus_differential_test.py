@@ -119,6 +119,9 @@ def main() -> None:
             f"found {len(words)}")
 
     database = ada_root / "poc/compact-db/output/words-poc-dense.wwdb"
+    search_database = (
+        ada_root / "poc/compact-db/output/words-poc-search-only.wwdb"
+    )
     analysis_schema = json.loads(
         (root / "schemas/analysis-v1.schema.json").read_text())
     search_schema = json.loads(
@@ -143,22 +146,45 @@ def main() -> None:
         words,
         root,
     )
-    counts = (len(ada_documents), len(native_documents), len(search_documents))
-    if counts != (len(words),) * 3:
+    search_only_documents = json_lines(
+        [
+            str(cpp),
+            "--database", str(search_database),
+            "--dataset-id", DATASET_ID,
+            "--format", "search",
+            "--batch-json-lines",
+        ],
+        words,
+        root,
+    )
+    counts = (
+        len(ada_documents), len(native_documents), len(search_documents),
+        len(search_only_documents),
+    )
+    if counts != (len(words),) * 4:
         raise AssertionError(
             f"batch result count differs: words={len(words)}, "
-            f"Ada/native/search={counts}")
+            f"Ada/native/full-search/search-only={counts}")
 
     stats = collections.Counter()
     reviewed_differences = {}
     full_bytes = 0
     search_bytes = 0
-    for word, ada, native, search in zip(
+    for word, ada, native, search, search_only in zip(
             words, ada_documents, native_documents, search_documents,
+            search_only_documents,
             strict=True):
         validate(ada, analysis_validator, f"Ada analysis for {word}")
         validate(native, analysis_validator, f"native analysis for {word}")
         validate(search, search_validator, f"native search for {word}")
+        validate(
+            search_only, search_validator,
+            f"native search-only profile for {word}",
+        )
+        if search_only != search:
+            raise AssertionError(
+                f"search-only WWDB differs from full WWDB for {word}"
+            )
         if any(document["query"]["text"] != word
                for document in (ada, native, search)):
             raise AssertionError(f"batch query order was lost at {word}")

@@ -1,7 +1,27 @@
 .vscode
-.cache
+.cache/
 .env
 bin
+
+# Build trees and release staging are fully reproducible.
+/build/
+/build-*/
+/cmake-build-*/
+/dist/
+/release/
+
+# Interpreter/tool caches never carry editorial evidence.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+
+# Host metadata and editor leftovers.
+.DS_Store
+*~
 
 # Prerequisites
 *.d
@@ -39,5 +59,3 @@ bin
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
-
-build

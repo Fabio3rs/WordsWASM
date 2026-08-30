@@ -1,0 +1,348 @@
+-- kind priority stage operation scope direction before after required-part stem-key min-before min-after constraint era stable-name
+SYNCOPE 0 MAIN LITERAL INTERNAL REVERSE ii ivi V 3 0 0 ANY CLASSICAL perfect-ivi-uncontracted
+Syncopated perfect ivi can drop 'v' without contracting vowel
+
+SYNCOPE 1 MAIN LITERAL INTERNAL REVERSE as avis V 3 0 1 ANY CLASSICAL perfect-v-contraction
+Syncopated perfect often drops the 'v' and contracts vowel
+SYNCOPE 1 MAIN LITERAL INTERNAL REVERSE es evis V 3 0 1 ANY CLASSICAL perfect-v-contraction
+Syncopated perfect often drops the 'v' and contracts vowel
+SYNCOPE 1 MAIN LITERAL INTERNAL REVERSE is ivis V 3 0 1 ANY CLASSICAL perfect-v-contraction
+Syncopated perfect often drops the 'v' and contracts vowel
+SYNCOPE 1 MAIN LITERAL INTERNAL REVERSE os ovis V 3 0 1 ANY CLASSICAL perfect-v-contraction
+Syncopated perfect often drops the 'v' and contracts vowel
+
+SYNCOPE 2 MAIN LITERAL INTERNAL REVERSE ar aver V 3 1 1 ANY CLASSICAL perfect-v-before-r
+Syncopated perfect often drops the 'v' and contracts vowel
+SYNCOPE 2 MAIN LITERAL INTERNAL REVERSE er ever V 3 1 1 ANY CLASSICAL perfect-v-before-r
+Syncopated perfect often drops the 'v' and contracts vowel
+SYNCOPE 2 MAIN LITERAL INTERNAL REVERSE or over V 3 1 1 ANY CLASSICAL perfect-v-before-r
+Syncopated perfect often drops the 'v' and contracts vowel
+
+SYNCOPE 3 MAIN LITERAL INTERNAL REVERSE ier iver V 3 0 1 ANY CLASSICAL perfect-ier
+Syncopated perfect often drops the 'v' and contracts vowel
+
+SYNCOPE 4 MAIN LITERAL INTERNAL REVERSE s sis V 3 0 2 ANY CLASSICAL perfect-is-after-s-x
+Syncopated perfect sometimes drops the 'is' after 's' or 'x'
+SYNCOPE 4 MAIN LITERAL INTERNAL REVERSE x xis V 3 0 2 ANY CLASSICAL perfect-is-after-s-x
+Syncopated perfect sometimes drops the 'is' after 's' or 'x'
+
+-- BEGIN IMPORTED ADA ORTHOGRAPHY
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD abs aps X 0 0 2 ANY CLASSICAL orth-initial-abs-aps
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD aps abs X 0 0 2 ANY CLASSICAL orth-initial-aps-abs
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD acq adq X 0 0 2 ANY CLASSICAL orth-initial-acq-adq
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD adq acq X 0 0 2 ANY CLASSICAL orth-initial-adq-acq
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD ante anti X 0 0 2 ANY CLASSICAL orth-initial-ante-anti
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD anti ante X 0 0 2 ANY CLASSICAL orth-initial-anti-ante
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD auri aure X 0 0 2 ANY CLASSICAL orth-initial-auri-aure
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD aure auri X 0 0 2 ANY CLASSICAL orth-initial-aure-auri
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD auri auru X 0 0 2 ANY CLASSICAL orth-initial-auri-auru
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD auru auri X 0 0 2 ANY CLASSICAL orth-initial-auru-auri
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY SLUR INITIAL FORWARD ad - X 0 0 0 ANY CLASSICAL orth-slur-ad
+A prefix-final consonant may assimilate to the following consonant
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD circum circun X 0 0 2 ANY CLASSICAL orth-initial-circum-circun
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD con com X 0 0 2 ANY CLASSICAL orth-initial-con-com
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD com con X 0 0 2 ANY CLASSICAL orth-initial-com-con
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD co com X 0 0 2 ANY CLASSICAL orth-initial-co-com
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD co con X 0 0 2 ANY CLASSICAL orth-initial-co-con
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD conl coll X 0 0 2 ANY CLASSICAL orth-initial-conl-coll
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD coll conl X 0 0 2 ANY CLASSICAL orth-initial-coll-conl
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY SLUR INITIAL FORWARD in - X 0 0 0 ANY CLASSICAL orth-slur-in
+A prefix-final consonant may assimilate to the following consonant
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD inb imb X 0 0 2 ANY CLASSICAL orth-initial-inb-imb
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD imb inb X 0 0 2 ANY CLASSICAL orth-initial-imb-inb
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD inp imp X 0 0 2 ANY CLASSICAL orth-initial-inp-imp
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD imp inp X 0 0 2 ANY CLASSICAL orth-initial-imp-inp
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD nun non X 0 0 2 ANY CLASSICAL orth-initial-nun-non
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY SLUR INITIAL FORWARD ob - X 0 0 0 ANY CLASSICAL orth-slur-ob
+A prefix-final consonant may assimilate to the following consonant
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD quadri quadru X 0 0 2 ANY CLASSICAL orth-initial-quadri-quadru
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD quadru quadri X 0 0 2 ANY CLASSICAL orth-initial-quadru-quadri
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY LITERAL INITIAL FORWARD se ce X 0 0 2 ANY CLASSICAL orth-initial-se-ce
+Alternative assimilated prefix spelling
+ORTHOGRAPHIC 0 EARLY SLUR INITIAL FORWARD sub - X 0 0 0 ANY CLASSICAL orth-slur-sub
+A prefix-final consonant may assimilate to the following consonant
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD is iis V 0 0 0 EO_VERB CLASSICAL orth-eo-is-iis
+Some forms of eo insert i where its stem meets an is- sequence
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD adgn agn X 0 0 2 ANY CLASSICAL orth-initial-adgn-agn
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD agn adgn X 0 0 2 ANY CLASSICAL orth-initial-agn-adgn
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD adsc asc X 0 0 2 ANY CLASSICAL orth-initial-adsc-asc
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD asc adsc X 0 0 2 ANY CLASSICAL orth-initial-asc-adsc
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD adsp asp X 0 0 2 ANY CLASSICAL orth-initial-adsp-asp
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD asp adsp X 0 0 2 ANY CLASSICAL orth-initial-asp-adsp
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD arqui arci X 0 0 2 ANY CLASSICAL orth-initial-arqui-arci
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD arci arqui X 0 0 2 ANY CLASSICAL orth-initial-arci-arqui
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD arqu arcu X 0 0 2 ANY CLASSICAL orth-initial-arqu-arcu
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD arcu arqu X 0 0 2 ANY CLASSICAL orth-initial-arcu-arqu
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD ae e X 0 0 2 ANY CLASSICAL orth-initial-ae-e
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD al hal X 0 0 2 ANY CLASSICAL orth-initial-al-hal
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD am ham X 0 0 2 ANY CLASSICAL orth-initial-am-ham
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD ar har X 0 0 2 ANY CLASSICAL orth-initial-ar-har
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD aur or X 0 0 2 ANY CLASSICAL orth-initial-aur-or
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD dampn damn X 0 0 2 ANY CLASSICAL orth-initial-dampn-damn
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD dij disj X 0 0 2 ANY CLASSICAL orth-initial-dij-disj
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD disj dij X 0 0 2 ANY CLASSICAL orth-initial-disj-dij
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD dir disr X 0 0 2 ANY CLASSICAL orth-initial-dir-disr
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD disr dir X 0 0 2 ANY CLASSICAL orth-initial-disr-dir
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD dir der X 0 0 2 ANY CLASSICAL orth-initial-dir-der
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD der dir X 0 0 2 ANY CLASSICAL orth-initial-der-dir
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD del dil X 0 0 2 ANY CLASSICAL orth-initial-del-dil
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD dil del X 0 0 2 ANY CLASSICAL orth-initial-dil-del
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD ecf eff X 0 0 2 ANY CLASSICAL orth-initial-ecf-eff
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD eff ecf X 0 0 2 ANY CLASSICAL orth-initial-eff-ecf
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD ecs exs X 0 0 2 ANY CLASSICAL orth-initial-ecs-exs
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD exs ecs X 0 0 2 ANY CLASSICAL orth-initial-exs-ecs
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD es ess X 0 0 2 ANY CLASSICAL orth-initial-es-ess
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD ess es X 0 0 2 ANY CLASSICAL orth-initial-ess-es
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD ex exs X 0 0 2 ANY CLASSICAL orth-initial-ex-exs
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD exs ex X 0 0 2 ANY CLASSICAL orth-initial-exs-ex
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD eid id X 0 0 2 ANY CLASSICAL orth-initial-eid-id
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD el hel X 0 0 2 ANY CLASSICAL orth-initial-el-hel
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD e ae X 0 0 2 ANY CLASSICAL orth-initial-e-ae
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD faen fen X 0 0 2 ANY CLASSICAL orth-initial-faen-fen
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD fen faen X 0 0 2 ANY CLASSICAL orth-initial-fen-faen
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD faen foen X 0 0 2 ANY CLASSICAL orth-initial-faen-foen
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD foen faen X 0 0 2 ANY CLASSICAL orth-initial-foen-faen
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD fed foed X 0 0 2 ANY CLASSICAL orth-initial-fed-foed
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD foed fed X 0 0 2 ANY CLASSICAL orth-initial-foed-fed
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD fet foet X 0 0 2 ANY CLASSICAL orth-initial-fet-foet
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD foet fet X 0 0 2 ANY CLASSICAL orth-initial-foet-fet
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD f ph X 0 0 2 ANY CLASSICAL orth-initial-f-ph
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD gna na X 0 0 2 ANY CLASSICAL orth-initial-gna-na
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD har ar X 0 0 2 ANY CLASSICAL orth-initial-har-ar
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD hal al X 0 0 2 ANY CLASSICAL orth-initial-hal-al
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD ham am X 0 0 2 ANY CLASSICAL orth-initial-ham-am
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD hel el X 0 0 2 ANY CLASSICAL orth-initial-hel-el
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD hol ol X 0 0 2 ANY CLASSICAL orth-initial-hol-ol
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD hum um X 0 0 2 ANY CLASSICAL orth-initial-hum-um
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD k c X 0 0 2 ANY CLASSICAL orth-initial-k-c
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD lub lib X 0 0 2 ANY CLASSICAL orth-initial-lub-lib
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD lib lub X 0 0 2 ANY CLASSICAL orth-initial-lib-lub
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD mani manu X 0 0 2 ANY CLASSICAL orth-initial-mani-manu
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD manu mani X 0 0 2 ANY CLASSICAL orth-initial-manu-mani
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD na gna X 0 0 2 ANY CLASSICAL orth-initial-na-gna
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD nihil nil X 0 0 2 ANY CLASSICAL orth-initial-nihil-nil
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD nil nihil X 0 0 2 ANY CLASSICAL orth-initial-nil-nihil
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD obt opt X 0 0 2 ANY CLASSICAL orth-initial-obt-opt
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD opt obt X 0 0 2 ANY CLASSICAL orth-initial-opt-obt
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD obs ops X 0 0 2 ANY CLASSICAL orth-initial-obs-ops
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD ops obs X 0 0 2 ANY CLASSICAL orth-initial-ops-obs
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD ol hol X 0 0 2 ANY CLASSICAL orth-initial-ol-hol
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD opp op X 0 0 2 ANY CLASSICAL orth-initial-opp-op
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD or aur X 0 0 2 ANY CLASSICAL orth-initial-or-aur
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD ph f X 0 0 2 ANY CLASSICAL orth-initial-ph-f
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD pre prae X 0 0 2 ANY CLASSICAL orth-initial-pre-prae
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD prae pre X 0 0 2 ANY CLASSICAL orth-initial-prae-pre
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD subsc susc X 0 0 2 ANY CLASSICAL orth-initial-subsc-susc
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD susc subsc X 0 0 2 ANY CLASSICAL orth-initial-susc-subsc
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD subsp susp X 0 0 2 ANY CLASSICAL orth-initial-subsp-susp
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD susp subsp X 0 0 2 ANY CLASSICAL orth-initial-susp-subsp
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD subc susc X 0 0 2 ANY CLASSICAL orth-initial-subc-susc
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD susc subc X 0 0 2 ANY CLASSICAL orth-initial-susc-subc
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD succ susc X 0 0 2 ANY CLASSICAL orth-initial-succ-susc
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD susc succ X 0 0 2 ANY CLASSICAL orth-initial-susc-succ
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD subt supt X 0 0 2 ANY CLASSICAL orth-initial-subt-supt
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD supt subt X 0 0 2 ANY CLASSICAL orth-initial-supt-subt
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD subt sust X 0 0 2 ANY CLASSICAL orth-initial-subt-sust
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD sust subt X 0 0 2 ANY CLASSICAL orth-initial-sust-subt
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD transv trav X 0 0 2 ANY CLASSICAL orth-initial-transv-trav
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD trav transv X 0 0 2 ANY CLASSICAL orth-initial-trav-transv
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD ul hul X 0 0 2 ANY CLASSICAL orth-initial-ul-hul
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD uol vul X 0 0 2 ANY CLASSICAL orth-initial-uol-vul
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD y i X 0 0 2 ANY CLASSICAL orth-initial-y-i
+Alternative initial spelling
+ORTHOGRAPHIC 0 FALLBACK LITERAL INITIAL FORWARD z di X 0 0 2 ANY CLASSICAL orth-initial-z-di
+Alternative initial spelling
+ORTHOGRAPHIC 1 FALLBACK LITERAL INTERNAL FORWARD ae e X 0 0 0 ANY CLASSICAL orth-internal-ae-e
+Alternative internal spelling
+ORTHOGRAPHIC 1 FALLBACK LITERAL INTERNAL FORWARD bul bol X 0 0 0 ANY CLASSICAL orth-internal-bul-bol
+Alternative internal spelling
+ORTHOGRAPHIC 1 FALLBACK LITERAL INTERNAL FORWARD bol bul X 0 0 0 ANY CLASSICAL orth-internal-bol-bul
+Alternative internal spelling
+ORTHOGRAPHIC 1 FALLBACK LITERAL INTERNAL FORWARD cl cul X 0 0 0 ANY CLASSICAL orth-internal-cl-cul
+Alternative internal spelling
+ORTHOGRAPHIC 1 FALLBACK LITERAL INTERNAL FORWARD cu quu X 0 0 0 ANY CLASSICAL orth-internal-cu-quu
+Alternative internal spelling
+ORTHOGRAPHIC 1 FALLBACK LITERAL INTERNAL FORWARD f ph X 0 0 0 ANY CLASSICAL orth-internal-f-ph
+Alternative internal spelling
+ORTHOGRAPHIC 1 FALLBACK LITERAL INTERNAL FORWARD ph f X 0 0 0 ANY CLASSICAL orth-internal-ph-f
+Alternative internal spelling
+ORTHOGRAPHIC 1 FALLBACK LITERAL INTERNAL FORWARD h - X 0 0 0 ANY CLASSICAL orth-internal-h-empty
+Alternative internal spelling
+ORTHOGRAPHIC 1 FALLBACK LITERAL INTERNAL FORWARD oe e X 0 0 0 ANY CLASSICAL orth-internal-oe-e
+Alternative internal spelling
+ORTHOGRAPHIC 1 FALLBACK LITERAL INTERNAL FORWARD vul vol X 0 0 0 ANY CLASSICAL orth-internal-vul-vol
+Alternative internal spelling
+ORTHOGRAPHIC 1 FALLBACK LITERAL INTERNAL FORWARD vol vul X 0 0 0 ANY CLASSICAL orth-internal-vol-vul
+Alternative internal spelling
+ORTHOGRAPHIC 1 FALLBACK LITERAL INTERNAL FORWARD uol vul X 0 0 0 ANY CLASSICAL orth-internal-uol-vul
+Alternative internal spelling
+ORTHOGRAPHIC 2 FALLBACK LITERAL FINAL FORWARD is iis ADJ 0 2 0 ADJECTIVE_IIS CLASSICAL orth-adjective-terminal-iis
+A terminal iis on a first-declension adjective may drop one i
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD col caul X 0 0 0 ANY MEDIEVAL orth-internal-col-caul
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD e ae X 0 0 0 ANY MEDIEVAL orth-internal-e-ae
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD o u X 0 0 0 ANY MEDIEVAL orth-internal-o-u
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD i y X 0 0 0 ANY MEDIEVAL orth-internal-i-y
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD ism sm X 0 0 0 ANY MEDIEVAL orth-internal-ism-sm
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD isp sp X 0 0 0 ANY MEDIEVAL orth-internal-isp-sp
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD ist st X 0 0 0 ANY MEDIEVAL orth-internal-ist-st
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD iz z X 0 0 0 ANY MEDIEVAL orth-internal-iz-z
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD esm sm X 0 0 0 ANY MEDIEVAL orth-internal-esm-sm
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD esp sp X 0 0 0 ANY MEDIEVAL orth-internal-esp-sp
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD est st X 0 0 0 ANY MEDIEVAL orth-internal-est-st
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD ez z X 0 0 0 ANY MEDIEVAL orth-internal-ez-z
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD di z X 0 0 0 ANY MEDIEVAL orth-internal-di-z
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD f ph X 0 0 0 ANY MEDIEVAL orth-internal-f-ph
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD is ix X 0 0 0 ANY MEDIEVAL orth-internal-is-ix
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD b p X 0 0 0 ANY MEDIEVAL orth-internal-b-p
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD d t X 0 0 0 ANY MEDIEVAL orth-internal-d-t
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD v b X 0 0 0 ANY MEDIEVAL orth-internal-v-b
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD v f X 0 0 0 ANY MEDIEVAL orth-internal-v-f
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD v f X 0 0 0 ANY MEDIEVAL orth-internal-v-f
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD s x X 0 0 0 ANY MEDIEVAL orth-internal-s-x
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD ci ti X 0 0 0 ANY MEDIEVAL orth-internal-ci-ti
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD nt nct X 0 0 0 ANY MEDIEVAL orth-internal-nt-nct
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD s ns X 0 0 0 ANY MEDIEVAL orth-internal-s-ns
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD ch c X 0 0 0 ANY MEDIEVAL orth-internal-ch-c
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD c ch X 0 0 0 ANY MEDIEVAL orth-internal-c-ch
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD th t X 0 0 0 ANY MEDIEVAL orth-internal-th-t
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 3 FALLBACK LITERAL INTERNAL FORWARD t th X 0 0 0 ANY MEDIEVAL orth-internal-t-th
+Medieval spelling may use this substitution
+ORTHOGRAPHIC 4 FALLBACK DOUBLE_CONSONANT INTERNAL FORWARD - - X 0 0 0 ANY MEDIEVAL orth-medieval-double-consonant
+A doubled consonant may be rendered by a single consonant in Medieval spelling
+-- END IMPORTED ADA ORTHOGRAPHY

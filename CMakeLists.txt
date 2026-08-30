@@ -111,29 +111,65 @@ target_link_libraries(words_core
     PRIVATE nlohmann_json::nlohmann_json
 )
 add_library(WordsWASM_lib ALIAS words_core)
+if(NOT EMSCRIPTEN)
+    # The packer is explicit because its output is a release/test fixture, not
+    # a prerequisite for consumers that link only the analysis library.
+    add_executable(wwdb_poc_pack EXCLUDE_FROM_ALL
+        whitakers-words/poc/compact-db/wwdb_poc_pack.cpp
+    )
+endif()
+
 if(EMSCRIPTEN)
+    # Emscripten marks this setting compile+link. The database validator uses
+    # an internal exception to construct LoadError; applying it only at link
+    # time would let corrupt input escape past the intended catch boundary.
+    target_compile_options(words_core PRIVATE
+        -sDISABLE_EXCEPTION_CATCHING=0
+    )
+
     add_executable(WordsWASM
         wasmsrc/main.cpp
     )
-
-    target_link_libraries(WordsWASM
-        PUBLIC words_core
-        -lembind
+    set_target_properties(WordsWASM PROPERTIES
+        OUTPUT_NAME words_wasm
+        SUFFIX ".mjs"
     )
 
-    # WebAssembly specific settings
+    target_link_libraries(WordsWASM
+        PRIVATE words_core
+        -lembind
+    )
+    target_compile_options(WordsWASM PRIVATE
+        -sDISABLE_EXCEPTION_CATCHING=0
+    )
+
+    # WHY: Embind keeps ordinary analysis calls at the typed language boundary;
+    # only the initial immutable database image crosses as a contiguous byte
+    # array. There is no public allocator/pointer ABI to keep synchronized.
     target_link_options(WordsWASM PRIVATE
         -lembind
         -sWASM=1
         -sMODULARIZE=1
-        -sEXPORT_NAME=Module
+        -sEXPORT_ES6=1
+        -sEXPORT_NAME=createWordsModule
         -sALLOW_MEMORY_GROWTH=1
-        -sENVIRONMENT=web
-        -sNO_DISABLE_EXCEPTION_CATCHING=1
-        -sEXPORTED_FUNCTIONS=_malloc,_free
-        -sEXPORTED_RUNTIME_METHODS=ccall,cwrap,HEAPU8
+        -sENVIRONMENT=web,worker,node
+        -sFILESYSTEM=0
+        -sDISABLE_EXCEPTION_CATCHING=0
         --emit-tsd words_wasm.d.ts
     )
+
+    add_custom_target(WordsWASM_browser_wrapper ALL
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/wasmsrc/words-engine.mjs"
+            "${CMAKE_CURRENT_BINARY_DIR}/words-engine.mjs"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/wasmsrc/words-engine.d.ts"
+            "${CMAKE_CURRENT_BINARY_DIR}/words-engine.d.ts"
+        COMMENT "Copying the browser analysis wrapper"
+        VERBATIM
+    )
+    add_dependencies(WordsWASM_browser_wrapper WordsWASM)
 
     if(ENABLE_WEB_COMPRESSION)
         find_program(BROTLI_EXECUTABLE brotli)
@@ -148,7 +184,7 @@ if(EMSCRIPTEN)
             )
 
             add_custom_target(WordsWASM_assets ALL
-                DEPENDS WordsWASM
+                DEPENDS WordsWASM_browser_wrapper
                 COMMAND "${CMAKE_COMMAND}" -P "${WEB_COMPRESSION_SCRIPT}"
                 COMMENT "Generating compressed web assets"
                 VERBATIM

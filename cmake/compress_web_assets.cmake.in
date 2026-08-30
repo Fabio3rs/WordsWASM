@@ -1,0 +1,30 @@
+set(web_assets
+    "@CMAKE_CURRENT_BINARY_DIR@/words_wasm.mjs"
+    "@CMAKE_CURRENT_BINARY_DIR@/words_wasm.wasm"
+    "@CMAKE_CURRENT_BINARY_DIR@/words_wasm.d.ts"
+    "@CMAKE_CURRENT_BINARY_DIR@/words-engine.mjs"
+    "@CMAKE_CURRENT_BINARY_DIR@/words-engine.d.ts"
+)
+
+foreach(asset IN LISTS web_assets)
+    if(NOT EXISTS "${asset}")
+        message(FATAL_ERROR "missing web asset: ${asset}")
+    endif()
+
+    execute_process(
+        COMMAND "@BROTLI_EXECUTABLE@" --force --quality=11
+                --output=${asset}.br "${asset}"
+        RESULT_VARIABLE brotli_result
+    )
+    if(NOT brotli_result EQUAL 0)
+        message(FATAL_ERROR "brotli failed for ${asset}: ${brotli_result}")
+    endif()
+
+    execute_process(
+        COMMAND "@GZIP_EXECUTABLE@" -9 -k -f "${asset}"
+        RESULT_VARIABLE gzip_result
+    )
+    if(NOT gzip_result EQUAL 0)
+        message(FATAL_ERROR "gzip failed for ${asset}: ${gzip_result}")
+    endif()
+endforeach()

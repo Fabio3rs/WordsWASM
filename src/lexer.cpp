@@ -296,8 +296,10 @@ LatinLexer::lex(const std::string_view utf8) const {
     }
     result.normalized_nfc.assign(
         reinterpret_cast<const char *>(composed->buffer.get()), composed->size);
+
+    // 2GB limit seems ok
     if (result.normalized_nfc.size() >
-        static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
+        static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) {
         return std::unexpected(LexError{
             "input-too-large", "normalized input exceeds range limits"});
     }

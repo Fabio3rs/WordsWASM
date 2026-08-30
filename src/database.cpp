@@ -1,4 +1,5 @@
 #include "words/database.hpp"
+#include "words/lifetime.hpp"
 
 #include <algorithm>
 #include <array>
@@ -20,6 +21,7 @@ constexpr std::size_t fixed_header_size = 40;
 constexpr std::size_t directory_entry_size = 32;
 constexpr std::uint16_t legacy_wwdb_minor = 6;
 constexpr std::uint16_t quantity_wwdb_minor = 7;
+constexpr std::uint16_t typed_packon_wwdb_minor = 8;
 constexpr std::uint32_t legacy_maximum_section_type = 21;
 constexpr std::uint32_t quantity_maximum_section_type = 23;
 constexpr std::uint32_t inflection_quantity_stride = 2;
@@ -33,6 +35,8 @@ constexpr std::uint32_t stem_quantity_slot_mask = 0x03U;
 constexpr std::uint32_t stem_quantity_slot_shift = 16U;
 constexpr std::uint32_t stem_quantity_key_width = 18U;
 constexpr std::uint8_t stem_quantity_slot_count = 4U;
+constexpr std::uint32_t dense_profile = 2U;
+constexpr std::uint32_t search_profile = 4U;
 
 enum class SectionType : std::uint32_t {
     stem_strings = 1,
@@ -74,7 +78,9 @@ class LoadFailure final : public std::runtime_error {
     LoadFailure(std::string code, std::string message)
         : std::runtime_error{message}, code_{std::move(code)} {}
 
-    [[nodiscard]] const std::string &code() const noexcept { return code_; }
+    [[nodiscard]] const std::string &code() const noexcept WORDS_LIFETIMEBOUND {
+        return code_;
+    }
 
   private:
     std::string code_;
@@ -131,12 +137,6 @@ class LoadFailure final : public std::runtime_error {
            (static_cast<std::uint64_t>(high) << 32U);
 }
 
-[[nodiscard]] std::uint64_t read_u48_le(const std::span<const std::byte> bytes,
-                                        const std::size_t offset) {
-    return static_cast<std::uint64_t>(read_u32_le(bytes, offset)) |
-           (static_cast<std::uint64_t>(read_u16_le(bytes, offset + 4U)) << 32U);
-}
-
 [[nodiscard]] std::uint32_t crc32(const std::span<const std::byte> bytes,
                                   std::uint32_t crc = 0) noexcept {
     crc = ~crc;
@@ -189,6 +189,67 @@ section_bytes(const std::span<const std::byte> image,
     const auto count = static_cast<std::size_t>(section.bytes);
     return image.subspan(offset, count);
 }
+
+class RecordView final {
+  public:
+    RecordView(const std::span<const std::byte> bytes WORDS_LIFETIMEBOUND,
+               const SectionView &section)
+        : bytes_{bytes}, count_{section.count}, stride_{section.stride},
+          columnar_{section.flags == 2U} {}
+
+    [[nodiscard]] std::uint8_t byte(const std::uint32_t record,
+                                    const std::uint32_t field) const {
+        if (record >= count_ || field >= stride_) {
+            fail("truncated-database", "record field is outside its section");
+        }
+        const auto offset = columnar_
+                                ? static_cast<std::size_t>(field) * count_ +
+                                      record
+                                : static_cast<std::size_t>(record) * stride_ +
+                                      field;
+        return byte_at(bytes_, offset);
+    }
+
+    [[nodiscard]] std::uint16_t read_u16(const std::uint32_t record,
+                                         const std::uint32_t field) const {
+        return static_cast<std::uint16_t>(byte(record, field)) |
+               static_cast<std::uint16_t>(
+                   static_cast<std::uint16_t>(byte(record, field + 1U)) << 8U);
+    }
+
+    [[nodiscard]] std::uint32_t read_u24(const std::uint32_t record,
+                                         const std::uint32_t field) const {
+        return static_cast<std::uint32_t>(byte(record, field)) |
+               (static_cast<std::uint32_t>(byte(record, field + 1U)) << 8U) |
+               (static_cast<std::uint32_t>(byte(record, field + 2U)) << 16U);
+    }
+
+    [[nodiscard]] std::uint32_t read_u32(const std::uint32_t record,
+                                         const std::uint32_t field) const {
+        return read_u24(record, field) |
+               (static_cast<std::uint32_t>(byte(record, field + 3U)) << 24U);
+    }
+
+    [[nodiscard]] std::uint64_t read_u48(const std::uint32_t record,
+                                         const std::uint32_t field) const {
+        return static_cast<std::uint64_t>(read_u32(record, field)) |
+               (static_cast<std::uint64_t>(read_u16(record, field + 4U))
+                << 32U);
+    }
+
+    [[nodiscard]] std::uint64_t read_u64(const std::uint32_t record,
+                                         const std::uint32_t field) const {
+        return static_cast<std::uint64_t>(read_u32(record, field)) |
+               (static_cast<std::uint64_t>(read_u32(record, field + 4U))
+                << 32U);
+    }
+
+  private:
+    std::span<const std::byte> bytes_;
+    std::uint32_t count_{};
+    std::uint32_t stride_{};
+    bool columnar_{};
+};
 
 [[nodiscard]] const SectionView &
 find_section(const std::vector<SectionView> &sections, const SectionType type) {
@@ -364,32 +425,54 @@ parse_stem_quantities(const std::span<const std::byte> image,
     return output;
 }
 
-void validate_section_shapes(const std::vector<SectionView> &sections) {
+void validate_section_shapes(const std::vector<SectionView> &sections,
+                             const DatabaseContent content) {
+    const auto search = content == DatabaseContent::search;
+    const auto record_flags = search ? 2U : 1U;
+    const auto require_meaning_pool = [&](const SectionType type) {
+        const auto *section = find_optional_section(sections, type);
+        if (search) {
+            if (section != nullptr) {
+                fail("unexpected-section",
+                     "search WWDB must not contain a meaning pool");
+            }
+        } else {
+            require_shape(find_section(sections, type), 0U, 0U);
+        }
+    };
+
     require_shape(find_section(sections, SectionType::stem_strings), 0U, 0U);
-    require_shape(find_section(sections, SectionType::meaning_strings), 0U, 0U);
+    require_meaning_pool(SectionType::meaning_strings);
     require_shape(find_section(sections, SectionType::ending_strings), 0U, 0U);
-    require_shape(find_section(sections, SectionType::lexemes), 1U, 16U);
-    require_shape(find_section(sections, SectionType::stem_references), 1U, 3U);
+    require_shape(find_section(sections, SectionType::lexemes), record_flags,
+                  search ? 14U : 16U);
+    require_shape(find_section(sections, SectionType::stem_references),
+                  record_flags, 3U);
     require_shape(find_section(sections, SectionType::stem_prefix_boundaries),
                   1U, 2U);
-    require_shape(find_section(sections, SectionType::inflections), 1U, 6U);
+    require_shape(find_section(sections, SectionType::inflections),
+                  record_flags, 6U);
     require_shape(
         find_section(sections, SectionType::inflection_section_boundaries), 1U,
         2U);
     require_shape(find_section(sections, SectionType::suffix_strings), 0U, 0U);
-    require_shape(find_section(sections, SectionType::suffix_meanings), 0U, 0U);
-    require_shape(find_section(sections, SectionType::suffixes), 1U, 14U);
+    require_meaning_pool(SectionType::suffix_meanings);
+    require_shape(find_section(sections, SectionType::suffixes), 1U,
+                  search ? 12U : 14U);
     require_shape(find_section(sections, SectionType::prefix_strings), 0U, 0U);
-    require_shape(find_section(sections, SectionType::prefix_meanings), 0U, 0U);
-    require_shape(find_section(sections, SectionType::prefixes), 1U, 8U);
+    require_meaning_pool(SectionType::prefix_meanings);
+    require_shape(find_section(sections, SectionType::prefixes), 1U,
+                  search ? 6U : 8U);
     require_shape(find_section(sections, SectionType::tackon_strings), 0U, 0U);
-    require_shape(find_section(sections, SectionType::tackon_meanings), 0U, 0U);
-    require_shape(find_section(sections, SectionType::tackons), 1U, 10U);
-    require_shape(find_section(sections, SectionType::uniques), 1U, 12U);
+    require_meaning_pool(SectionType::tackon_meanings);
+    require_shape(find_section(sections, SectionType::tackons), 1U,
+                  search ? 8U : 10U);
+    require_shape(find_section(sections, SectionType::uniques), 1U,
+                  search ? 10U : 12U);
     require_shape(find_section(sections, SectionType::rewrite_strings), 0U, 0U);
-    require_shape(find_section(sections, SectionType::rewrite_meanings), 0U,
-                  0U);
-    require_shape(find_section(sections, SectionType::rewrites), 1U, 16U);
+    require_meaning_pool(SectionType::rewrite_meanings);
+    require_shape(find_section(sections, SectionType::rewrites), 1U,
+                  search ? 14U : 16U);
 
     if (const auto *section = find_optional_section(
             sections, SectionType::inflection_quantities)) {
@@ -413,7 +496,7 @@ void validate_section_shapes(const std::vector<SectionView> &sections) {
 } // namespace
 
 std::expected<std::unique_ptr<const Database>, LoadError>
-Database::load_dense_poc(std::vector<std::byte> image) try {
+Database::load_poc(std::vector<std::byte> image) try {
     if (image.size() < fixed_header_size) {
         fail("truncated-database", "WWDB header is incomplete");
     }
@@ -435,14 +518,22 @@ Database::load_dense_poc(std::vector<std::byte> image) try {
     const auto declared_crc = read_u32_le(bytes, 32);
     const auto reserved = read_u32_le(bytes, 36);
     if (major != 1U ||
-        (minor != legacy_wwdb_minor && minor != quantity_wwdb_minor) ||
+        (minor != legacy_wwdb_minor && minor != quantity_wwdb_minor &&
+         minor != typed_packon_wwdb_minor) ||
         header_size != fixed_header_size) {
         fail("unsupported-version",
-             "only PoC WWDB versions 1.6 and 1.7 are supported");
+             "only PoC WWDB versions 1.6 through 1.8 are supported");
     }
-    if (profile != 2U) {
+    if (profile != dense_profile && profile != search_profile) {
         fail("unsupported-profile",
-             "only the row-oriented dense PoC profile is supported");
+             "only the full dense and search-only PoC profiles are supported");
+    }
+    const auto content = profile == search_profile ? DatabaseContent::search
+                                                   : DatabaseContent::full;
+    if (content == DatabaseContent::search &&
+        minor < typed_packon_wwdb_minor) {
+        fail("unsupported-version",
+             "search-only WWDB requires typed packon metadata from version 1.8");
     }
     if (reserved != 0U || declared_size != image.size()) {
         fail("invalid-header", "WWDB reserved field or file size is invalid");
@@ -514,8 +605,8 @@ Database::load_dense_poc(std::vector<std::byte> image) try {
 
     const auto &stem_pool_section =
         find_section(sections, SectionType::stem_strings);
-    const auto &meaning_pool_section =
-        find_section(sections, SectionType::meaning_strings);
+    const auto *meaning_pool_section =
+        find_optional_section(sections, SectionType::meaning_strings);
     const auto &ending_pool_section =
         find_section(sections, SectionType::ending_strings);
     const auto &lexeme_section = find_section(sections, SectionType::lexemes);
@@ -529,24 +620,24 @@ Database::load_dense_poc(std::vector<std::byte> image) try {
         find_section(sections, SectionType::inflection_section_boundaries);
     const auto &suffix_string_section =
         find_section(sections, SectionType::suffix_strings);
-    const auto &suffix_meaning_section =
-        find_section(sections, SectionType::suffix_meanings);
+    const auto *suffix_meaning_section =
+        find_optional_section(sections, SectionType::suffix_meanings);
     const auto &suffix_section = find_section(sections, SectionType::suffixes);
     const auto &prefix_string_section =
         find_section(sections, SectionType::prefix_strings);
-    const auto &prefix_meaning_section =
-        find_section(sections, SectionType::prefix_meanings);
+    const auto *prefix_meaning_section =
+        find_optional_section(sections, SectionType::prefix_meanings);
     const auto &prefix_section = find_section(sections, SectionType::prefixes);
     const auto &tackon_string_section =
         find_section(sections, SectionType::tackon_strings);
-    const auto &tackon_meaning_section =
-        find_section(sections, SectionType::tackon_meanings);
+    const auto *tackon_meaning_section =
+        find_optional_section(sections, SectionType::tackon_meanings);
     const auto &tackon_section = find_section(sections, SectionType::tackons);
     const auto &unique_section = find_section(sections, SectionType::uniques);
     const auto &rewrite_string_section =
         find_section(sections, SectionType::rewrite_strings);
-    const auto &rewrite_meaning_section =
-        find_section(sections, SectionType::rewrite_meanings);
+    const auto *rewrite_meaning_section =
+        find_optional_section(sections, SectionType::rewrite_meanings);
     const auto &rewrite_section = find_section(sections, SectionType::rewrites);
     const auto *inflection_quantity_section =
         find_optional_section(sections, SectionType::inflection_quantities);
@@ -560,50 +651,72 @@ Database::load_dense_poc(std::vector<std::byte> image) try {
 
     // WHY: layout validation belongs to the versioned wire schema and must
     // finish before any record is decoded into runtime objects.
-    validate_section_shapes(sections);
+    validate_section_shapes(sections, content);
 
-    auto database = std::unique_ptr<Database>{new Database{std::move(image)}};
+    auto database = std::unique_ptr<Database>{
+        new Database{std::move(image), content}};
     const auto owned_bytes = std::span<const std::byte>{database->image_};
     parse_string_pool(section_bytes(owned_bytes, stem_pool_section),
                       stem_pool_section.count, database->stem_strings_);
-    parse_string_pool(section_bytes(owned_bytes, meaning_pool_section),
-                      meaning_pool_section.count, database->meaning_strings_);
+    if (meaning_pool_section != nullptr) {
+        parse_string_pool(section_bytes(owned_bytes, *meaning_pool_section),
+                          meaning_pool_section->count,
+                          database->meaning_strings_);
+    }
     parse_string_pool(section_bytes(owned_bytes, ending_pool_section),
                       ending_pool_section.count, database->ending_strings_);
     parse_string_pool(section_bytes(owned_bytes, suffix_string_section),
                       suffix_string_section.count, database->suffix_strings_);
-    parse_string_pool(section_bytes(owned_bytes, suffix_meaning_section),
-                      suffix_meaning_section.count, database->suffix_meanings_);
+    if (suffix_meaning_section != nullptr) {
+        parse_string_pool(section_bytes(owned_bytes, *suffix_meaning_section),
+                          suffix_meaning_section->count,
+                          database->suffix_meanings_);
+    }
     parse_string_pool(section_bytes(owned_bytes, prefix_string_section),
                       prefix_string_section.count, database->prefix_strings_);
-    parse_string_pool(section_bytes(owned_bytes, prefix_meaning_section),
-                      prefix_meaning_section.count, database->prefix_meanings_);
+    if (prefix_meaning_section != nullptr) {
+        parse_string_pool(section_bytes(owned_bytes, *prefix_meaning_section),
+                          prefix_meaning_section->count,
+                          database->prefix_meanings_);
+    }
     parse_string_pool(section_bytes(owned_bytes, tackon_string_section),
                       tackon_string_section.count, database->tackon_strings_);
-    parse_string_pool(section_bytes(owned_bytes, tackon_meaning_section),
-                      tackon_meaning_section.count, database->tackon_meanings_);
+    if (tackon_meaning_section != nullptr) {
+        parse_string_pool(section_bytes(owned_bytes, *tackon_meaning_section),
+                          tackon_meaning_section->count,
+                          database->tackon_meanings_);
+    }
     parse_string_pool(section_bytes(owned_bytes, rewrite_string_section),
                       rewrite_string_section.count, database->rewrite_strings_);
-    parse_string_pool(section_bytes(owned_bytes, rewrite_meaning_section),
-                      rewrite_meaning_section.count,
-                      database->rewrite_meanings_);
+    if (rewrite_meaning_section != nullptr) {
+        parse_string_pool(section_bytes(owned_bytes, *rewrite_meaning_section),
+                          rewrite_meaning_section->count,
+                          database->rewrite_meanings_);
+    }
 
-    const auto rewrite_bytes = section_bytes(owned_bytes, rewrite_section);
+    const RecordView rewrite_records{
+        section_bytes(owned_bytes, rewrite_section), rewrite_section};
     database->rewrites_.reserve(rewrite_section.count);
     for (std::uint32_t ordinal = 0; ordinal < rewrite_section.count;
          ++ordinal) {
-        const auto offset = static_cast<std::size_t>(ordinal) * 16U;
-        const auto id = read_u16_le(rewrite_bytes, offset);
-        const auto before_id = read_u16_le(rewrite_bytes, offset + 2U);
-        const auto after_id = read_u16_le(rewrite_bytes, offset + 4U);
-        const auto name_id = read_u16_le(rewrite_bytes, offset + 6U);
-        const auto meaning_id = read_u16_le(rewrite_bytes, offset + 8U);
-        const auto metadata = read_u32_le(rewrite_bytes, offset + 10U);
-        const auto behavior = read_u16_le(rewrite_bytes, offset + 14U);
+        const auto id = rewrite_records.read_u16(ordinal, 0U);
+        const auto before_id = rewrite_records.read_u16(ordinal, 2U);
+        const auto after_id = rewrite_records.read_u16(ordinal, 4U);
+        const auto name_id = rewrite_records.read_u16(ordinal, 6U);
+        const auto meaning_id = content == DatabaseContent::full
+                                    ? rewrite_records.read_u16(ordinal, 8U)
+                                    : 0U;
+        const auto metadata_offset =
+            content == DatabaseContent::full ? 10U : 8U;
+        const auto metadata =
+            rewrite_records.read_u32(ordinal, metadata_offset);
+        const auto behavior =
+            rewrite_records.read_u16(ordinal, metadata_offset + 4U);
         if (id != ordinal || before_id >= database->rewrite_strings_.size() ||
             after_id >= database->rewrite_strings_.size() ||
             name_id >= database->rewrite_strings_.size() ||
-            meaning_id >= database->rewrite_meanings_.size()) {
+            (content == DatabaseContent::full &&
+             meaning_id >= database->rewrite_meanings_.size())) {
             fail("invalid-reference",
                  "rewrite ID or string reference is out of range");
         }
@@ -666,29 +779,34 @@ Database::load_dense_poc(std::vector<std::byte> image) try {
         database->rewrites_.push_back(rewrite);
     }
 
-    const auto lexeme_bytes = section_bytes(owned_bytes, lexeme_section);
+    const RecordView lexeme_records{section_bytes(owned_bytes, lexeme_section),
+                                    lexeme_section};
     database->lexemes_.reserve(lexeme_section.count);
     for (std::uint32_t ordinal = 0; ordinal < lexeme_section.count; ++ordinal) {
-        const auto offset = static_cast<std::size_t>(ordinal) * 16U;
         LexemeRecord record;
         record.dictionary = DictionaryKind::general;
         record.dictionary_entry = ordinal;
         for (std::size_t slot = 0; slot < record.stems.size(); ++slot) {
-            const auto id = read_u16_le(lexeme_bytes, offset + slot * 2U);
+            const auto id = lexeme_records.read_u16(
+                ordinal, static_cast<std::uint32_t>(slot * 2U));
             if (id >= database->stem_strings_.size()) {
                 fail("invalid-reference",
                      "lexeme stem string ID is out of range");
             }
             record.stems[slot] = StringId{id};
         }
-        const auto meaning_id = read_u16_le(lexeme_bytes, offset + 8U);
-        if (meaning_id >= database->meaning_strings_.size()) {
+        const auto meaning_id = content == DatabaseContent::full
+                                    ? lexeme_records.read_u16(ordinal, 8U)
+                                    : 0U;
+        if (content == DatabaseContent::full &&
+            meaning_id >= database->meaning_strings_.size()) {
             fail("invalid-reference",
                  "lexeme meaning string ID is out of range");
         }
         record.meaning = StringId{meaning_id};
 
-        const auto metadata = read_u48_le(lexeme_bytes, offset + 10U);
+        const auto metadata = lexeme_records.read_u48(
+            ordinal, content == DatabaseContent::full ? 10U : 8U);
         const auto pofs = static_cast<std::uint8_t>(metadata & 0x0fU);
         const auto paradigm =
             static_cast<std::uint8_t>((metadata >> 4U) & 0xffU);
@@ -726,7 +844,15 @@ Database::load_dense_poc(std::vector<std::byte> image) try {
                    pofs == std::to_underlying(PartOfSpeech::pack)) {
             record.pronoun_kind =
                 static_cast<PronounKind>(class_payload & 0x0fU);
-            if ((class_payload >> 4U) != 0U ||
+            const auto packon_plus_one =
+                static_cast<std::uint16_t>(class_payload >> 4U);
+            if (pofs == std::to_underlying(PartOfSpeech::pack) &&
+                minor >= typed_packon_wwdb_minor && packon_plus_one != 0U) {
+                record.required_packon = AddonId{packon_plus_one - 1U};
+            }
+            if ((pofs == std::to_underlying(PartOfSpeech::pronoun) &&
+                 packon_plus_one != 0U) ||
+                (minor < typed_packon_wwdb_minor && packon_plus_one != 0U) ||
                 std::to_underlying(record.pronoun_kind) > 7U) {
                 fail("invalid-enum",
                      "pronoun lexical payload contains an invalid kind");
@@ -783,12 +909,12 @@ Database::load_dense_poc(std::vector<std::byte> image) try {
     };
     std::vector<IndexedStem> indexed_stems;
     indexed_stems.reserve(stem_reference_section.count);
-    const auto reference_bytes =
-        section_bytes(owned_bytes, stem_reference_section);
+    const RecordView stem_reference_records{
+        section_bytes(owned_bytes, stem_reference_section),
+        stem_reference_section};
     for (std::uint32_t ordinal = 0; ordinal < stem_reference_section.count;
          ++ordinal) {
-        const auto packed = read_u24_le(reference_bytes,
-                                        static_cast<std::size_t>(ordinal) * 3U);
+        const auto packed = stem_reference_records.read_u24(ordinal, 0U);
         if ((packed >> 21U) != 0U) {
             fail("reserved-bits", "stem reference has nonzero reserved bits");
         }
@@ -836,12 +962,12 @@ Database::load_dense_poc(std::vector<std::byte> image) try {
         });
     }
 
-    const auto rule_bytes = section_bytes(owned_bytes, inflection_section);
+    const RecordView inflection_records{
+        section_bytes(owned_bytes, inflection_section), inflection_section};
     database->rules_.reserve(inflection_section.count);
     for (std::uint32_t ordinal = 0; ordinal < inflection_section.count;
          ++ordinal) {
-        const auto packed =
-            read_u48_le(rule_bytes, static_cast<std::size_t>(ordinal) * 6U);
+        const auto packed = inflection_records.read_u48(ordinal, 0U);
         if ((packed >> 47U) != 0U) {
             fail("reserved-bits",
                  "inflection record has nonzero reserved bits");
@@ -1024,14 +1150,18 @@ Database::load_dense_poc(std::vector<std::byte> image) try {
     };
     std::vector<IndexedUnique> indexed_uniques;
     indexed_uniques.reserve(unique_section.count);
-    const auto unique_bytes = section_bytes(owned_bytes, unique_section);
+    const RecordView unique_records{section_bytes(owned_bytes, unique_section),
+                                    unique_section};
     for (std::uint32_t ordinal = 0; ordinal < unique_section.count; ++ordinal) {
-        const auto offset = static_cast<std::size_t>(ordinal) * 12U;
-        const auto surface_id = read_u16_le(unique_bytes, offset);
-        const auto meaning_id = read_u16_le(unique_bytes, offset + 2U);
-        const auto metadata = read_u64_le(unique_bytes, offset + 4U);
+        const auto surface_id = unique_records.read_u16(ordinal, 0U);
+        const auto meaning_id = content == DatabaseContent::full
+                                    ? unique_records.read_u16(ordinal, 2U)
+                                    : 0U;
+        const auto metadata = unique_records.read_u64(
+            ordinal, content == DatabaseContent::full ? 4U : 2U);
         if (surface_id >= database->stem_strings_.size() ||
-            meaning_id >= database->meaning_strings_.size()) {
+            (content == DatabaseContent::full &&
+             meaning_id >= database->meaning_strings_.size())) {
             fail("invalid-reference",
                  "unique string or meaning ID is out of range");
         }
@@ -1161,16 +1291,20 @@ Database::load_dense_poc(std::vector<std::byte> image) try {
         });
     }
 
-    const auto suffix_bytes = section_bytes(owned_bytes, suffix_section);
+    const RecordView suffix_records{section_bytes(owned_bytes, suffix_section),
+                                    suffix_section};
     database->suffixes_.reserve(suffix_section.count);
     for (std::uint32_t ordinal = 0; ordinal < suffix_section.count; ++ordinal) {
-        const auto offset = static_cast<std::size_t>(ordinal) * 14U;
-        const auto addon_id = read_u16_le(suffix_bytes, offset);
-        const auto fix_id = read_u16_le(suffix_bytes, offset + 2U);
-        const auto meaning_id = read_u16_le(suffix_bytes, offset + 4U);
-        const auto metadata = read_u64_le(suffix_bytes, offset + 6U);
+        const auto addon_id = suffix_records.read_u16(ordinal, 0U);
+        const auto fix_id = suffix_records.read_u16(ordinal, 2U);
+        const auto meaning_id = content == DatabaseContent::full
+                                    ? suffix_records.read_u16(ordinal, 4U)
+                                    : 0U;
+        const auto metadata = suffix_records.read_u64(
+            ordinal, content == DatabaseContent::full ? 6U : 4U);
         if (fix_id >= database->suffix_strings_.size() ||
-            meaning_id >= database->suffix_meanings_.size()) {
+            (content == DatabaseContent::full &&
+             meaning_id >= database->suffix_meanings_.size())) {
             fail("invalid-reference",
                  "suffix string or meaning ID is out of range");
         }
@@ -1285,16 +1419,20 @@ Database::load_dense_poc(std::vector<std::byte> image) try {
         });
     }
 
-    const auto prefix_bytes = section_bytes(owned_bytes, prefix_section);
+    const RecordView prefix_records{section_bytes(owned_bytes, prefix_section),
+                                    prefix_section};
     database->prefixes_.reserve(prefix_section.count);
     for (std::uint32_t ordinal = 0; ordinal < prefix_section.count; ++ordinal) {
-        const auto offset = static_cast<std::size_t>(ordinal) * 8U;
-        const auto addon_id = read_u16_le(prefix_bytes, offset);
-        const auto fix_id = read_u16_le(prefix_bytes, offset + 2U);
-        const auto meaning_id = read_u16_le(prefix_bytes, offset + 4U);
-        const auto metadata = read_u16_le(prefix_bytes, offset + 6U);
+        const auto addon_id = prefix_records.read_u16(ordinal, 0U);
+        const auto fix_id = prefix_records.read_u16(ordinal, 2U);
+        const auto meaning_id = content == DatabaseContent::full
+                                    ? prefix_records.read_u16(ordinal, 4U)
+                                    : 0U;
+        const auto metadata = prefix_records.read_u16(
+            ordinal, content == DatabaseContent::full ? 6U : 4U);
         if (fix_id >= database->prefix_strings_.size() ||
-            meaning_id >= database->prefix_meanings_.size()) {
+            (content == DatabaseContent::full &&
+             meaning_id >= database->prefix_meanings_.size())) {
             fail("invalid-reference",
                  "prefix string or meaning ID is out of range");
         }
@@ -1315,16 +1453,20 @@ Database::load_dense_poc(std::vector<std::byte> image) try {
         database->prefixes_.push_back(prefix);
     }
 
-    const auto tackon_bytes = section_bytes(owned_bytes, tackon_section);
+    const RecordView tackon_records{section_bytes(owned_bytes, tackon_section),
+                                    tackon_section};
     database->tackons_.reserve(tackon_section.count);
     for (std::uint32_t ordinal = 0; ordinal < tackon_section.count; ++ordinal) {
-        const auto offset = static_cast<std::size_t>(ordinal) * 10U;
-        const auto addon_id = read_u16_le(tackon_bytes, offset);
-        const auto fix_id = read_u16_le(tackon_bytes, offset + 2U);
-        const auto meaning_id = read_u16_le(tackon_bytes, offset + 4U);
-        const auto metadata = read_u32_le(tackon_bytes, offset + 6U);
+        const auto addon_id = tackon_records.read_u16(ordinal, 0U);
+        const auto fix_id = tackon_records.read_u16(ordinal, 2U);
+        const auto meaning_id = content == DatabaseContent::full
+                                    ? tackon_records.read_u16(ordinal, 4U)
+                                    : 0U;
+        const auto metadata = tackon_records.read_u32(
+            ordinal, content == DatabaseContent::full ? 6U : 4U);
         if (fix_id >= database->tackon_strings_.size() ||
-            meaning_id >= database->tackon_meanings_.size()) {
+            (content == DatabaseContent::full &&
+             meaning_id >= database->tackon_meanings_.size())) {
             fail("invalid-reference",
                  "tackon string or meaning ID is out of range");
         }
@@ -1422,6 +1564,16 @@ Database::load_dense_poc(std::vector<std::byte> image) try {
                                 return reference.kind == AddonKind::unknown;
                             })) {
         fail("invalid-reference", "addon ID namespace contains a gap");
+    }
+    for (const auto &lexeme : database->lexemes_) {
+        if (lexeme.required_packon &&
+            (lexeme.required_packon->value() >=
+                 database->addon_references_.size() ||
+             database->addon_references_[lexeme.required_packon->value()].kind !=
+                 AddonKind::packon)) {
+            fail("invalid-reference",
+                 "lexeme packon metadata does not name a packon addon");
+        }
     }
 
     struct IndexedPrefix final {

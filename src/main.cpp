@@ -153,6 +153,12 @@ int main(const int argc, char *argv[]) try {
                   << engine.error().message << '\n';
         return 3;
     }
+    if (options->format == "analysis" &&
+        !(*engine)->supports_full_analysis()) {
+        std::cerr << "words_cli: unsupported-output: analysis format requires "
+                     "a full WWDB with meanings\n";
+        return 3;
+    }
 
     const words::AnalysisOptions analysis_options{options->two_words};
     if (options->batch_json_lines) {

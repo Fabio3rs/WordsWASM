@@ -1,0 +1,547 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Whitaker's WORDS generated lexeme review candidate",
+  "description": "Build-time evidence queue. It is not a runtime analysis or a packer input.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "draft_id",
+    "revision",
+    "key",
+    "structure",
+    "evidence",
+    "triage",
+    "decision"
+  ],
+  "properties": {
+    "schema": {
+      "const": "whitakers-words.lexeme-review-candidate.v1"
+    },
+    "draft_id": {
+      "type": "string",
+      "pattern": "^lexdraft:[a-z]+:(common|proper):[a-z]+$"
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "baseline_revision": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "key": {
+      "$ref": "#/$defs/key"
+    },
+    "structure": {
+      "$ref": "#/$defs/structure"
+    },
+    "evidence": {
+      "$ref": "#/$defs/evidence"
+    },
+    "triage": {
+      "$ref": "#/$defs/triage"
+    },
+    "decision": {
+      "$ref": "#/$defs/pendingDecision"
+    },
+    "baseline": {
+      "$ref": "#/$defs/baseline"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["baseline"]
+      },
+      "then": {
+        "required": ["baseline_revision"]
+      },
+      "else": {
+        "not": {
+          "required": ["baseline_revision"]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "partOfSpeech": {
+      "enum": [
+        "NOUN",
+        "PRON",
+        "ADJ",
+        "NUM",
+        "ADV",
+        "VERB",
+        "PREP",
+        "CONJ",
+        "INTERJ"
+      ]
+    },
+    "key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ascii_lemma", "part_of_speech", "proper"],
+      "properties": {
+        "ascii_lemma": {
+          "type": "string",
+          "pattern": "^[a-z]+$"
+        },
+        "part_of_speech": {
+          "$ref": "#/$defs/partOfSpeech"
+        },
+        "proper": {
+          "type": "boolean"
+        }
+      }
+    },
+    "stem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot", "stem"],
+      "properties": {
+        "slot": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "stem": {
+          "type": "string",
+          "pattern": "^[a-z]{1,18}$"
+        }
+      }
+    },
+    "paradigm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "part_of_speech",
+        "declension_or_conjugation",
+        "variant"
+      ],
+      "properties": {
+        "part_of_speech": {
+          "$ref": "#/$defs/partOfSpeech"
+        },
+        "declension_or_conjugation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9
+        },
+        "variant": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9
+        }
+      }
+    },
+    "lexical": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["part_of_speech", "paradigm", "stems"],
+      "properties": {
+        "part_of_speech": {
+          "$ref": "#/$defs/partOfSpeech"
+        },
+        "paradigm": {
+          "$ref": "#/$defs/paradigm"
+        },
+        "stems": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/stem"
+          }
+        },
+        "gender": {
+          "enum": ["m", "f", "n", "c"]
+        }
+      }
+    },
+    "structure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["readiness", "lexical", "validation"],
+      "properties": {
+        "readiness": {
+          "enum": ["cross_validated", "empirical_structure"]
+        },
+        "lexical": {
+          "$ref": "#/$defs/lexical"
+        },
+        "validation": {
+          "type": "object"
+        }
+      }
+    },
+    "quantityVote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_ref",
+        "source_family",
+        "independent_authority",
+        "quantity"
+      ],
+      "properties": {
+        "source_ref": {
+          "type": "string",
+          "minLength": 3
+        },
+        "source_family": {
+          "type": "string",
+          "minLength": 1
+        },
+        "independent_authority": {
+          "type": "boolean"
+        },
+        "quantity": {
+          "enum": ["long", "short"]
+        }
+      }
+    },
+    "quantityPosition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["letter_index", "letter", "status", "votes"],
+      "properties": {
+        "letter_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "letter": {
+          "enum": ["a", "e", "i", "o", "u", "y"]
+        },
+        "status": {
+          "enum": [
+            "consensus",
+            "conflict",
+            "single_source",
+            "derived_only",
+            "derived_conflict",
+            "unknown"
+          ]
+        },
+        "votes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/quantityVote"
+          }
+        },
+        "consensus": {
+          "enum": ["long", "short"]
+        }
+      }
+    },
+    "familyMultiplicity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_family",
+        "independent_authority",
+        "entry_count",
+        "source_entry_ids"
+      ],
+      "properties": {
+        "source_family": {
+          "type": "string",
+          "minLength": 1
+        },
+        "independent_authority": {
+          "type": "boolean"
+        },
+        "entry_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source_entry_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "headwordEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_ref",
+        "source_family",
+        "independent_authority",
+        "language",
+        "role",
+        "lemma",
+        "text"
+      ],
+      "properties": {
+        "source_ref": {
+          "type": "string",
+          "minLength": 3
+        },
+        "source_family": {
+          "type": "string",
+          "minLength": 1
+        },
+        "independent_authority": {
+          "type": "boolean"
+        },
+        "language": {
+          "type": "string",
+          "pattern": "^[a-z]{2,3}$"
+        },
+        "role": {
+          "enum": ["headword_and_gloss", "reference_only"]
+        },
+        "lemma": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "marked_lemmas",
+        "source_families",
+        "quantity",
+        "semantics"
+      ],
+      "properties": {
+        "marked_lemmas": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "source_families": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "quantity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "positions"],
+          "properties": {
+            "status": {
+              "enum": [
+                "conflict",
+                "consensus_complete",
+                "consensus_partial",
+                "single_source_only",
+                "derived_only",
+                "unknown"
+              ]
+            },
+            "positions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/quantityPosition"
+              }
+            }
+          }
+        },
+        "semantics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "family_multiplicity",
+            "headword_evidence"
+          ],
+          "properties": {
+            "status": {
+              "const": "manual_alignment_required"
+            },
+            "family_multiplicity": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "$ref": "#/$defs/familyMultiplicity"
+              }
+            },
+            "headword_evidence": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "$ref": "#/$defs/headwordEvidence"
+              }
+            }
+          }
+        }
+      }
+    },
+    "triage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["priority", "flags"],
+      "properties": {
+        "priority": {
+          "enum": ["normal", "medium", "high"]
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "pendingDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "automatic_promotion_allowed",
+        "required_fields"
+      ],
+      "properties": {
+        "status": {
+          "const": "needs_review"
+        },
+        "automatic_promotion_allowed": {
+          "const": false
+        },
+        "required_fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "baselineLexeme": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dictionary",
+        "entry_id",
+        "dictionary_form",
+        "part_of_speech",
+        "meaning",
+        "derivation_methods"
+      ],
+      "properties": {
+        "dictionary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entry_id": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "dictionary_form": {
+          "type": "string"
+        },
+        "part_of_speech": {
+          "type": "string"
+        },
+        "meaning": {
+          "type": "string"
+        },
+        "derivation_methods": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "coverage",
+        "analysis_count",
+        "derivation_methods",
+        "target_part_of_speech_present",
+        "lexemes"
+      ],
+      "properties": {
+        "status": {
+          "enum": ["analyzed", "unknown"]
+        },
+        "coverage": {
+          "enum": [
+            "unknown",
+            "unknown_with_suggestion",
+            "direct",
+            "artificial",
+            "repaired",
+            "mixed"
+          ]
+        },
+        "analysis_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "derivation_methods": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "target_part_of_speech_present": {
+          "type": "boolean"
+        },
+        "lexemes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/baselineLexeme"
+          }
+        },
+        "two_words_suggestions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["split_at", "segments"],
+            "properties": {
+              "split_at": {
+                "type": "integer",
+                "minimum": 2
+              },
+              "segments": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

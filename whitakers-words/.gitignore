@@ -1,0 +1,33 @@
+*~
+.DS_Store
+__pycache__/
+*.py[cod]
+auto.cgpr
+obj/
+bin/
+lib/
+_site/
+WORD.MOD
+WORD.MDV
+DICTFILE.GEN
+INDXFILE.GEN
+INFLECTS.SEC
+INFLECTS.SEC.*
+STEMFILE.GEN
+CHECKEWD.
+EWDSLIST.GEN
+DICT.LOC
+DICTFILE.LOC
+STEMFILE.LOC
+EWDSFILE.GEN
+STEMLIST.GEN
+src/latin_utils/latin_utils-config.adb
+
+# WWDB containers, compressed variants and manifests are deterministic release
+# products. Keep the directory, but publish its contents from tagged CI builds.
+poc/compact-db/output/*
+!poc/compact-db/output/.gitkeep
+
+# Local investigation captures/backups are neither Ada source nor test data.
+scopa,
+whitakers-words.7z

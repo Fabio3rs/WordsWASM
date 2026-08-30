@@ -11,12 +11,23 @@
 namespace words {
 
 TEST(DatabaseTest, LoadsDensePocAndFindsRealData) {
-    auto database = Database::load_dense_poc(test::read_database());
+    auto database = Database::load_poc(test::read_database());
     ASSERT_TRUE(database) << database.error().message;
     EXPECT_FALSE((*database)->lookup_stem("puell").empty());
     EXPECT_FALSE((*database)->lookup_ending("ae").empty());
     EXPECT_FALSE((*database)->lookup_ending("").empty());
     EXPECT_TRUE((*database)->lookup_stem("zzzzzz").empty());
+}
+
+TEST(DatabaseTest, LoadsColumnarSearchPocWithoutMeaningPools) {
+    auto database = Database::load_poc(test::read_search_database());
+    ASSERT_TRUE(database) << database.error().message;
+    EXPECT_EQ((*database)->content(), DatabaseContent::search);
+    EXPECT_FALSE((*database)->has_meanings());
+    EXPECT_FALSE((*database)->lookup_stem("puell").empty());
+    EXPECT_FALSE((*database)->lookup_ending("ae").empty());
+    EXPECT_EQ((*database)->lookup_unique("eadem").size(), 3U);
+    EXPECT_EQ((*database)->lookup_suffix("icul").size(), 3U);
 }
 
 TEST(DatabaseTest, LoadsInflectionAndSparseStemQuantities) {
@@ -27,7 +38,7 @@ TEST(DatabaseTest, LoadsInflectionAndSparseStemQuantities) {
     constexpr std::uint32_t short_evil_entry = 26'267U;
     constexpr std::uint32_t short_bad_entry = 26'269U;
 
-    auto database = Database::load_dense_poc(test::read_database());
+    auto database = Database::load_poc(test::read_database());
     ASSERT_TRUE(database) << database.error().message;
 
     const auto ablative =
@@ -52,10 +63,36 @@ TEST(DatabaseTest, LoadsInflectionAndSparseStemQuantities) {
             EXPECT_EQ(quantity.long_vowel, 0U) << entry;
         }
     }
+
+    const auto expect_stem_quantity = [&](const std::string_view stem,
+                                          const std::uint32_t entry,
+                                          const std::uint32_t known,
+                                          const std::uint32_t long_vowel) {
+        const auto references = (*database)->lookup_stem(stem);
+        const auto found = std::ranges::find_if(
+            references, [&](const StemReference &reference) {
+                return (*database)->lexeme(reference.lexeme).dictionary_entry +
+                           1U ==
+                       entry;
+            });
+        ASSERT_NE(found, references.end()) << entry;
+        const auto quantity =
+            (*database)->stem_quantity(found->lexeme, found->lexical_slot);
+        EXPECT_EQ(quantity.known, known) << entry;
+        EXPECT_EQ(quantity.long_vowel, long_vowel) << entry;
+    };
+    expect_stem_quantity("puell", 32'257U, 0b00010U, 0U);
+    expect_stem_quantity("nomen", 27'969U, 0b00010U, 0b00010U);
+    expect_stem_quantity("adhuc", 1'012U, 0b01001U, 0b01000U);
+    expect_stem_quantity("defend", 16'105U, 0b00010U, 0b00010U);
+    expect_stem_quantity("lev", 25'590U, 0b00010U, 0U);
+    expect_stem_quantity("lev", 25'591U, 0b00010U, 0b00010U);
+    expect_stem_quantity("popul", 30'955U, 0b01010U, 0U);
+    expect_stem_quantity("popul", 30'957U, 0b01010U, 0b00010U);
 }
 
 TEST(DatabaseTest, DecodesAdjectiveDegreePayloads) {
-    auto database = Database::load_dense_poc(test::read_database());
+    auto database = Database::load_poc(test::read_database());
     ASSERT_TRUE(database) << database.error().message;
 
     const auto has_lexical_degree = [&](const std::string_view stem,
@@ -81,7 +118,7 @@ TEST(DatabaseTest, DecodesAdjectiveDegreePayloads) {
 }
 
 TEST(DatabaseTest, DecodesRemainingSemanticPayloads) {
-    auto database = Database::load_dense_poc(test::read_database());
+    auto database = Database::load_poc(test::read_database());
     ASSERT_TRUE(database) << database.error().message;
 
     const auto has_lexeme = [&](const std::string_view stem,
@@ -120,7 +157,7 @@ TEST(DatabaseTest, DecodesRemainingSemanticPayloads) {
 }
 
 TEST(DatabaseTest, LoadsAndIndexesUniqueAnalyses) {
-    auto database = Database::load_dense_poc(test::read_database());
+    auto database = Database::load_poc(test::read_database());
     ASSERT_TRUE(database) << database.error().message;
 
     const auto homographs = (*database)->lookup_unique("eadem");
@@ -175,7 +212,7 @@ TEST(DatabaseTest, LoadsTypedRewriteMicroRules) {
 }
 
 TEST(DatabaseTest, LoadsAndIndexesSuffixRules) {
-    auto database = Database::load_dense_poc(test::read_database());
+    auto database = Database::load_poc(test::read_database());
     ASSERT_TRUE(database) << database.error().message;
 
     const auto suffixes = (*database)->lookup_suffix("icul");
@@ -190,7 +227,7 @@ TEST(DatabaseTest, LoadsAndIndexesSuffixRules) {
 }
 
 TEST(DatabaseTest, LoadsAndIndexesPrefixRules) {
-    auto database = Database::load_dense_poc(test::read_database());
+    auto database = Database::load_poc(test::read_database());
     ASSERT_TRUE(database) << database.error().message;
 
     const auto prefixes = (*database)->lookup_prefix("archi");
@@ -212,7 +249,7 @@ TEST(DatabaseTest, LoadsAndIndexesPrefixRules) {
 }
 
 TEST(DatabaseTest, SeparatesTickonsTackonsAndPackons) {
-    auto database = Database::load_dense_poc(test::read_database());
+    auto database = Database::load_poc(test::read_database());
     ASSERT_TRUE(database) << database.error().message;
 
     const auto tickons = (*database)->lookup_tickon("ec");
@@ -242,7 +279,7 @@ TEST(DatabaseTest, SeparatesTickonsTackonsAndPackons) {
 TEST(DatabaseTest, RejectsWrongMagic) {
     auto bytes = test::read_database();
     bytes[0] = std::byte{'X'};
-    const auto database = Database::load_dense_poc(std::move(bytes));
+    const auto database = Database::load_poc(std::move(bytes));
     ASSERT_FALSE(database);
     EXPECT_EQ(database.error().code, "invalid-magic");
 }
@@ -250,7 +287,7 @@ TEST(DatabaseTest, RejectsWrongMagic) {
 TEST(DatabaseTest, RejectsUnsupportedProfile) {
     auto bytes = test::read_database();
     bytes[20] = std::byte{3};
-    const auto database = Database::load_dense_poc(std::move(bytes));
+    const auto database = Database::load_poc(std::move(bytes));
     ASSERT_FALSE(database);
     EXPECT_EQ(database.error().code, "unsupported-profile");
 }
@@ -258,7 +295,7 @@ TEST(DatabaseTest, RejectsUnsupportedProfile) {
 TEST(DatabaseTest, RejectsTruncation) {
     auto bytes = test::read_database();
     bytes.resize(20U);
-    const auto database = Database::load_dense_poc(std::move(bytes));
+    const auto database = Database::load_poc(std::move(bytes));
     ASSERT_FALSE(database);
     EXPECT_EQ(database.error().code, "truncated-database");
 }
@@ -266,7 +303,7 @@ TEST(DatabaseTest, RejectsTruncation) {
 TEST(DatabaseTest, RejectsPayloadCorruption) {
     auto bytes = test::read_database();
     bytes.back() ^= std::byte{1};
-    const auto database = Database::load_dense_poc(std::move(bytes));
+    const auto database = Database::load_poc(std::move(bytes));
     ASSERT_FALSE(database);
     EXPECT_EQ(database.error().code, "checksum-mismatch");
 }

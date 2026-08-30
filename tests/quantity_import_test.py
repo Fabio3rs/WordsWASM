@@ -29,6 +29,8 @@ def source() -> dict[str, object]:
         "version": "1",
         "method": "grammar_reference",
         "reliability": "high",
+        "family": "fixture",
+        "independent_quantity_authority": True,
     }
 
 
@@ -70,7 +72,7 @@ class QuantityImportTest(unittest.TestCase):
             (ROOT / "whitakers-words/QUANTITIES.LAT").read_text(encoding="utf-8"),
         )
         report = json.loads(result.report)
-        self.assertEqual(report["counts"]["promoted_targets"], 9)
+        self.assertEqual(report["counts"]["promoted_targets"], 79)
         self.assertEqual(report["counts"]["deferred_evidence"], 2)
 
     def test_confirmed_evidence_merges_disjoint_positions(self) -> None:

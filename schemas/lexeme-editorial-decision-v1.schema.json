@@ -1,0 +1,244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Whitaker's WORDS lexeme editorial decision",
+  "description": "Versioned human decision that may authorize a future runtime lexeme.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "decision_id",
+    "target",
+    "disposition",
+    "review"
+  ],
+  "properties": {
+    "schema": {
+      "const": "whitakers-words.lexeme-editorial-decision.v1"
+    },
+    "decision_id": {
+      "type": "string",
+      "pattern": "^lexdecision:[a-z0-9._:-]+$"
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["draft_id", "revision", "sense_ids"],
+      "properties": {
+        "draft_id": {
+          "type": "string",
+          "pattern": "^lexdraft:[a-z]+:(common|proper):[a-z]+$"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "sense_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^sense-[a-z0-9._-]+$"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "disposition": {
+      "enum": [
+        "accept_new",
+        "merge_existing",
+        "variant_of",
+        "reject",
+        "defer"
+      ]
+    },
+    "existing_lexeme": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dictionary", "entry_id"],
+      "properties": {
+        "dictionary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entry_id": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "canonical": {
+      "$ref": "#/$defs/canonical"
+    },
+    "field_evidence": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "string",
+          "minLength": 3
+        },
+        "uniqueItems": true
+      },
+      "minProperties": 1
+    },
+    "quantity_evidence_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewed_at", "reviewer", "note"],
+      "properties": {
+        "reviewed_at": {
+          "type": "string",
+          "format": "date"
+        },
+        "reviewer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "disposition": {
+            "const": "accept_new"
+          }
+        },
+        "required": ["disposition"]
+      },
+      "then": {
+        "required": ["canonical", "field_evidence", "quantity_evidence_ids"]
+      },
+      "else": {
+        "not": {
+          "required": ["canonical"]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "disposition": {
+            "enum": ["merge_existing", "variant_of"]
+          }
+        },
+        "required": ["disposition"]
+      },
+      "then": {
+        "required": ["existing_lexeme"]
+      },
+      "else": {
+        "not": {
+          "required": ["existing_lexeme"]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "stem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot", "ascii"],
+      "properties": {
+        "slot": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "ascii": {
+          "type": "string",
+          "pattern": "^[a-z]{1,18}$"
+        }
+      }
+    },
+    "canonical": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dictionary_form",
+        "meaning",
+        "part_of_speech",
+        "properties",
+        "stems",
+        "metadata"
+      ],
+      "properties": {
+        "dictionary_form": {
+          "type": "string",
+          "minLength": 1
+        },
+        "meaning": {
+          "type": "string",
+          "minLength": 1
+        },
+        "part_of_speech": {
+          "enum": [
+            "noun",
+            "pronoun",
+            "adjective",
+            "numeral",
+            "adverb",
+            "verb",
+            "preposition",
+            "conjunction",
+            "interjection"
+          ]
+        },
+        "properties": {
+          "type": "object",
+          "minProperties": 1
+        },
+        "stems": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/stem"
+          }
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "age",
+            "subject",
+            "geography",
+            "frequency",
+            "source"
+          ],
+          "properties": {
+            "age": {
+              "type": ["string", "null"]
+            },
+            "subject": {
+              "type": ["string", "null"]
+            },
+            "geography": {
+              "type": ["string", "null"]
+            },
+            "frequency": {
+              "type": ["string", "null"]
+            },
+            "source": {
+              "const": "other-dictionaries"
+            }
+          }
+        }
+      }
+    }
+  }
+}

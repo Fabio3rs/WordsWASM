@@ -1370,9 +1370,17 @@ void append_packon_analyses(const Database &database,
                     !packon_paradigm_accepts(packon, rule, lexeme)) {
                     continue;
                 }
-                const auto meaning = database.meaning(lexeme.meaning);
-                const auto marker = std::string{"(w/-"} + std::string{fix};
-                if (!meaning.starts_with(marker)) {
+                const auto typed_match = lexeme.required_packon == id;
+                const auto legacy_match = [&] {
+                    if (lexeme.required_packon || !database.has_meanings()) {
+                        return false;
+                    }
+                    const auto meaning = database.meaning(lexeme.meaning);
+                    const auto marker =
+                        std::string{"(w/-"} + std::string{fix};
+                    return meaning.starts_with(marker);
+                }();
+                if (!typed_match && !legacy_match) {
                     continue;
                 }
                 output.push_back(AnalysisIR{
@@ -2248,7 +2256,7 @@ Engine::create(std::vector<std::byte> database_image, EngineConfig config) {
             "invalid-dataset-id",
             "datasetId must be sha256: followed by 64 lowercase hex digits"});
     }
-    auto database = Database::load_dense_poc(std::move(database_image));
+    auto database = Database::load_poc(std::move(database_image));
     if (!database) {
         return std::unexpected(std::move(database.error()));
     }

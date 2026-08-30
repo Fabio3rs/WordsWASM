@@ -11,6 +11,7 @@
 #include <ranges>
 #include <span>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -478,7 +479,11 @@ adjective_dictionary_form(const Database &database, const LexemeRecord &lexeme,
     if (!result.empty()) {
         return result;
     }
-    return fallback.empty() ? stem(0) : std::string{fallback};
+
+    // Fix not eliding copy on return
+    result = fallback.empty() ? stem(0) : std::string{fallback};
+
+    return result;
 }
 
 [[nodiscard]] std::string
@@ -1476,6 +1481,10 @@ search_two_word_suggestion(const TwoWordSuggestionIR &suggestion) {
 } // namespace
 
 std::string analysis_json(const Engine &engine, const QueryResult &result) {
+    if (!engine.supports_full_analysis()) {
+        throw std::logic_error{
+            "analysis JSON requires a full WWDB with meanings"};
+    }
     Json analyses = Json::array();
     if (result.status == QueryStatus::analyzed) {
         std::vector<std::pair<std::string, Json>> ordered;

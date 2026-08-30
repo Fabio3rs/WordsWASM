@@ -1,0 +1,215 @@
+name: Native and WebAssembly build
+
+"on":
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: Native engine, Ada oracle and tests
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build gcc-14 g++-14 gnat gprbuild libgtest-dev \
+            python3-jsonschema
+
+      - name: Build the Ada oracle and generated source data
+        run: |
+          make -C whitakers-words -j"$(nproc)" \
+            GPRBUILD_OPTIONS="-j$(nproc)" all
+
+      - name: Configure the native engine
+        run: |
+          cmake -S . -B build/native -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=gcc-14 \
+            -DCMAKE_CXX_COMPILER=g++-14 \
+            -DENABLE_SANITIZERS=OFF
+
+      - name: Build the native engine and WWDB packer
+        run: |
+          cmake --build build/native \
+            --target words_cli words_tests wwdb_poc_pack \
+            -j"$(nproc)"
+
+      - name: Generate the full and search test/release datasets
+        run: |
+          mkdir -p whitakers-words/poc/compact-db/output
+          build/native/wwdb_poc_pack \
+            whitakers-words \
+            whitakers-words/poc/compact-db/output/words-poc-dense.wwdb \
+            dense
+          build/native/wwdb_poc_pack \
+            whitakers-words \
+            whitakers-words/poc/compact-db/output/words-poc-search-only.wwdb \
+            search-only
+
+      - name: Run native, differential and data-pipeline tests
+        run: ctest --test-dir build/native --output-on-failure
+
+      - name: Upload the validated datasets
+        uses: actions/upload-artifact@v4
+        with:
+          name: validated-wwdb
+          path: |
+            whitakers-words/poc/compact-db/output/words-poc-dense.wwdb
+            whitakers-words/poc/compact-db/output/words-poc-search-only.wwdb
+          if-no-files-found: error
+
+  wasm:
+    name: Browser analysis engine
+    needs: native
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install compression tools
+        run: sudo apt-get update && sudo apt-get install -y brotli gzip ninja-build
+
+      - name: Download the validated datasets
+        uses: actions/download-artifact@v4
+        with:
+          name: validated-wwdb
+          path: whitakers-words/poc/compact-db/output
+
+      - name: Cache emsdk
+        uses: actions/cache@v4
+        with:
+          path: emsdk
+          key: emsdk-948c31acd3f369a5da276e33ab2ed57108c165e5
+
+      - name: Setup emsdk
+        run: |
+          if [ ! -d emsdk/.git ]; then
+            git clone https://github.com/emscripten-core/emsdk.git emsdk
+          fi
+          cd emsdk
+          git fetch
+          git checkout 948c31acd3f369a5da276e33ab2ed57108c165e5
+          ./emsdk install latest
+          ./emsdk activate latest
+
+      - name: Configure and build WebAssembly
+        run: |
+          source emsdk/emsdk_env.sh
+          emcmake cmake -S . -B build/wasm -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_TESTS=OFF \
+            -DENABLE_SANITIZERS=OFF \
+            -DENABLE_WEB_COMPRESSION=ON
+          cmake --build build/wasm -j"$(nproc)"
+
+      - name: Export deployable assets
+        run: |
+          node scripts/export-wasm-assets.mjs \
+            --build-dir build/wasm \
+            --full-database whitakers-words/poc/compact-db/output/words-poc-dense.wwdb \
+            --search-database whitakers-words/poc/compact-db/output/words-poc-search-only.wwdb \
+            --out-dir release/words-web
+
+      - name: Smoke-test the real WebAssembly engine
+        run: |
+          dataset_id="$(node -p "require('./release/words-web/manifest.json').datasetId")"
+          node tests/wasm_smoke_test.mjs \
+            build/wasm/words_wasm.mjs \
+            release/words-web/words-full.wwdb \
+            "${dataset_id}" \
+            release/words-web/words-search.wwdb
+
+      - name: Package tagged release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          mkdir -p release/packages
+          for database in full search; do
+            for suffix in '' .br .gz; do
+              cp "release/words-web/words-${database}.wwdb${suffix}" \
+                "release/packages/words-${database}-${GITHUB_REF_NAME}.wwdb${suffix}"
+            done
+          done
+          cp release/words-web/dataset-manifest.json \
+            "release/packages/dataset-manifest-${GITHUB_REF_NAME}.json"
+          cp release/words-web/manifest.json \
+            "release/packages/words-web-manifest-${GITHUB_REF_NAME}.json"
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 \
+            -C release -czf "release/packages/words-web-${GITHUB_REF_NAME}.tar.gz" \
+            words-web
+          cd release/packages
+          sha256sum \
+            "words-full-${GITHUB_REF_NAME}.wwdb"* \
+            "words-search-${GITHUB_REF_NAME}.wwdb"* \
+            "dataset-manifest-${GITHUB_REF_NAME}.json" \
+            "words-web-manifest-${GITHUB_REF_NAME}.json" \
+            "words-web-${GITHUB_REF_NAME}.tar.gz" \
+            > "words-assets-${GITHUB_REF_NAME}.sha256"
+
+      - name: Upload WebAssembly artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: words-web
+          path: |
+            release/words-web/**
+            release/packages/**
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish tagged GitHub release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: wasm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download packaged assets
+        uses: actions/download-artifact@v4
+        with:
+          name: words-web
+          path: release-downloads
+
+      - name: Publish assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "${GITHUB_REF_NAME}" \
+              --generate-notes
+          fi
+
+          mapfile -d '' release_files < <(
+            find release-downloads -path '*/packages/*' -type f -print0
+          )
+          if [ "${#release_files[@]}" -eq 0 ]; then
+            echo "No tagged release package was downloaded" >&2
+            exit 1
+          fi
+          gh release upload "${GITHUB_REF_NAME}" "${release_files[@]}" --clobber

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "words/lifetime.hpp"
 #include "words/model.hpp"
 
 #include <array>
@@ -7,6 +8,7 @@
 #include <cstdint>
 #include <expected>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -17,6 +19,11 @@ namespace words {
 struct LoadError final {
     std::string code;
     std::string message;
+};
+
+enum class DatabaseContent : std::uint8_t {
+    full,
+    search,
 };
 
 struct LexemeRecord final {
@@ -30,6 +37,7 @@ struct LexemeRecord final {
     Gender gender{Gender::unknown};
     std::uint8_t noun_kind{};
     PronounKind pronoun_kind{PronounKind::unknown};
+    std::optional<AddonId> required_packon;
     Degree adjective_degree{Degree::unknown};
     NumeralType numeral_type{NumeralType::unknown};
     std::uint16_t numeral_value{};
@@ -141,7 +149,7 @@ class Database final {
   public:
     [[nodiscard]] static std::expected<std::unique_ptr<const Database>,
                                        LoadError>
-    load_dense_poc(std::vector<std::byte> image);
+    load_poc(std::vector<std::byte> image);
 
     Database(const Database &) = delete;
     Database &operator=(const Database &) = delete;
@@ -173,16 +181,21 @@ class Database final {
     [[nodiscard]] std::span<const AddonId>
     lookup_packon(std::string_view normalized_ascii) const noexcept;
 
-    [[nodiscard]] const LexemeRecord &lexeme(LexemeId id) const;
-    [[nodiscard]] const InflectionRule &rule(RuleId id) const;
+    [[nodiscard]] DatabaseContent content() const noexcept { return content_; }
+    [[nodiscard]] bool has_meanings() const noexcept {
+        return content_ == DatabaseContent::full;
+    }
+
+    [[nodiscard]] const LexemeRecord &lexeme(LexemeId id) const WORDS_LIFETIMEBOUND;
+    [[nodiscard]] const InflectionRule &rule(RuleId id) const WORDS_LIFETIMEBOUND;
     [[nodiscard]] QuantityMask inflection_quantity(RuleId id) const noexcept;
     [[nodiscard]] QuantityMask
     stem_quantity(LexemeId id, std::uint8_t lexical_slot) const noexcept;
-    [[nodiscard]] const SuffixRule &suffix(AddonId id) const;
-    [[nodiscard]] const PrefixRule &prefix(AddonId id) const;
-    [[nodiscard]] const TackonRule &tackon(AddonId id) const;
-    [[nodiscard]] const RewriteRule &rewrite(RewriteId id) const;
-    [[nodiscard]] std::span<const RewriteRule> rewrites() const noexcept {
+    [[nodiscard]] const SuffixRule &suffix(AddonId id) const WORDS_LIFETIMEBOUND;
+    [[nodiscard]] const PrefixRule &prefix(AddonId id) const WORDS_LIFETIMEBOUND;
+    [[nodiscard]] const TackonRule &tackon(AddonId id) const WORDS_LIFETIMEBOUND;
+    [[nodiscard]] const RewriteRule &rewrite(RewriteId id) const WORDS_LIFETIMEBOUND;
+    [[nodiscard]] std::span<const RewriteRule> rewrites() const noexcept WORDS_LIFETIMEBOUND {
         return rewrites_;
     }
     [[nodiscard]] AddonKind addon_kind(AddonId id) const;
@@ -254,10 +267,11 @@ class Database final {
         QuantityMask quantity;
     };
 
-    explicit Database(std::vector<std::byte> image)
-        : image_{std::move(image)} {}
+    explicit Database(std::vector<std::byte> image, DatabaseContent content)
+        : image_{std::move(image)}, content_{content} {}
 
     std::vector<std::byte> image_;
+    DatabaseContent content_{DatabaseContent::full};
     std::vector<std::string_view> stem_strings_;
     std::vector<std::string_view> meaning_strings_;
     std::vector<std::string_view> ending_strings_;

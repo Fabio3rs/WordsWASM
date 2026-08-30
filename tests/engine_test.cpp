@@ -8,11 +8,33 @@
 #include <algorithm>
 #include <array>
 #include <ranges>
+#include <stdexcept>
 #include <string_view>
 
 namespace words {
 
 using Json = nlohmann::ordered_json;
+
+TEST(EngineTest, SearchDatabasePreservesTheFullDatabaseHitContract) {
+    constexpr std::array<std::string_view, 10> fixtures{
+        "puella", "anaticulus", "mālum", "eadem", "mavisque",
+        "pretor", "amasti", "iv", "amata est", "anaticuliculiculus",
+    };
+    ASSERT_TRUE(test::engine().supports_full_analysis());
+    ASSERT_FALSE(test::search_engine().supports_full_analysis());
+
+    for (const auto fixture : fixtures) {
+        const auto full_result = test::engine().analyze_text(fixture);
+        const auto search_result = test::search_engine().analyze_text(fixture);
+        EXPECT_EQ(Json::parse(search_json(test::engine(), full_result)),
+                  Json::parse(search_json(test::search_engine(), search_result)))
+            << fixture;
+    }
+
+    const auto result = test::search_engine().analyze("puella");
+    EXPECT_THROW(static_cast<void>(analysis_json(test::search_engine(), result)),
+                 std::logic_error);
+}
 
 TEST(EngineTest, AnalyzesNounOnlyFixtures) {
     constexpr std::array<std::pair<std::string_view, std::size_t>, 6> fixtures{{
@@ -658,6 +680,61 @@ TEST(EngineTest, LexicalQuantityPartitionsMalumHomographs) {
     EXPECT_TRUE(std::ranges::all_of(ascii.analyses, [](const auto &analysis) {
         return analysis.quantity_match == QuantityMatch::unspecified;
     }));
+}
+
+TEST(EngineTest, ReviewedLexicalQuantitiesSelectTheirExactLexemes) {
+    const auto contains_entry = [](const QueryResult &result,
+                                   const std::uint32_t dictionary_entry) {
+        return std::ranges::any_of(result.analyses, [&](const AnalysisIR &analysis) {
+            const auto &lexeme =
+                test::engine().database().lexeme(analysis.lexeme);
+            return lexeme.dictionary_entry + 1U == dictionary_entry &&
+                   analysis.quantity_match == QuantityMatch::exact;
+        });
+    };
+
+    EXPECT_TRUE(contains_entry(test::engine().analyze("pŭella"), 32'257U));
+    EXPECT_FALSE(contains_entry(test::engine().analyze("pūella"), 32'257U));
+    EXPECT_TRUE(contains_entry(test::engine().analyze("ăpŭd"), 4'320U));
+    EXPECT_FALSE(contains_entry(test::engine().analyze("āpŭd"), 4'320U));
+    EXPECT_TRUE(contains_entry(test::engine().analyze("dēfendo"), 16'105U));
+    EXPECT_FALSE(contains_entry(test::engine().analyze("dĕfendo"), 16'105U));
+}
+
+TEST(EngineTest, QuantitySeparatesMeaningDistinguishingHomographs) {
+    const auto selects_only = [](const std::string_view marked,
+                                 const std::uint32_t selected,
+                                 const std::uint32_t rejected) {
+        const auto result = test::engine().analyze(marked);
+        const auto contains_entry = [&](const std::uint32_t dictionary_entry) {
+            return std::ranges::any_of(
+                result.analyses, [&](const AnalysisIR &analysis) {
+                    const auto &lexeme =
+                        test::engine().database().lexeme(analysis.lexeme);
+                    return lexeme.dictionary_entry + 1U == dictionary_entry &&
+                           analysis.quantity_match == QuantityMatch::exact;
+                });
+        };
+        EXPECT_TRUE(contains_entry(selected)) << marked;
+        EXPECT_FALSE(contains_entry(rejected)) << marked;
+    };
+
+    selects_only("ănăs", 3'340U, 3'341U);
+    selects_only("ănās", 3'341U, 3'340U);
+    selects_only("incĭdo", 23'186U, 23'187U);
+    selects_only("incīdo", 23'187U, 23'186U);
+    selects_only("lĕgo", 25'478U, 25'479U);
+    selects_only("lēgo", 25'479U, 25'478U);
+    selects_only("lĕvis", 25'590U, 25'591U);
+    selects_only("lēvis", 25'591U, 25'590U);
+    selects_only("lĭber", 25'632U, 25'630U);
+    selects_only("līber", 25'630U, 25'632U);
+    selects_only("occĭdo", 28'484U, 28'485U);
+    selects_only("occīdo", 28'485U, 28'484U);
+    selects_only("pŏpulus", 30'955U, 30'957U);
+    selects_only("pōpulus", 30'957U, 30'955U);
+    selects_only("tŭber", 37'919U, 37'922U);
+    selects_only("tūber", 37'922U, 37'919U);
 }
 
 TEST(EngineTest, RejectsCharactersThatOnlyCaseFoldIntoLatinAscii) {

@@ -2,6 +2,7 @@
 
 #include "words/database.hpp"
 #include "words/lexer.hpp"
+#include "words/lifetime.hpp"
 #include "words/model.hpp"
 
 #include <cstddef>
@@ -36,11 +37,16 @@ class Engine final {
                                       AnalysisOptions options = {}) const;
     [[nodiscard]] QueryResult analyze_text(std::string_view utf8,
                                            AnalysisOptions options = {}) const;
-    [[nodiscard]] const Database &database() const noexcept {
+    [[nodiscard]] const Database &
+    database() const noexcept WORDS_LIFETIMEBOUND {
         return *database_;
     }
-    [[nodiscard]] std::string_view dataset_id() const noexcept {
+    [[nodiscard]] std::string_view
+    dataset_id() const noexcept WORDS_LIFETIMEBOUND {
         return config_.dataset_id;
+    }
+    [[nodiscard]] bool supports_full_analysis() const noexcept {
+        return database_->has_meanings();
     }
 
   private:
