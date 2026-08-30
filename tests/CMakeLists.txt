@@ -4,7 +4,15 @@ add_executable(words_tests
     engine_test.cpp
     lexer_test.cpp
 )
-target_link_libraries(words_tests PRIVATE words_core GTest::GTest GTest::Main)
+# The test inspects both JSON contracts directly. words_core intentionally
+# keeps its serializer dependency private because no public header exposes it,
+# so the test must declare its own compile-time dependency.
+target_link_libraries(words_tests PRIVATE
+    words_core
+    nlohmann_json::nlohmann_json
+    GTest::GTest
+    GTest::Main
+)
 target_compile_definitions(words_tests PRIVATE
     WORDS_TEST_WWDB="${CMAKE_SOURCE_DIR}/whitakers-words/poc/compact-db/output/words-poc-dense.wwdb"
     WORDS_TEST_SEARCH_WWDB="${CMAKE_SOURCE_DIR}/whitakers-words/poc/compact-db/output/words-poc-search-only.wwdb"
