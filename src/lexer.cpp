@@ -220,6 +220,10 @@ LatinLexer::lex(const std::string_view utf8) const {
     }
 
     std::vector<Glyph> glyphs;
+    // Every accepted glyph consumes at least one input byte. Reserving that
+    // upper bound turns the common ASCII word from several geometric vector
+    // growths into one small allocation without changing Unicode handling.
+    glyphs.reserve(utf8.size());
     auto remaining = std::span<const utf8proc_uint8_t>{decomposed->buffer.get(),
                                                        decomposed->size};
     while (!remaining.empty()) {

@@ -261,8 +261,9 @@ transformed_paradigm_matches(const SuffixRule &suffix,
 [[nodiscard]] std::optional<QuantityMatch>
 candidate_quantity_match(const Database &database, const SurfaceForm &surface,
                          const CandidateIR &candidate,
-                         const StemReference &stem) noexcept {
-    if (!has_quantity(surface)) {
+                         const StemReference &stem,
+                         const bool surface_has_quantity) noexcept {
+    if (!surface_has_quantity) {
         return QuantityMatch::unspecified;
     }
 
@@ -394,6 +395,7 @@ void append_regular_analyses(const Database &database,
                              const SurfaceForm &surface,
                              const CandidateIR &candidate,
                              const std::span<const StemReference> stems,
+                             const bool surface_has_quantity,
                              const DerivationIR &derivation,
                              std::vector<AnalysisIR> &output,
                              EnumerationState &state) {
@@ -405,7 +407,8 @@ void append_regular_analyses(const Database &database,
             continue;
         }
         const auto quantity_match =
-            candidate_quantity_match(database, surface, candidate, stem);
+            candidate_quantity_match(database, surface, candidate, stem,
+                                     surface_has_quantity);
         if (!quantity_match) {
             continue;
         }
@@ -690,6 +693,7 @@ void add_matching_suffixes(const Database &database,
 void append_prefix_analyses(const Database &database,
                             const SurfaceForm &surface,
                             const std::span<const CandidateIR> candidates,
+                            const bool surface_has_quantity,
                             const DerivationIR &initial_derivation,
                             std::vector<AnalysisIR> &output,
                             EnumerationState &state) {
@@ -710,19 +714,30 @@ void append_prefix_analyses(const Database &database,
         const auto &prefix = database.prefix(prefix_id);
         const auto output_before = output.size();
         const auto unsupported_before = state.unsupported;
+        const auto fix_size = database.prefix_string(prefix.fix).size();
+        previous_stem.reset();
+        std::span<const StemReference> base_stems;
+        bool matching_prefix{};
         for (const auto &candidate : candidates) {
-            const auto stem_text = candidate_stem(surface, candidate);
-            if (!prefix_matches(database, prefix, stem_text)) {
+            if (!previous_stem ||
+                previous_stem->begin != candidate.stem.begin ||
+                previous_stem->count != candidate.stem.count) {
+                previous_stem = candidate.stem;
+                const auto stem_text = candidate_stem(surface, candidate);
+                matching_prefix = prefix_matches(database, prefix, stem_text);
+                base_stems = matching_prefix
+                                 ? database.lookup_stem(stem_text.substr(fix_size))
+                                 : std::span<const StemReference>{};
+            }
+            if (!matching_prefix) {
                 continue;
             }
-            const auto fix_size = database.prefix_string(prefix.fix).size();
-            const auto base_text = stem_text.substr(fix_size);
             auto projected_candidate = candidate;
             projected_candidate.stem.begin +=
                 static_cast<std::uint32_t>(fix_size);
             projected_candidate.stem.count -=
                 static_cast<std::uint32_t>(fix_size);
-            for (const auto &stem : database.lookup_stem(base_text)) {
+            for (const auto &stem : base_stems) {
                 const auto &lexeme = database.lexeme(stem.lexeme);
                 if (!prefix_root_matches(prefix, lexeme.part_of_speech)) {
                     continue;
@@ -735,8 +750,8 @@ void append_prefix_analyses(const Database &database,
                 }
                 append_regular_analyses(
                     database, surface, projected_candidate,
-                    std::span<const StemReference>{&stem, 1U}, *derivation,
-                    output, state);
+                    std::span<const StemReference>{&stem, 1U},
+                    surface_has_quantity, *derivation, output, state);
             }
         }
         if (output.size() != output_before ||
@@ -954,29 +969,49 @@ void append_suffix_analyses(const Database &database,
         }
         const auto suffix_size = database.suffix_string(suffix.fix).size();
         bool dictionary_hit = false;
+        previous_stem.reset();
+        bool matching_suffix{};
+        std::span<const StemReference> base_stems;
         for (const auto &candidate : candidates) {
-            const auto stem_text = candidate_stem(surface, candidate);
-            if (suffix_matches(database, suffix, stem_text) &&
-                !database
-                     .lookup_stem(
-                         stem_text.substr(0, stem_text.size() - suffix_size))
-                     .empty()) {
+            if (!previous_stem ||
+                previous_stem->begin != candidate.stem.begin ||
+                previous_stem->count != candidate.stem.count) {
+                previous_stem = candidate.stem;
+                const auto stem_text = candidate_stem(surface, candidate);
+                matching_suffix = suffix_matches(database, suffix, stem_text);
+                base_stems =
+                    matching_suffix
+                        ? database.lookup_stem(stem_text.substr(
+                              0, stem_text.size() - suffix_size))
+                        : std::span<const StemReference>{};
+            }
+            if (matching_suffix && !base_stems.empty()) {
                 dictionary_hit = true;
                 break;
             }
         }
 
         if (dictionary_hit) {
+            previous_stem.reset();
             for (const auto &candidate : candidates) {
-                const auto stem_text = candidate_stem(surface, candidate);
-                if (!suffix_matches(database, suffix, stem_text)) {
+                if (!previous_stem ||
+                    previous_stem->begin != candidate.stem.begin ||
+                    previous_stem->count != candidate.stem.count) {
+                    previous_stem = candidate.stem;
+                    const auto stem_text = candidate_stem(surface, candidate);
+                    matching_suffix =
+                        suffix_matches(database, suffix, stem_text);
+                    base_stems =
+                        matching_suffix
+                            ? database.lookup_stem(stem_text.substr(
+                                  0, stem_text.size() - suffix_size))
+                            : std::span<const StemReference>{};
+                }
+                if (!matching_suffix) {
                     continue;
                 }
-                const auto base_text =
-                    stem_text.substr(0, stem_text.size() - suffix_size);
                 append_suffix_semantics(database, candidate, suffix,
-                                        database.lookup_stem(base_text),
-                                        std::nullopt, quantity_match,
+                                        base_stems, std::nullopt, quantity_match,
                                         initial_derivation, output, state);
             }
             continue;
@@ -1011,14 +1046,31 @@ void append_suffix_analyses(const Database &database,
             const auto output_before = output.size();
             const auto unsupported_before = state.unsupported;
             const auto prefix_size = database.prefix_string(prefix.fix).size();
+            previous_stem.reset();
+            bool matching_prefix{};
             for (const auto &candidate : candidates) {
-                const auto stem_text = candidate_stem(surface, candidate);
-                if (!suffix_matches(database, suffix, stem_text)) {
-                    continue;
+                if (!previous_stem ||
+                    previous_stem->begin != candidate.stem.begin ||
+                    previous_stem->count != candidate.stem.count) {
+                    previous_stem = candidate.stem;
+                    const auto stem_text = candidate_stem(surface, candidate);
+                    matching_suffix =
+                        suffix_matches(database, suffix, stem_text);
+                    const auto without_suffix =
+                        matching_suffix
+                            ? stem_text.substr(0,
+                                               stem_text.size() - suffix_size)
+                            : std::string_view{};
+                    matching_prefix =
+                        matching_suffix &&
+                        prefix_matches(database, prefix, without_suffix);
+                    base_stems =
+                        matching_prefix
+                            ? database.lookup_stem(
+                                  without_suffix.substr(prefix_size))
+                            : std::span<const StemReference>{};
                 }
-                const auto without_suffix =
-                    stem_text.substr(0, stem_text.size() - suffix_size);
-                if (!prefix_matches(database, prefix, without_suffix)) {
+                if (!matching_prefix) {
                     continue;
                 }
                 auto projected_candidate = candidate;
@@ -1027,10 +1079,8 @@ void append_suffix_analyses(const Database &database,
                 projected_candidate.stem.count -=
                     static_cast<std::uint32_t>(prefix_size);
                 append_suffix_semantics(
-                    database, projected_candidate, suffix,
-                    database.lookup_stem(without_suffix.substr(prefix_size)),
-                    prefix_id, quantity_match, initial_derivation, output,
-                    state);
+                    database, projected_candidate, suffix, base_stems, prefix_id,
+                    quantity_match, initial_derivation, output, state);
             }
             if (output.size() != output_before ||
                 state.unsupported != unsupported_before) {
@@ -1043,23 +1093,45 @@ void append_suffix_analyses(const Database &database,
 [[nodiscard]] std::vector<CandidateIR>
 enumerate_candidates(const Database &database, const SurfaceForm &surface,
                      const SurfaceRange word) {
-    std::vector<CandidateIR> candidates;
+    struct EndingGroup final {
+        std::size_t stem_size{};
+        std::size_t ending_size{};
+        std::span<const RuleId> rules;
+    };
+
     const auto word_text =
         std::string_view{surface.lookup_ascii}.substr(word.begin, word.count);
     const auto maximum_ending = std::min<std::size_t>(7U, word_text.size());
+
+    // There are at most eight distinct ending lengths. Retaining their stable
+    // database spans lets the output reserve exactly once instead of growing
+    // geometrically through a candidate set that commonly exceeds 100 rows.
+    std::array<EndingGroup, 8> groups{};
+    std::size_t group_count{};
+    std::size_t candidate_count{};
     for (std::size_t ending_size = maximum_ending;; --ending_size) {
         const auto stem_size = word_text.size() - ending_size;
         const auto ending_text = word_text.substr(stem_size);
-        for (const auto rule_id : database.lookup_ending(ending_text)) {
-            candidates.push_back(CandidateIR{
-                rule_id,
-                SurfaceRange{word.begin, static_cast<std::uint32_t>(stem_size)},
-                SurfaceRange{word.begin + static_cast<std::uint32_t>(stem_size),
-                             static_cast<std::uint32_t>(ending_size)},
-            });
-        }
+        const auto rules = database.lookup_ending(ending_text);
+        groups[group_count++] = EndingGroup{stem_size, ending_size, rules};
+        candidate_count += rules.size();
         if (ending_size == 0U) {
             break;
+        }
+    }
+
+    std::vector<CandidateIR> candidates;
+    candidates.reserve(candidate_count);
+    for (const auto &group : std::span{groups}.first(group_count)) {
+        for (const auto rule_id : group.rules) {
+            candidates.push_back(CandidateIR{
+                rule_id,
+                SurfaceRange{word.begin,
+                             static_cast<std::uint32_t>(group.stem_size)},
+                SurfaceRange{
+                    word.begin + static_cast<std::uint32_t>(group.stem_size),
+                    static_cast<std::uint32_t>(group.ending_size)},
+            });
         }
     }
     return candidates;
@@ -1108,11 +1180,19 @@ void append_word_analyses(const Database &database, const SurfaceForm &surface,
     const auto had_direct_analysis = !output.empty();
     const auto output_before = output.size();
     const auto candidates = enumerate_candidates(database, surface, word);
+    const auto surface_has_quantity =
+        quantity_match != QuantityMatch::unspecified;
+    std::optional<SurfaceRange> previous_stem;
+    std::span<const StemReference> stems;
     for (const auto &candidate : candidates) {
-        append_regular_analyses(
-            database, surface, candidate,
-            database.lookup_stem(candidate_stem(surface, candidate)),
-            initial_derivation, output, state);
+        if (!previous_stem || previous_stem->begin != candidate.stem.begin ||
+            previous_stem->count != candidate.stem.count) {
+            previous_stem = candidate.stem;
+            stems = database.lookup_stem(candidate_stem(surface, candidate));
+        }
+        append_regular_analyses(database, surface, candidate, stems,
+                                surface_has_quantity, initial_derivation,
+                                output, state);
     }
     const auto output_after_regular = output.size();
     const auto regular_hit = output_after_regular != output_before;
@@ -1125,6 +1205,7 @@ void append_word_analyses(const Database &database, const SurfaceForm &surface,
         });
     if (!had_direct_analysis && !regular_hit && !state.unsupported) {
         append_prefix_analyses(database, surface, candidates,
+                               surface_has_quantity,
                                initial_derivation, output, state);
     }
     const auto prefix_hit = output.size() != output_after_regular;
@@ -1357,14 +1438,22 @@ void append_packon_analyses(const Database &database,
         if (!derivation) {
             continue;
         }
-        for (const auto &candidate :
-             enumerate_candidates(database, surface, base_word)) {
+        const auto candidates =
+            enumerate_candidates(database, surface, base_word);
+        std::optional<SurfaceRange> previous_stem;
+        std::span<const StemReference> stems;
+        for (const auto &candidate : candidates) {
             const auto &rule = database.rule(candidate.rule);
             if (rule.part_of_speech != PartOfSpeech::pronoun) {
                 continue;
             }
-            for (const auto &stem :
-                 database.lookup_stem(candidate_stem(surface, candidate))) {
+            if (!previous_stem ||
+                previous_stem->begin != candidate.stem.begin ||
+                previous_stem->count != candidate.stem.count) {
+                previous_stem = candidate.stem;
+                stems = database.lookup_stem(candidate_stem(surface, candidate));
+            }
+            for (const auto &stem : stems) {
                 const auto &lexeme = database.lexeme(stem.lexeme);
                 if (lexeme.part_of_speech != PartOfSpeech::pack ||
                     !packon_paradigm_accepts(packon, rule, lexeme)) {
@@ -1418,15 +1507,21 @@ void append_qu_pronoun_analyses(const Database &database,
         return;
     }
     const auto required_key = qu_form || aliqu_form ? 1U : 2U;
-    for (const auto &candidate :
-         enumerate_candidates(database, surface, word)) {
+    const auto candidates = enumerate_candidates(database, surface, word);
+    std::optional<SurfaceRange> previous_stem;
+    std::span<const StemReference> stems;
+    for (const auto &candidate : candidates) {
         const auto &rule = database.rule(candidate.rule);
         if (rule.part_of_speech != PartOfSpeech::pronoun ||
             rule.stem_key != required_key) {
             continue;
         }
-        for (const auto &stem :
-             database.lookup_stem(candidate_stem(surface, candidate))) {
+        if (!previous_stem || previous_stem->begin != candidate.stem.begin ||
+            previous_stem->count != candidate.stem.count) {
+            previous_stem = candidate.stem;
+            stems = database.lookup_stem(candidate_stem(surface, candidate));
+        }
+        for (const auto &stem : stems) {
             const auto &lexeme = database.lexeme(stem.lexeme);
             if (lexeme.part_of_speech != PartOfSpeech::pronoun ||
                 lexeme.declension != 1U ||

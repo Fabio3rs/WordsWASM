@@ -164,22 +164,30 @@ class LoadFailure final : public std::runtime_error {
     return value;
 }
 
-[[nodiscard]] bool normalized_less(const std::string_view left,
-                                   const std::string_view right) noexcept {
+[[nodiscard]] int normalized_compare(const std::string_view left,
+                                     const std::string_view right) noexcept {
     const auto common = std::min(left.size(), right.size());
     for (std::size_t index = 0; index < common; ++index) {
         const auto left_char = normalized_char(left[index]);
         const auto right_char = normalized_char(right[index]);
         if (left_char != right_char) {
-            return left_char < right_char;
+            return left_char < right_char ? -1 : 1;
         }
     }
-    return left.size() < right.size();
+    if (left.size() == right.size()) {
+        return 0;
+    }
+    return left.size() < right.size() ? -1 : 1;
+}
+
+[[nodiscard]] bool normalized_less(const std::string_view left,
+                                   const std::string_view right) noexcept {
+    return normalized_compare(left, right) < 0;
 }
 
 [[nodiscard]] bool normalized_equal(const std::string_view left,
                                     const std::string_view right) noexcept {
-    return !normalized_less(left, right) && !normalized_less(right, left);
+    return normalized_compare(left, right) == 0;
 }
 
 [[nodiscard]] std::span<const std::byte>
@@ -781,7 +789,8 @@ Database::load_poc(std::vector<std::byte> image) try {
 
     const RecordView lexeme_records{section_bytes(owned_bytes, lexeme_section),
                                     lexeme_section};
-    database->lexemes_.reserve(lexeme_section.count);
+    database->lexemes_.reserve(static_cast<std::size_t>(lexeme_section.count) +
+                               unique_section.count);
     for (std::uint32_t ordinal = 0; ordinal < lexeme_section.count; ++ordinal) {
         LexemeRecord record;
         record.dictionary = DictionaryKind::general;
@@ -934,8 +943,10 @@ Database::load_poc(std::vector<std::byte> image) try {
     }
     std::ranges::sort(indexed_stems,
                       [](const IndexedStem &left, const IndexedStem &right) {
-                          if (!normalized_equal(left.key, right.key)) {
-                              return normalized_less(left.key, right.key);
+                          const auto key_order =
+                              normalized_compare(left.key, right.key);
+                          if (key_order != 0) {
+                              return key_order < 0;
                           }
                           return std::tuple{left.reference.lexeme.value(),
                                             left.reference.lexical_slot,
@@ -945,6 +956,7 @@ Database::load_poc(std::vector<std::byte> image) try {
                                             right.reference.stem_key};
                       });
     database->stem_references_.reserve(indexed_stems.size());
+    database->stem_groups_.reserve(stem_pool_section.count);
     for (std::size_t index = 0; index < indexed_stems.size();) {
         const auto first = database->stem_references_.size();
         const auto key = indexed_stems[index].key;
@@ -1122,8 +1134,10 @@ Database::load_poc(std::vector<std::byte> image) try {
     }
     std::ranges::sort(indexed_rules,
                       [](const IndexedRule &left, const IndexedRule &right) {
-                          if (!normalized_equal(left.key, right.key)) {
-                              return normalized_less(left.key, right.key);
+                          const auto key_order =
+                              normalized_compare(left.key, right.key);
+                          if (key_order != 0) {
+                              return key_order < 0;
                           }
                           return left.id < right.id;
                       });
@@ -1267,9 +1281,10 @@ Database::load_poc(std::vector<std::byte> image) try {
     }
 
     std::ranges::sort(indexed_uniques, [](const IndexedUnique &left,
-                                          const IndexedUnique &right) {
-        if (!normalized_equal(left.key, right.key)) {
-            return normalized_less(left.key, right.key);
+                                         const IndexedUnique &right) {
+        const auto key_order = normalized_compare(left.key, right.key);
+        if (key_order != 0) {
+            return key_order < 0;
         }
         return left.reference.lexeme < right.reference.lexeme;
     });
@@ -1397,9 +1412,10 @@ Database::load_poc(std::vector<std::byte> image) try {
             {database->suffix_string(suffix.fix), suffix.id});
     }
     std::ranges::sort(indexed_suffixes, [](const IndexedSuffix &left,
-                                           const IndexedSuffix &right) {
-        if (!normalized_equal(left.key, right.key)) {
-            return normalized_less(left.key, right.key);
+                                          const IndexedSuffix &right) {
+        const auto key_order = normalized_compare(left.key, right.key);
+        if (key_order != 0) {
+            return key_order < 0;
         }
         return left.id < right.id;
     });
@@ -1596,9 +1612,10 @@ Database::load_poc(std::vector<std::byte> image) try {
         indexed_prefixes.push_back({key, prefix.id});
     }
     std::ranges::sort(indexed_prefixes, [](const IndexedPrefix &left,
-                                           const IndexedPrefix &right) {
-        if (!normalized_equal(left.key, right.key)) {
-            return normalized_less(left.key, right.key);
+                                          const IndexedPrefix &right) {
+        const auto key_order = normalized_compare(left.key, right.key);
+        if (key_order != 0) {
+            return key_order < 0;
         }
         return left.id < right.id;
     });
@@ -1619,9 +1636,10 @@ Database::load_poc(std::vector<std::byte> image) try {
     }
 
     std::ranges::sort(indexed_tickons, [](const IndexedPrefix &left,
-                                          const IndexedPrefix &right) {
-        if (!normalized_equal(left.key, right.key)) {
-            return normalized_less(left.key, right.key);
+                                         const IndexedPrefix &right) {
+        const auto key_order = normalized_compare(left.key, right.key);
+        if (key_order != 0) {
+            return key_order < 0;
         }
         return left.id < right.id;
     });
@@ -1653,8 +1671,10 @@ Database::load_poc(std::vector<std::byte> image) try {
     const auto build_tackon_index = [](auto &source, auto &ids, auto &groups) {
         std::ranges::sort(
             source, [](const IndexedTackon &left, const IndexedTackon &right) {
-                if (!normalized_equal(left.key, right.key)) {
-                    return normalized_less(left.key, right.key);
+                const auto key_order =
+                    normalized_compare(left.key, right.key);
+                if (key_order != 0) {
+                    return key_order < 0;
                 }
                 return left.id < right.id;
             });
