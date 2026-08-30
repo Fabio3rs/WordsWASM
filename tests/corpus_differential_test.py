@@ -2,6 +2,7 @@
 
 import argparse
 import collections
+import concurrent.futures
 import copy
 import json
 import re
@@ -129,34 +130,44 @@ def main() -> None:
     analysis_validator = jsonschema.Draft202012Validator(analysis_schema)
     search_validator = jsonschema.Draft202012Validator(search_schema)
 
-    ada_documents = json_lines(
-        ["bin/words_json", "--batch-json-lines"], words, ada_root)
     native_base = [
         str(cpp),
         "--database", str(database),
         "--dataset-id", DATASET_ID,
     ]
-    native_documents = json_lines(
-        native_base + ["--format", "analysis", "--batch-json-lines"],
-        words,
-        root,
-    )
-    search_documents = json_lines(
-        native_base + ["--format", "search", "--batch-json-lines"],
-        words,
-        root,
-    )
-    search_only_documents = json_lines(
-        [
-            str(cpp),
-            "--database", str(search_database),
-            "--dataset-id", DATASET_ID,
-            "--format", "search",
-            "--batch-json-lines",
-        ],
-        words,
-        root,
-    )
+    # The four immutable batch snapshots are independent. Running their
+    # producers concurrently keeps exhaustive corpus coverage without making
+    # their CPU costs additive.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        ada_future = executor.submit(
+            json_lines,
+            ["bin/words_json", "--batch-json-lines"], words, ada_root,
+        )
+        native_future = executor.submit(
+            json_lines,
+            native_base + ["--format", "analysis", "--batch-json-lines"],
+            words, root,
+        )
+        search_future = executor.submit(
+            json_lines,
+            native_base + ["--format", "search", "--batch-json-lines"],
+            words, root,
+        )
+        search_only_future = executor.submit(
+            json_lines,
+            [
+                str(cpp),
+                "--database", str(search_database),
+                "--dataset-id", DATASET_ID,
+                "--format", "search",
+                "--batch-json-lines",
+            ],
+            words, root,
+        )
+        ada_documents = ada_future.result()
+        native_documents = native_future.result()
+        search_documents = search_future.result()
+        search_only_documents = search_only_future.result()
     counts = (
         len(ada_documents), len(native_documents), len(search_documents),
         len(search_only_documents),
@@ -174,13 +185,13 @@ def main() -> None:
             words, ada_documents, native_documents, search_documents,
             search_only_documents,
             strict=True):
-        validate(ada, analysis_validator, f"Ada analysis for {word}")
         validate(native, analysis_validator, f"native analysis for {word}")
+        # Equal JSON values have the same schema result. Most Ada/native
+        # envelopes are identical, so only validate the oracle separately when
+        # the semantic comparison below actually has two distinct documents.
+        if ada != native:
+            validate(ada, analysis_validator, f"Ada analysis for {word}")
         validate(search, search_validator, f"native search for {word}")
-        validate(
-            search_only, search_validator,
-            f"native search-only profile for {word}",
-        )
         if search_only != search:
             raise AssertionError(
                 f"search-only WWDB differs from full WWDB for {word}"

@@ -50,6 +50,11 @@ TWO_WORD_FIXTURES = {
     "unustres": ("unus", "tres"),
 }
 UNKNOWN_FIXTURES = ("anaticuliculiculus", "archiarchipuella")
+EQUIVALENT_FIXTURES = (
+    NOUN_FIXTURES + ADJECTIVE_FIXTURES + DERIVED_FIXTURES + PREFIX_FIXTURES
+    + TACKON_FIXTURES + PACKON_FIXTURES + SEMANTIC_FIXTURES
+    + DERIVED_SEMANTIC_FIXTURES + UNIQUE_FIXTURES + ROMAN_FIXTURES
+)
 
 
 def load_json(command: list[str], cwd: Path | None = None) -> dict:
@@ -64,6 +69,27 @@ def load_json(command: list[str], cwd: Path | None = None) -> dict:
     return json.loads(completed.stdout)
 
 
+def load_json_lines(command: list[str], queries: tuple[str, ...],
+                    cwd: Path | None = None) -> dict[str, dict]:
+    if len(set(queries)) != len(queries):
+        raise AssertionError("batch queries must be unique")
+    completed = subprocess.run(
+        command,
+        cwd=cwd,
+        check=True,
+        input="".join(f"{query}\n" for query in queries),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    documents = [json.loads(line) for line in completed.stdout.splitlines()]
+    if len(documents) != len(queries):
+        raise AssertionError(
+            f"batch result count differs: queries={len(queries)}, "
+            f"documents={len(documents)}")
+    return dict(zip(queries, documents, strict=True))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
@@ -75,6 +101,8 @@ def main() -> None:
     database = ada_root / "poc/compact-db/output/words-poc-dense.wwdb"
     analysis_schema = json.loads((root / "schemas/analysis-v1.schema.json").read_text())
     search_schema = json.loads((root / "schemas/search-v1.schema.json").read_text())
+    analysis_validator = jsonschema.Draft202012Validator(analysis_schema)
+    search_validator = jsonschema.Draft202012Validator(search_schema)
 
     subprocess.run([
         sys.executable,
@@ -83,47 +111,81 @@ def main() -> None:
         "--check", str(ada_root / "REWRITES.LAT"),
     ], check=True)
 
-    def cpp(word: str, output_format: str,
-            two_words: bool = False) -> dict:
+    native_base = [
+        str(args.cpp),
+        "--database", str(database),
+        "--dataset-id", DATASET_ID,
+    ]
+
+    def cpp_batch(output_format: str, queries: tuple[str, ...],
+                  two_words: bool = False) -> dict[str, dict]:
         command = [
-            str(args.cpp),
-            "--database", str(database),
-            "--dataset-id", DATASET_ID,
+            *native_base,
             "--format", output_format,
         ]
         if two_words:
             command.append("--two-words=legacy")
-        command.append(word)
-        return load_json(command)
+        command.append("--batch-json-lines")
+        return load_json_lines(command, queries)
 
-    for word in (
-        NOUN_FIXTURES + ADJECTIVE_FIXTURES + DERIVED_FIXTURES + PREFIX_FIXTURES
-        + TACKON_FIXTURES + PACKON_FIXTURES + SEMANTIC_FIXTURES
-        + DERIVED_SEMANTIC_FIXTURES + UNIQUE_FIXTURES
-        + ROMAN_FIXTURES
-    ):
+    standard_queries = (
+        EQUIVALENT_FIXTURES + UNKNOWN_FIXTURES + SYNCOPE_FIXTURES
+        + ORTHOGRAPHIC_FIXTURES + COMPOUND_FIXTURES
+    )
+    marked_query = "puella\N{COMBINING MACRON}"
+    two_word_queries = tuple(TWO_WORD_FIXTURES)
+    cpp_documents = {
+        **{
+            (word, "analysis", False): document
+            for word, document in cpp_batch(
+                "analysis", standard_queries + (marked_query,)).items()
+        },
+        **{
+            (word, "search", False): document
+            for word, document in cpp_batch("search", standard_queries).items()
+        },
+        **{
+            (word, "analysis", True): document
+            for word, document in cpp_batch(
+                "analysis", two_word_queries + ("insed",), True).items()
+        },
+        **{
+            (word, "search", True): document
+            for word, document in cpp_batch(
+                "search", two_word_queries, True).items()
+        },
+    }
+
+    def cpp(word: str, output_format: str,
+            two_words: bool = False) -> dict:
+        key = (word, output_format, two_words)
+        if key not in cpp_documents:
+            raise AssertionError(f"unbatched C++ query: {key}")
+        return cpp_documents.pop(key)
+
+    for word in EQUIVALENT_FIXTURES:
         expected = load_json(["bin/words_json", word], cwd=ada_root)
         actual = cpp(word, "analysis")
         if actual != expected:
             raise AssertionError(f"C++ differs from Ada for {word}")
-        jsonschema.validate(actual, analysis_schema)
-        jsonschema.validate(cpp(word, "search"), search_schema)
+        analysis_validator.validate(actual)
+        search_validator.validate(cpp(word, "search"))
 
     for word in UNKNOWN_FIXTURES:
         expected = load_json(["bin/words_json", word], cwd=ada_root)
         actual = cpp(word, "analysis")
         if actual != expected:
             raise AssertionError(f"C++ differs from Ada for {word}")
-        jsonschema.validate(actual, analysis_schema)
+        analysis_validator.validate(actual)
         search = cpp(word, "search")
         if search["status"] != "unknown":
             raise AssertionError(f"{word} should be unknown")
-        jsonschema.validate(search, search_schema)
+        search_validator.validate(search)
 
     for word in SYNCOPE_FIXTURES:
         expected = load_json(["bin/words_json", word], cwd=ada_root)
         actual = cpp(word, "analysis")
-        jsonschema.validate(actual, analysis_schema)
+        analysis_validator.validate(actual)
         if len(actual["analyses"]) != len(expected["analyses"]):
             raise AssertionError(f"C++ syncope count differs from Ada for {word}")
 
@@ -144,12 +206,12 @@ def main() -> None:
         search = cpp(word, "search")
         if any("rewriteIds" not in hit for hit in search["hits"]):
             raise AssertionError(f"C++ search lost syncope identity for {word}")
-        jsonschema.validate(search, search_schema)
+        search_validator.validate(search)
 
     for word in ORTHOGRAPHIC_FIXTURES:
         expected = load_json(["bin/words_json", word], cwd=ada_root)
         actual = cpp(word, "analysis")
-        jsonschema.validate(actual, analysis_schema)
+        analysis_validator.validate(actual)
         if len(actual["analyses"]) != len(expected["analyses"]):
             raise AssertionError(
                 f"C++ orthographic count differs from Ada for {word}")
@@ -172,12 +234,12 @@ def main() -> None:
         if any("rewriteIds" not in hit for hit in search["hits"]):
             raise AssertionError(
                 f"C++ search lost orthographic identity for {word}")
-        jsonschema.validate(search, search_schema)
+        search_validator.validate(search)
 
     for phrase in COMPOUND_FIXTURES:
         expected = load_json(["bin/words_json", phrase], cwd=ada_root)
         actual = cpp(phrase, "analysis")
-        jsonschema.validate(actual, analysis_schema)
+        analysis_validator.validate(actual)
         if len(actual["analyses"]) != len(expected["analyses"]):
             raise AssertionError(
                 f"C++ compound count differs from Ada for {phrase}")
@@ -200,13 +262,13 @@ def main() -> None:
         if sum("compound" in hit for hit in search["hits"]) != compound_count:
             raise AssertionError(
                 f"C++ search lost compound identity for {phrase}")
-        jsonschema.validate(search, search_schema)
+        search_validator.validate(search)
 
     for word, expected_segments in TWO_WORD_FIXTURES.items():
         expected = load_json(
             ["bin/words_json", "--two-words=legacy", word], cwd=ada_root)
         actual = cpp(word, "analysis", two_words=True)
-        jsonschema.validate(actual, analysis_schema)
+        analysis_validator.validate(actual)
         if actual["status"] != "unknown" or actual["analyses"]:
             raise AssertionError(
                 f"{word} split must remain a suggestion, not an analysis")
@@ -242,21 +304,24 @@ def main() -> None:
         if len(search.get("suggestions", [])) != 1:
             raise AssertionError(
                 f"search lost Two_Words grouping for {word}")
-        jsonschema.validate(search, search_schema)
+        search_validator.validate(search)
 
     blocked = cpp("insed", "analysis", two_words=True)
     expected_blocked = load_json(
         ["bin/words_json", "--two-words=legacy", "insed"], cwd=ada_root)
     if blocked != expected_blocked or "suggestions" in blocked:
         raise AssertionError("common-prefix guard differs from Ada")
-    jsonschema.validate(blocked, analysis_schema)
+    analysis_validator.validate(blocked)
 
-    marked = cpp("puella\N{COMBINING MACRON}", "analysis")
+    marked = cpp(marked_query, "analysis")
     if marked["query"]["normalized"] != "puellā":
         raise AssertionError("NFD input was not normalized to NFC")
     if any(item["form"]["ending"] != "ā" for item in marked["analyses"]):
         raise AssertionError("surface ending did not preserve the macron")
-    jsonschema.validate(marked, analysis_schema)
+    analysis_validator.validate(marked)
+    if cpp_documents:
+        raise AssertionError(
+            f"unused batched C++ queries: {sorted(cpp_documents)}")
 
 
 if __name__ == "__main__":
