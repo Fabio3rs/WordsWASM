@@ -1,0 +1,3 @@
+# WHY: makeinfl reads this legacy table as fixed-width records. Its CRLF and
+# right padding are part of the proven, upstream-compatible input shape.
+whitakers-words/INFLECTS.LAT whitespace=-trailing-space,cr-at-eol
