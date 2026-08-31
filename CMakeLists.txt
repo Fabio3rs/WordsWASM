@@ -129,6 +129,9 @@ if(NOT EMSCRIPTEN)
     add_executable(wwdb_poc_pack EXCLUDE_FROM_ALL
         whitakers-words/poc/compact-db/wwdb_poc_pack.cpp
     )
+    target_include_directories(wwdb_poc_pack PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    )
     target_link_libraries(wwdb_poc_pack PRIVATE nlohmann_json::nlohmann_json)
 endif()
 

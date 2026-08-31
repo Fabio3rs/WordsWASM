@@ -30,48 +30,20 @@
 
 #include <nlohmann/json.hpp>
 
+#include "words/detail/wwdb_schema.hpp"
+
 namespace {
 
 using Bytes = std::vector<std::byte>;
+namespace wwdb = words::detail::wwdb;
+using PackingProfile = wwdb::Profile;
+using SectionType = wwdb::SectionType;
 
 constexpr std::size_t dictionary_record_size = 180;
 constexpr std::size_t stem_record_size = 56;
 constexpr std::size_t inflection_record_size = 40;
 constexpr std::size_t inflections_per_section = 570;
-constexpr std::size_t inflection_section_count = 5;
-
-enum class SectionType : std::uint32_t {
-    stem_strings = 1,
-    meaning_strings = 2,
-    ending_strings = 3,
-    lexemes = 4,
-    stem_references = 5,
-    stem_prefix_boundaries = 6,
-    inflections = 7,
-    inflection_section_boundaries = 8,
-    suffix_strings = 9,
-    suffix_meanings = 10,
-    suffixes = 11,
-    prefix_strings = 12,
-    prefix_meanings = 13,
-    prefixes = 14,
-    tackon_strings = 15,
-    tackon_meanings = 16,
-    tackons = 17,
-    uniques = 18,
-    rewrite_strings = 19,
-    rewrite_meanings = 20,
-    rewrites = 21,
-    inflection_quantities = 22,
-    stem_quantities = 23,
-};
-
-enum class PackingProfile : std::uint32_t {
-    simple = 1,
-    dense = 2,
-    columnar = 3,
-    search_only = 4,
-};
+constexpr std::size_t inflection_section_count = wwdb::inflection_section_count;
 
 struct Section {
     SectionType type;
@@ -255,9 +227,9 @@ read_compiled_lexemes(const std::filesystem::path &path) {
             fail(context + ": invalid JSON: " + error.what());
         }
         constexpr std::array<std::string_view, 9> fields{
-            "schema",          "decision_id", "stems",
-            "meaning",         "part_of_speech", "paradigm",
-            "class_payload",   "numeric_value", "translation",
+            "schema",        "decision_id",    "stems",
+            "meaning",       "part_of_speech", "paradigm",
+            "class_payload", "numeric_value",  "translation",
         };
         if (!record.is_object() || record.size() != fields.size() ||
             !std::ranges::all_of(fields, [&](const std::string_view field) {
@@ -277,7 +249,8 @@ read_compiled_lexemes(const std::filesystem::path &path) {
         lexeme.meaning = record["meaning"].get<std::string>();
         if (lexeme.decision_id.empty() || lexeme.meaning.empty() ||
             lexeme.meaning.size() > std::numeric_limits<std::uint8_t>::max()) {
-            fail(context + ": empty ID/meaning or meaning exceeds 255 UTF-8 bytes");
+            fail(context +
+                 ": empty ID/meaning or meaning exceeds 255 UTF-8 bytes");
         }
         if (!decisions.emplace(lexeme.decision_id, line_number).second) {
             fail(context + ": duplicate decision_id " + lexeme.decision_id);
@@ -297,7 +270,8 @@ read_compiled_lexemes(const std::filesystem::path &path) {
                     return character >= 'a' && character <= 'z';
                 });
             if (lexeme.stems[slot].size() > 18U || !valid) {
-                fail(context + ": stem must contain at most 18 lowercase ASCII letters");
+                fail(context +
+                     ": stem must contain at most 18 lowercase ASCII letters");
             }
             has_stem = has_stem || !lexeme.stems[slot].empty();
         }
@@ -322,7 +296,8 @@ read_compiled_lexemes(const std::filesystem::path &path) {
             lexeme.part_of_speech != 12U) {
             fail(context + ": part_of_speech is not importable");
         }
-        const auto declension = static_cast<std::uint8_t>(lexeme.paradigm >> 4U);
+        const auto declension =
+            static_cast<std::uint8_t>(lexeme.paradigm >> 4U);
         const auto variant = static_cast<std::uint8_t>(lexeme.paradigm & 0x0fU);
         if (declension > 9U || variant > 9U) {
             fail(context + ": paradigm component exceeds 0..9");
@@ -334,7 +309,8 @@ read_compiled_lexemes(const std::filesystem::path &path) {
         const auto source = (lexeme.translation >> 17U) & 0x1fU;
         if (age > 8U || subject > 11U || geography > 17U || frequency > 9U ||
             source != 17U) {
-            fail(context + ": translation metadata is outside the import policy");
+            fail(context +
+                 ": translation metadata is outside the import policy");
         }
         if ((lexeme.part_of_speech == 1U &&
              ((lexeme.class_payload & 0x07U) > 4U ||
@@ -468,7 +444,7 @@ std::string_view trim(std::string_view value) {
 }
 
 bool quantity_positions_are_vowels(const std::string_view text,
-                                    const std::uint32_t known) {
+                                   const std::uint32_t known) {
     for (std::size_t index = 0; index < text.size(); ++index) {
         if ((known & (std::uint32_t{1U} << index)) == 0U) {
             continue;
@@ -1086,14 +1062,16 @@ QuantitySources read_quantities(const std::filesystem::path &path) {
             const auto entry = parse_u32(fields[1], "dictionary entry", source);
             if (entry == 0U ||
                 entry > std::numeric_limits<std::uint16_t>::max()) {
-                fail("dictionary entry exceeds one-based u16 in QUANTITIES.LAT");
+                fail(
+                    "dictionary entry exceeds one-based u16 in QUANTITIES.LAT");
             }
             const auto slot = parse_u8(fields[2], "lexical slot", source);
             if (slot < 1U || slot > 4U) {
                 fail("lexical slot is outside 1..4 in QUANTITIES.LAT");
             }
             result.stems.push_back({
-                static_cast<std::uint16_t>(entry), slot,
+                static_cast<std::uint16_t>(entry),
+                slot,
                 parse_u32(fields[3], "known mask", source),
                 parse_u32(fields[4], "long mask", source),
             });
@@ -1249,14 +1227,15 @@ std::size_t stem_bucket(std::string_view stem) {
     return base + 1 + static_cast<std::size_t>(second_character - 'a');
 }
 
-std::uint32_t crc32(std::span<const std::byte> bytes, std::uint32_t crc = 0) {
+std::uint32_t crc32(std::span<const std::byte> bytes,
+                    std::uint32_t crc = wwdb::crc32_initial_value) {
     crc = ~crc;
     for (const auto item : bytes) {
         crc ^= std::to_integer<std::uint8_t>(item);
-        for (int bit = 0; bit < 8; ++bit) {
+        for (std::size_t bit = 0; bit < wwdb::bits_per_byte; ++bit) {
             const auto mask = static_cast<std::uint32_t>(
-                -static_cast<std::int32_t>(crc & 1U));
-            crc = (crc >> 1U) ^ (0xedb8'8320U & mask);
+                -static_cast<std::int32_t>(crc & wwdb::crc32_lsb_mask));
+            crc = (crc >> 1U) ^ (wwdb::crc32_reflected_polynomial & mask);
         }
     }
     return ~crc;
@@ -1277,15 +1256,12 @@ Bytes byte_shuffle(Bytes rows, std::size_t count, std::size_t stride) {
 }
 
 Bytes make_image(std::vector<Section> sections, PackingProfile profile) {
-    constexpr std::uint32_t fixed_header_size = 40;
-    constexpr std::uint32_t directory_entry_size = 32;
-
     const auto section_count = static_cast<std::uint32_t>(sections.size());
     const auto header_bytes =
-        fixed_header_size + (section_count * directory_entry_size);
+        wwdb::fixed_header_size + (section_count * wwdb::directory_entry_size);
 
     std::uint64_t file_size = header_bytes;
-    std::uint32_t payload_crc = 0;
+    std::uint32_t payload_crc = wwdb::crc32_initial_value;
     for (const auto &section : sections) {
         file_size += section.data.size();
         payload_crc = crc32(section.data, payload_crc);
@@ -1293,17 +1269,17 @@ Bytes make_image(std::vector<Section> sections, PackingProfile profile) {
 
     Bytes output;
     output.reserve(static_cast<std::size_t>(file_size));
-    for (const char ch : std::string_view{"WWDB\r\n\x1a\n", 8}) {
-        append_u8(output, static_cast<std::uint8_t>(ch));
+    for (const auto byte : wwdb::magic) {
+        append_u8(output, byte);
     }
-    append_u16_le(output, 1); // major
-    append_u16_le(output, 8); // minor: typed packon selection metadata
-    append_u32_le(output, fixed_header_size);
+    append_u16_le(output, wwdb::major_version);
+    append_u16_le(output, wwdb::typed_packon_minor_version);
+    append_u32_le(output, wwdb::fixed_header_size);
     append_u32_le(output, section_count);
     append_u32_le(output, std::to_underlying(profile));
     append_u64_le(output, file_size);
     append_u32_le(output, payload_crc);
-    append_u32_le(output, 0); // reserved
+    append_u32_le(output, wwdb::reserved_value);
 
     std::uint64_t offset = header_bytes;
     for (const auto &section : sections) {
@@ -1369,8 +1345,8 @@ int main(int argc, char **argv) try {
 
     const auto legacy_lexeme_count = dictionary.size() / dictionary_record_size;
     const auto imported_stem_reference_count = std::ranges::fold_left(
-        compiled_lexemes, std::size_t{0}, [](const std::size_t count,
-                                             const CompiledLexeme &lexeme) {
+        compiled_lexemes, std::size_t{0},
+        [](const std::size_t count, const CompiledLexeme &lexeme) {
             return count + static_cast<std::size_t>(std::ranges::count_if(
                                lexeme.stems, [](const std::string &stem) {
                                    return !stem.empty();
@@ -1383,7 +1359,8 @@ int main(int argc, char **argv) try {
     if (lexeme_count + uniques.size() >
             std::numeric_limits<std::uint16_t>::max() + 1ULL ||
         stem_reference_count > std::numeric_limits<std::uint16_t>::max()) {
-        fail("WWDB u16 lexeme/reference capacity exceeded after LEXEMES.LAT import");
+        fail("WWDB u16 lexeme/reference capacity exceeded after LEXEMES.LAT "
+             "import");
     }
 
     StringPool stem_pool;
@@ -1403,31 +1380,30 @@ int main(int argc, char **argv) try {
                                   profile == PackingProfile::search_only;
     const bool include_meanings = profile != PackingProfile::search_only;
     const std::size_t lexeme_stride =
-        !use_dense_records ? 19 : (include_meanings ? 16 : 14);
+        !use_dense_records ? 19U
+                           : (include_meanings ? wwdb::full_lexeme_stride
+                                               : wwdb::search_lexeme_stride);
     lexeme_records.reserve(lexeme_count * lexeme_stride);
-    const auto structural_signature = [](
-                                          const auto &stem_spellings,
-                                          const std::uint8_t part,
-                                          const std::uint8_t paradigm_value,
-                                          const std::uint8_t attribute_0,
-                                          const std::uint8_t attribute_1,
-                                          const std::uint16_t numeric_value) {
-        std::string signature;
-        for (const auto &stem : stem_spellings) {
-            signature.append(stem);
-            signature.push_back('\x1f');
-        }
-        signature.append(std::to_string(part));
-        signature.push_back(':');
-        signature.append(std::to_string(paradigm_value));
-        signature.push_back(':');
-        signature.append(std::to_string(attribute_0));
-        signature.push_back(':');
-        signature.append(std::to_string(attribute_1));
-        signature.push_back(':');
-        signature.append(std::to_string(numeric_value));
-        return signature;
-    };
+    const auto structural_signature =
+        [](const auto &stem_spellings, const std::uint8_t part,
+           const std::uint8_t paradigm_value, const std::uint8_t attribute_0,
+           const std::uint8_t attribute_1, const std::uint16_t numeric_value) {
+            std::string signature;
+            for (const auto &stem : stem_spellings) {
+                signature.append(stem);
+                signature.push_back('\x1f');
+            }
+            signature.append(std::to_string(part));
+            signature.push_back(':');
+            signature.append(std::to_string(paradigm_value));
+            signature.push_back(':');
+            signature.append(std::to_string(attribute_0));
+            signature.push_back(':');
+            signature.append(std::to_string(attribute_1));
+            signature.push_back(':');
+            signature.append(std::to_string(numeric_value));
+            return signature;
+        };
     std::unordered_map<std::string, std::size_t> lexical_structures;
     lexical_structures.reserve(lexeme_count);
 
@@ -1515,7 +1491,8 @@ int main(int argc, char **argv) try {
                     fail("noun attribute outside dense profile");
                 }
                 class_payload = static_cast<std::uint64_t>(attribute_0) |
-                                (static_cast<std::uint64_t>(attribute_1) << 3U);
+                                (static_cast<std::uint64_t>(attribute_1)
+                                 << wwdb::noun_kind_shift);
                 break;
             case 2: // pronoun kind
             case 4: // adjective comparison
@@ -1536,8 +1513,7 @@ int main(int argc, char **argv) try {
                     }
                     // The closing delimiter is semantically significant: a
                     // prefix comparison would mistake -cum for -cumque.
-                    const auto marker =
-                        std::string{"(w/-"} + tackon.fix + ')';
+                    const auto marker = std::string{"(w/-"} + tackon.fix + ')';
                     if (!meaning.starts_with(marker)) {
                         continue;
                     }
@@ -1547,18 +1523,18 @@ int main(int argc, char **argv) try {
                     packon_plus_one =
                         static_cast<std::uint16_t>(tackon.addon_id + 1U);
                 }
-                class_payload =
-                    static_cast<std::uint64_t>(attribute_0) |
-                    (static_cast<std::uint64_t>(packon_plus_one) << 4U);
+                class_payload = static_cast<std::uint64_t>(attribute_0) |
+                                (static_cast<std::uint64_t>(packon_plus_one)
+                                 << wwdb::pronoun_packon_plus_one_shift);
                 break;
             }
             case 5: // numeral sort:3 | numeric value:10
                 if (attribute_0 > 7 || numeric_value > 1023) {
                     fail("numeral payload outside dense profile");
                 }
-                class_payload =
-                    static_cast<std::uint64_t>(attribute_0) |
-                    (static_cast<std::uint64_t>(numeric_value) << 3U);
+                class_payload = static_cast<std::uint64_t>(attribute_0) |
+                                (static_cast<std::uint64_t>(numeric_value)
+                                 << wwdb::numeral_value_shift);
                 break;
             case 6:  // adverb comparison
             case 10: // preposition case
@@ -1573,9 +1549,10 @@ int main(int argc, char **argv) try {
 
             const std::uint64_t metadata =
                 static_cast<std::uint64_t>(pofs) |
-                (static_cast<std::uint64_t>(paradigm) << 4U) |
-                (static_cast<std::uint64_t>(translation) << 12U) |
-                (class_payload << 34U);
+                (static_cast<std::uint64_t>(paradigm) << wwdb::paradigm_shift) |
+                (static_cast<std::uint64_t>(translation)
+                 << wwdb::translation_shift) |
+                (class_payload << wwdb::lexeme_class_payload_shift);
             append_u48_le(lexeme_records, metadata);
         }
     }
@@ -1588,15 +1565,12 @@ int main(int argc, char **argv) try {
         if (lexeme.part_of_speech == 1U) {
             attribute_0 =
                 static_cast<std::uint8_t>(lexeme.class_payload & 0x07U);
-            attribute_1 =
-                static_cast<std::uint8_t>(lexeme.class_payload >> 3U);
+            attribute_1 = static_cast<std::uint8_t>(lexeme.class_payload >> 3U);
         } else if (lexeme.part_of_speech == 5U) {
             attribute_0 =
                 static_cast<std::uint8_t>(lexeme.class_payload & 0x07U);
-        } else if (lexeme.part_of_speech == 2U ||
-                   lexeme.part_of_speech == 4U ||
-                   lexeme.part_of_speech == 6U ||
-                   lexeme.part_of_speech == 7U ||
+        } else if (lexeme.part_of_speech == 2U || lexeme.part_of_speech == 4U ||
+                   lexeme.part_of_speech == 6U || lexeme.part_of_speech == 7U ||
                    lexeme.part_of_speech == 10U) {
             attribute_0 = static_cast<std::uint8_t>(lexeme.class_payload);
         }
@@ -1612,10 +1586,9 @@ int main(int argc, char **argv) try {
         }
 
         std::array<std::uint16_t, 4> stem_ids{};
-        std::ranges::transform(lexeme.stems, stem_ids.begin(),
-                               [&](const std::string &stem) {
-                                   return stem_pool.intern(stem);
-                               });
+        std::ranges::transform(
+            lexeme.stems, stem_ids.begin(),
+            [&](const std::string &stem) { return stem_pool.intern(stem); });
         std::uint16_t meaning_id = 0;
         if (include_meanings) {
             meaning_id = meaning_pool.intern(lexeme.meaning);
@@ -1636,15 +1609,19 @@ int main(int argc, char **argv) try {
         } else {
             const std::uint64_t metadata =
                 static_cast<std::uint64_t>(lexeme.part_of_speech) |
-                (static_cast<std::uint64_t>(lexeme.paradigm) << 4U) |
-                (static_cast<std::uint64_t>(lexeme.translation) << 12U) |
-                (static_cast<std::uint64_t>(lexeme.class_payload) << 34U);
+                (static_cast<std::uint64_t>(lexeme.paradigm)
+                 << wwdb::paradigm_shift) |
+                (static_cast<std::uint64_t>(lexeme.translation)
+                 << wwdb::translation_shift) |
+                (static_cast<std::uint64_t>(lexeme.class_payload)
+                 << wwdb::lexeme_class_payload_shift);
             append_u48_le(lexeme_records, metadata);
         }
     }
 
     Bytes stem_reference_records;
-    const std::size_t stem_reference_stride = use_dense_records ? 3 : 5;
+    const std::size_t stem_reference_stride =
+        use_dense_records ? wwdb::stem_reference_stride : 5U;
     stem_reference_records.reserve(stem_reference_count *
                                    stem_reference_stride);
     struct PendingStemReference final {
@@ -1653,7 +1630,8 @@ int main(int argc, char **argv) try {
         std::uint8_t lexical_slot{};
         std::uint8_t stem_key{};
     };
-    std::array<std::vector<PendingStemReference>, 703> stem_buckets;
+    std::array<std::vector<PendingStemReference>, wwdb::stem_bucket_count>
+        stem_buckets;
     std::size_t previous_bucket = 0;
     std::string previous_stem;
 
@@ -1692,7 +1670,8 @@ int main(int argc, char **argv) try {
             lexical_slot = key - 1;
         } else {
             for (std::size_t candidate = 0; candidate < 4; ++candidate) {
-                if (fixed_string(dictionary_record, candidate * 18, 18) == stem) {
+                if (fixed_string(dictionary_record, candidate * 18, 18) ==
+                    stem) {
                     lexical_slot = candidate;
                     break;
                 }
@@ -1748,8 +1727,10 @@ int main(int argc, char **argv) try {
             }
             const auto packed_reference =
                 static_cast<std::uint32_t>(reference.lexeme_id) |
-                (static_cast<std::uint32_t>(reference.lexical_slot) << 16U) |
-                (static_cast<std::uint32_t>(reference.stem_key) << 18U);
+                (static_cast<std::uint32_t>(reference.lexical_slot)
+                 << wwdb::stem_reference_slot_shift) |
+                (static_cast<std::uint32_t>(reference.stem_key)
+                 << wwdb::stem_reference_key_shift);
             append_u24_le(stem_reference_records, packed_reference);
         }
     }
@@ -1828,12 +1809,19 @@ int main(int argc, char **argv) try {
             } else {
                 const std::uint64_t packed_inflection =
                     static_cast<std::uint64_t>(pofs) |
-                    (static_cast<std::uint64_t>(paradigm) << 4U) |
-                    (static_cast<std::uint64_t>(morphology) << 12U) |
-                    (static_cast<std::uint64_t>(ending_id) << 28U) |
-                    (static_cast<std::uint64_t>(stem_key - 1U) << 37U) |
-                    (static_cast<std::uint64_t>(age) << 39U) |
-                    (static_cast<std::uint64_t>(frequency) << 43U);
+                    (static_cast<std::uint64_t>(paradigm)
+                     << wwdb::paradigm_shift) |
+                    (static_cast<std::uint64_t>(morphology)
+                     << wwdb::morphology_shift) |
+                    (static_cast<std::uint64_t>(ending_id)
+                     << wwdb::ending_id_shift) |
+                    (static_cast<std::uint64_t>(stem_key -
+                                                wwdb::inflection_stem_key_bias)
+                     << wwdb::inflection_stem_key_shift) |
+                    (static_cast<std::uint64_t>(age)
+                     << wwdb::inflection_age_shift) |
+                    (static_cast<std::uint64_t>(frequency)
+                     << wwdb::inflection_frequency_shift);
                 append_u48_le(inflection_records, packed_inflection);
             }
             inflection_endings.push_back(ending);
@@ -1845,28 +1833,30 @@ int main(int argc, char **argv) try {
     std::vector<std::uint16_t> packed_inflection_quantities(
         dense_inflection_count);
     for (const auto &quantity : quantities.inflections) {
-        if (quantity.rule_id >= dense_inflection_count || quantity.known == 0U ||
-            quantity.known > 0x7fU || quantity.long_vowel > 0x7fU ||
+        if (quantity.rule_id >= dense_inflection_count ||
+            quantity.known == 0U ||
+            quantity.known > wwdb::inflection_quantity_value_mask ||
+            quantity.long_vowel > wwdb::inflection_quantity_value_mask ||
             (quantity.long_vowel & ~quantity.known) != 0U) {
             fail("invalid inflection quantity in QUANTITIES.LAT");
         }
         const auto &ending = inflection_endings.at(quantity.rule_id);
         const auto ending_size = ending.size();
-        const auto valid_bits = ending_size == 0U
-                                    ? 0U
-                                    : (std::uint32_t{1U} << ending_size) - 1U;
+        const auto valid_bits =
+            ending_size == 0U ? 0U : (std::uint32_t{1U} << ending_size) - 1U;
         if (((quantity.known | quantity.long_vowel) & ~valid_bits) != 0U ||
             !quantity_positions_are_vowels(ending, quantity.known) ||
             packed_inflection_quantities[quantity.rule_id] != 0U) {
             fail("duplicate or out-of-range inflection quantity");
         }
         packed_inflection_quantities[quantity.rule_id] =
-            static_cast<std::uint16_t>(quantity.known |
-                                       (quantity.long_vowel << 7U));
+            static_cast<std::uint16_t>(
+                quantity.known |
+                (quantity.long_vowel << wwdb::maximum_ending_size));
     }
     Bytes inflection_quantity_records;
-    inflection_quantity_records.reserve(
-        packed_inflection_quantities.size() * 2U);
+    inflection_quantity_records.reserve(packed_inflection_quantities.size() *
+                                        wwdb::inflection_quantity_stride);
     for (const auto quantity : packed_inflection_quantities) {
         append_u16_le(inflection_quantity_records, quantity);
     }
@@ -1889,13 +1879,13 @@ int main(int argc, char **argv) try {
         const auto record = std::span{dictionary}.subspan(
             lexeme_id * dictionary_record_size, dictionary_record_size);
         const auto stem =
-            fixed_string(record, lexical_slot * 18U, 18U);
-        const auto valid_bits = stem.empty()
-                                    ? 0U
-                                    : (std::uint32_t{1U} << stem.size()) - 1U;
+            fixed_string(record, lexical_slot * wwdb::maximum_stem_size,
+                         wwdb::maximum_stem_size);
+        const auto valid_bits =
+            stem.empty() ? 0U : (std::uint32_t{1U} << stem.size()) - 1U;
         if (stem.empty() || quantity.known == 0U ||
-            quantity.known > 0x03ffffU ||
-            quantity.long_vowel > 0x03ffffU ||
+            quantity.known > wwdb::stem_quantity_value_mask ||
+            quantity.long_vowel > wwdb::stem_quantity_value_mask ||
             (quantity.long_vowel & ~quantity.known) != 0U ||
             ((quantity.known | quantity.long_vowel) & ~valid_bits) != 0U ||
             !quantity_positions_are_vowels(stem, quantity.known)) {
@@ -1903,20 +1893,21 @@ int main(int argc, char **argv) try {
         }
         packed_stem_quantities.push_back({
             static_cast<std::uint32_t>(lexeme_id) |
-                (static_cast<std::uint32_t>(lexical_slot) << 16U),
+                (static_cast<std::uint32_t>(lexical_slot)
+                 << wwdb::stem_quantity_slot_shift),
             quantity.known,
             quantity.long_vowel,
         });
     }
-    std::ranges::sort(packed_stem_quantities, {},
-                      &PackedStemQuantity::key);
+    std::ranges::sort(packed_stem_quantities, {}, &PackedStemQuantity::key);
     if (std::ranges::adjacent_find(
             packed_stem_quantities, std::ranges::equal_to{},
             &PackedStemQuantity::key) != packed_stem_quantities.end()) {
         fail("duplicate stem quantity in QUANTITIES.LAT");
     }
     Bytes stem_quantity_records;
-    stem_quantity_records.reserve(packed_stem_quantities.size() * 9U);
+    stem_quantity_records.reserve(packed_stem_quantities.size() *
+                                  wwdb::stem_quantity_stride);
     for (const auto &quantity : packed_stem_quantities) {
         append_u24_le(stem_quantity_records, quantity.key);
         append_u24_le(stem_quantity_records, quantity.known);
@@ -1924,7 +1915,9 @@ int main(int argc, char **argv) try {
     }
 
     Bytes suffix_records;
-    const std::uint32_t suffix_stride = include_meanings ? 14U : 12U;
+    const std::uint32_t suffix_stride = include_meanings
+                                            ? wwdb::full_suffix_stride
+                                            : wwdb::search_suffix_stride;
     suffix_records.reserve(addons.suffixes.size() * suffix_stride);
     for (const auto &suffix : addons.suffixes) {
         append_u16_le(suffix_records, suffix.addon_id);
@@ -1935,19 +1928,29 @@ int main(int argc, char **argv) try {
         }
         const std::uint64_t metadata =
             static_cast<std::uint64_t>(suffix.root) |
-            (static_cast<std::uint64_t>(suffix.root_key) << 4U) |
-            (static_cast<std::uint64_t>(suffix.target) << 7U) |
-            (static_cast<std::uint64_t>(suffix.target_key) << 11U) |
-            (static_cast<std::uint64_t>(suffix.paradigm) << 14U) |
-            (static_cast<std::uint64_t>(suffix.attribute_0) << 22U) |
-            (static_cast<std::uint64_t>(suffix.attribute_1) << 26U) |
-            (static_cast<std::uint64_t>(suffix.numeric_value) << 30U) |
-            (static_cast<std::uint64_t>(suffix.connect) << 38U);
+            (static_cast<std::uint64_t>(suffix.root_key)
+             << wwdb::suffix_root_key_shift) |
+            (static_cast<std::uint64_t>(suffix.target)
+             << wwdb::suffix_target_pos_shift) |
+            (static_cast<std::uint64_t>(suffix.target_key)
+             << wwdb::suffix_target_key_shift) |
+            (static_cast<std::uint64_t>(suffix.paradigm)
+             << wwdb::suffix_paradigm_shift) |
+            (static_cast<std::uint64_t>(suffix.attribute_0)
+             << wwdb::suffix_attribute_shift) |
+            (static_cast<std::uint64_t>(suffix.attribute_1)
+             << wwdb::suffix_noun_kind_shift) |
+            (static_cast<std::uint64_t>(suffix.numeric_value)
+             << wwdb::suffix_numeric_value_shift) |
+            (static_cast<std::uint64_t>(suffix.connect)
+             << wwdb::suffix_connector_shift);
         append_u64_le(suffix_records, metadata);
     }
 
     Bytes prefix_records;
-    const std::uint32_t prefix_stride = include_meanings ? 8U : 6U;
+    const std::uint32_t prefix_stride = include_meanings
+                                            ? wwdb::full_prefix_stride
+                                            : wwdb::search_prefix_stride;
     prefix_records.reserve(addons.prefixes.size() * prefix_stride);
     for (const auto &prefix : addons.prefixes) {
         append_u16_le(prefix_records, prefix.addon_id);
@@ -1958,13 +1961,17 @@ int main(int argc, char **argv) try {
         }
         const auto metadata = static_cast<std::uint16_t>(
             static_cast<std::uint16_t>(prefix.root) |
-            (static_cast<std::uint16_t>(prefix.target) << 4U) |
-            (static_cast<std::uint16_t>(prefix.connect) << 8U));
+            (static_cast<std::uint16_t>(prefix.target)
+             << wwdb::prefix_target_shift) |
+            (static_cast<std::uint16_t>(prefix.connect)
+             << wwdb::prefix_connector_shift));
         append_u16_le(prefix_records, metadata);
     }
 
     Bytes tackon_records;
-    const std::uint32_t tackon_stride = include_meanings ? 10U : 8U;
+    const std::uint32_t tackon_stride = include_meanings
+                                            ? wwdb::full_tackon_stride
+                                            : wwdb::search_tackon_stride;
     tackon_records.reserve(addons.tackons.size() * tackon_stride);
     for (const auto &tackon : addons.tackons) {
         append_u16_le(tackon_records, tackon.addon_id);
@@ -1975,16 +1982,23 @@ int main(int argc, char **argv) try {
         }
         const std::uint32_t metadata =
             static_cast<std::uint32_t>(tackon.base) |
-            (static_cast<std::uint32_t>(tackon.paradigm) << 4U) |
-            (static_cast<std::uint32_t>(tackon.attribute_0) << 12U) |
-            (static_cast<std::uint32_t>(tackon.attribute_1) << 16U) |
-            (static_cast<std::uint32_t>(tackon.packon) << 20U) |
-            (static_cast<std::uint32_t>(tackon.enclitic) << 21U);
+            (static_cast<std::uint32_t>(tackon.paradigm)
+             << wwdb::paradigm_shift) |
+            (static_cast<std::uint32_t>(tackon.attribute_0)
+             << wwdb::tackon_attribute_shift) |
+            (static_cast<std::uint32_t>(tackon.attribute_1)
+             << wwdb::tackon_noun_kind_shift) |
+            (static_cast<std::uint32_t>(tackon.packon)
+             << wwdb::tackon_packon_shift) |
+            (static_cast<std::uint32_t>(tackon.enclitic)
+             << wwdb::tackon_enclitic_shift);
         append_u32_le(tackon_records, metadata);
     }
 
     Bytes unique_records;
-    const std::uint32_t unique_stride = include_meanings ? 12U : 10U;
+    const std::uint32_t unique_stride = include_meanings
+                                            ? wwdb::full_unique_stride
+                                            : wwdb::search_unique_stride;
     unique_records.reserve(uniques.size() * unique_stride);
     for (const auto &unique : uniques) {
         append_u16_le(unique_records, stem_pool.intern(unique.surface));
@@ -1996,14 +2010,19 @@ int main(int argc, char **argv) try {
         // never existed in the source data.
         const std::uint64_t metadata =
             static_cast<std::uint64_t>(unique.part_of_speech) |
-            (static_cast<std::uint64_t>(unique.paradigm) << 4U) |
-            (static_cast<std::uint64_t>(unique.morphology) << 12U) |
-            (static_cast<std::uint64_t>(unique.translation) << 28U);
+            (static_cast<std::uint64_t>(unique.paradigm)
+             << wwdb::paradigm_shift) |
+            (static_cast<std::uint64_t>(unique.morphology)
+             << wwdb::morphology_shift) |
+            (static_cast<std::uint64_t>(unique.translation)
+             << wwdb::unique_translation_shift);
         append_u64_le(unique_records, metadata);
     }
 
     Bytes rewrite_records;
-    const std::uint32_t rewrite_stride = include_meanings ? 16U : 14U;
+    const std::uint32_t rewrite_stride = include_meanings
+                                             ? wwdb::full_rewrite_stride
+                                             : wwdb::search_rewrite_stride;
     rewrite_records.reserve(rewrites.size() * rewrite_stride);
     for (std::size_t ordinal = 0; ordinal < rewrites.size(); ++ordinal) {
         const auto &rewrite = rewrites[ordinal];
@@ -2023,33 +2042,46 @@ int main(int argc, char **argv) try {
         }
         const std::uint32_t metadata =
             static_cast<std::uint32_t>(rewrite.kind) |
-            (static_cast<std::uint32_t>(rewrite.scope) << 2U) |
-            (static_cast<std::uint32_t>(rewrite.priority) << 4U) |
-            (static_cast<std::uint32_t>(rewrite.scan_reverse) << 12U) |
-            (static_cast<std::uint32_t>(rewrite.required_part) << 13U) |
-            (static_cast<std::uint32_t>(rewrite.required_stem_key) << 17U) |
-            (static_cast<std::uint32_t>(rewrite.minimum_before) << 20U) |
-            (static_cast<std::uint32_t>(rewrite.minimum_after) << 24U) |
-            (static_cast<std::uint32_t>(rewrite.medieval) << 28U);
+            (static_cast<std::uint32_t>(rewrite.scope)
+             << wwdb::rewrite_scope_shift) |
+            (static_cast<std::uint32_t>(rewrite.priority)
+             << wwdb::rewrite_priority_shift) |
+            (static_cast<std::uint32_t>(rewrite.scan_reverse)
+             << wwdb::rewrite_scan_reverse_shift) |
+            (static_cast<std::uint32_t>(rewrite.required_part)
+             << wwdb::rewrite_required_pos_shift) |
+            (static_cast<std::uint32_t>(rewrite.required_stem_key)
+             << wwdb::rewrite_stem_key_shift) |
+            (static_cast<std::uint32_t>(rewrite.minimum_before)
+             << wwdb::rewrite_minimum_before_shift) |
+            (static_cast<std::uint32_t>(rewrite.minimum_after)
+             << wwdb::rewrite_minimum_after_shift) |
+            (static_cast<std::uint32_t>(rewrite.medieval)
+             << wwdb::rewrite_medieval_shift);
         append_u32_le(rewrite_records, metadata);
         // Integer promotions apply to each shift and OR.  Narrow only after
         // composing the validated seven-bit payload so conversion warnings do
         // not hide an accidental future expansion of the wire field.
         const auto behavior = static_cast<std::uint16_t>(
             static_cast<std::uint16_t>(rewrite.operation) |
-            (static_cast<std::uint16_t>(rewrite.stage) << 3U) |
-            (static_cast<std::uint16_t>(rewrite.constraint) << 5U));
+            (static_cast<std::uint16_t>(rewrite.stage)
+             << wwdb::rewrite_stage_shift) |
+            (static_cast<std::uint16_t>(rewrite.constraint)
+             << wwdb::rewrite_constraint_shift));
         append_u16_le(rewrite_records, behavior);
     }
 
     std::vector<Section> sections;
-    sections.push_back({SectionType::stem_strings, 0, stem_pool.size(), 0,
+    sections.push_back({SectionType::stem_strings, wwdb::section_flag_pool,
+                        stem_pool.size(), wwdb::variable_stride,
                         stem_pool.encode()});
     if (include_meanings) {
-        sections.push_back({SectionType::meaning_strings, 0,
-                            meaning_pool.size(), 0, meaning_pool.encode()});
+        sections.push_back({SectionType::meaning_strings,
+                            wwdb::section_flag_pool, meaning_pool.size(),
+                            wwdb::variable_stride, meaning_pool.encode()});
     }
-    sections.push_back({SectionType::ending_strings, 0, ending_pool.size(), 0,
+    sections.push_back({SectionType::ending_strings, wwdb::section_flag_pool,
+                        ending_pool.size(), wwdb::variable_stride,
                         ending_pool.encode()});
     if (use_byte_columns) {
         lexeme_records = byte_shuffle(std::move(lexeme_records), lexeme_count,
@@ -2057,11 +2089,14 @@ int main(int argc, char **argv) try {
         stem_reference_records =
             byte_shuffle(std::move(stem_reference_records),
                          stem_reference_count, stem_reference_stride);
-        inflection_records = byte_shuffle(std::move(inflection_records),
-                                          dense_inflection_count, 6);
+        inflection_records =
+            byte_shuffle(std::move(inflection_records), dense_inflection_count,
+                         wwdb::inflection_stride);
     }
 
-    const std::uint32_t record_flags = use_byte_columns ? 2U : 1U;
+    const std::uint32_t record_flags = use_byte_columns
+                                           ? wwdb::section_flag_columnar
+                                           : wwdb::section_flag_row_major;
     sections.push_back({SectionType::lexemes, record_flags,
                         static_cast<std::uint32_t>(lexeme_count),
                         static_cast<std::uint32_t>(lexeme_stride),
@@ -2070,68 +2105,77 @@ int main(int argc, char **argv) try {
                         static_cast<std::uint32_t>(stem_reference_count),
                         static_cast<std::uint32_t>(stem_reference_stride),
                         std::move(stem_reference_records)});
-    sections.push_back({SectionType::stem_prefix_boundaries, 1, 704, 2,
-                        std::move(stem_boundaries)});
+    sections.push_back({SectionType::stem_prefix_boundaries,
+                        wwdb::section_flag_row_major, wwdb::stem_boundary_count,
+                        wwdb::boundary_stride, std::move(stem_boundaries)});
     sections.push_back({SectionType::inflections, record_flags,
-                        dense_inflection_count, use_dense_records ? 6U : 8U,
+                        dense_inflection_count,
+                        use_dense_records ? wwdb::inflection_stride : 8U,
                         std::move(inflection_records)});
-    sections.push_back({SectionType::inflection_section_boundaries, 1, 6, 2,
+    sections.push_back({SectionType::inflection_section_boundaries,
+                        wwdb::section_flag_row_major,
+                        wwdb::inflection_boundary_count, wwdb::boundary_stride,
                         std::move(inflection_boundaries)});
-    sections.push_back({SectionType::inflection_quantities, 1,
-                        dense_inflection_count, 2,
+    sections.push_back({SectionType::inflection_quantities,
+                        wwdb::section_flag_row_major, dense_inflection_count,
+                        wwdb::inflection_quantity_stride,
                         std::move(inflection_quantity_records)});
     sections.push_back({
         SectionType::stem_quantities,
-        1,
+        wwdb::section_flag_row_major,
         static_cast<std::uint32_t>(packed_stem_quantities.size()),
-        9,
+        wwdb::stem_quantity_stride,
         std::move(stem_quantity_records),
     });
-    sections.push_back({SectionType::suffix_strings, 0,
-                        suffix_string_pool.size(), 0,
+    sections.push_back({SectionType::suffix_strings, wwdb::section_flag_pool,
+                        suffix_string_pool.size(), wwdb::variable_stride,
                         suffix_string_pool.encode()});
     if (include_meanings) {
-        sections.push_back({SectionType::suffix_meanings, 0,
-                            suffix_meaning_pool.size(), 0,
+        sections.push_back({SectionType::suffix_meanings,
+                            wwdb::section_flag_pool, suffix_meaning_pool.size(),
+                            wwdb::variable_stride,
                             suffix_meaning_pool.encode()});
     }
-    sections.push_back({SectionType::suffixes, 1,
+    sections.push_back({SectionType::suffixes, wwdb::section_flag_row_major,
                         static_cast<std::uint32_t>(addons.suffixes.size()),
                         suffix_stride, std::move(suffix_records)});
-    sections.push_back({SectionType::prefix_strings, 0,
-                        prefix_string_pool.size(), 0,
+    sections.push_back({SectionType::prefix_strings, wwdb::section_flag_pool,
+                        prefix_string_pool.size(), wwdb::variable_stride,
                         prefix_string_pool.encode()});
     if (include_meanings) {
-        sections.push_back({SectionType::prefix_meanings, 0,
-                            prefix_meaning_pool.size(), 0,
+        sections.push_back({SectionType::prefix_meanings,
+                            wwdb::section_flag_pool, prefix_meaning_pool.size(),
+                            wwdb::variable_stride,
                             prefix_meaning_pool.encode()});
     }
-    sections.push_back({SectionType::prefixes, 1,
+    sections.push_back({SectionType::prefixes, wwdb::section_flag_row_major,
                         static_cast<std::uint32_t>(addons.prefixes.size()),
                         prefix_stride, std::move(prefix_records)});
-    sections.push_back({SectionType::tackon_strings, 0,
-                        tackon_string_pool.size(), 0,
+    sections.push_back({SectionType::tackon_strings, wwdb::section_flag_pool,
+                        tackon_string_pool.size(), wwdb::variable_stride,
                         tackon_string_pool.encode()});
     if (include_meanings) {
-        sections.push_back({SectionType::tackon_meanings, 0,
-                            tackon_meaning_pool.size(), 0,
+        sections.push_back({SectionType::tackon_meanings,
+                            wwdb::section_flag_pool, tackon_meaning_pool.size(),
+                            wwdb::variable_stride,
                             tackon_meaning_pool.encode()});
     }
-    sections.push_back({SectionType::tackons, 1,
+    sections.push_back({SectionType::tackons, wwdb::section_flag_row_major,
                         static_cast<std::uint32_t>(addons.tackons.size()),
                         tackon_stride, std::move(tackon_records)});
-    sections.push_back({SectionType::uniques, 1,
+    sections.push_back({SectionType::uniques, wwdb::section_flag_row_major,
                         static_cast<std::uint32_t>(uniques.size()),
                         unique_stride, std::move(unique_records)});
-    sections.push_back({SectionType::rewrite_strings, 0,
-                        rewrite_string_pool.size(), 0,
+    sections.push_back({SectionType::rewrite_strings, wwdb::section_flag_pool,
+                        rewrite_string_pool.size(), wwdb::variable_stride,
                         rewrite_string_pool.encode()});
     if (include_meanings) {
-        sections.push_back({SectionType::rewrite_meanings, 0,
-                            rewrite_meaning_pool.size(), 0,
+        sections.push_back({SectionType::rewrite_meanings,
+                            wwdb::section_flag_pool,
+                            rewrite_meaning_pool.size(), wwdb::variable_stride,
                             rewrite_meaning_pool.encode()});
     }
-    sections.push_back({SectionType::rewrites, 1,
+    sections.push_back({SectionType::rewrites, wwdb::section_flag_row_major,
                         static_cast<std::uint32_t>(rewrites.size()),
                         rewrite_stride, std::move(rewrite_records)});
 

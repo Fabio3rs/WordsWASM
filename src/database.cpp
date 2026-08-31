@@ -1,9 +1,11 @@
 #include "words/database.hpp"
+#include "words/detail/wwdb_schema.hpp"
 #include "words/lifetime.hpp"
 
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <compare>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -17,52 +19,27 @@
 namespace words {
 namespace {
 
-constexpr std::size_t fixed_header_size = 40;
-constexpr std::size_t directory_entry_size = 32;
-constexpr std::uint16_t legacy_wwdb_minor = 6;
-constexpr std::uint16_t quantity_wwdb_minor = 7;
-constexpr std::uint16_t typed_packon_wwdb_minor = 8;
-constexpr std::uint32_t legacy_maximum_section_type = 21;
-constexpr std::uint32_t quantity_maximum_section_type = 23;
-constexpr std::uint32_t inflection_quantity_stride = 2;
-constexpr std::uint32_t stem_quantity_stride = 9;
-constexpr std::size_t maximum_ending_size = 7;
-constexpr std::size_t maximum_stem_size = 18;
-constexpr std::uint16_t inflection_quantity_value_mask = 0x007fU;
-constexpr std::uint16_t inflection_quantity_reserved_mask = 0xc000U;
-constexpr std::uint32_t stem_quantity_lexeme_mask = 0xffffU;
-constexpr std::uint32_t stem_quantity_slot_mask = 0x03U;
-constexpr std::uint32_t stem_quantity_slot_shift = 16U;
-constexpr std::uint32_t stem_quantity_key_width = 18U;
-constexpr std::uint8_t stem_quantity_slot_count = 4U;
-constexpr std::uint32_t dense_profile = 2U;
-constexpr std::uint32_t search_profile = 4U;
+namespace wwdb = detail::wwdb;
+using wwdb::SectionType;
 
-enum class SectionType : std::uint32_t {
-    stem_strings = 1,
-    meaning_strings = 2,
-    ending_strings = 3,
-    lexemes = 4,
-    stem_references = 5,
-    stem_prefix_boundaries = 6,
-    inflections = 7,
-    inflection_section_boundaries = 8,
-    suffix_strings = 9,
-    suffix_meanings = 10,
-    suffixes = 11,
-    prefix_strings = 12,
-    prefix_meanings = 13,
-    prefixes = 14,
-    tackon_strings = 15,
-    tackon_meanings = 16,
-    tackons = 17,
-    uniques = 18,
-    rewrite_strings = 19,
-    rewrite_meanings = 20,
-    rewrites = 21,
-    inflection_quantities = 22,
-    stem_quantities = 23,
-};
+constexpr std::uint32_t safe_maximum_section_count = 64U;
+constexpr std::uint32_t minimum_section_count = 1U;
+
+static_assert(std::to_underlying(Gender::common) <= wwdb::three_bit_mask);
+static_assert(std::to_underlying(GrammaticalCase::accusative) <=
+              wwdb::three_bit_mask);
+static_assert(std::to_underlying(GrammaticalNumber::plural) <=
+              wwdb::two_bit_mask);
+static_assert(std::to_underlying(Degree::superlative) <= wwdb::two_bit_mask);
+static_assert(std::to_underlying(PronounKind::adjectival) <= wwdb::nibble_mask);
+static_assert(std::to_underlying(NumeralType::adverbial) <=
+              wwdb::three_bit_mask);
+static_assert(std::to_underlying(Tense::future_perfect) <=
+              wwdb::three_bit_mask);
+static_assert(std::to_underlying(Voice::passive) <= wwdb::two_bit_mask);
+static_assert(std::to_underlying(Mood::participle) <= wwdb::three_bit_mask);
+static_assert(std::to_underlying(VerbKind::perfect_definite) <=
+              wwdb::nibble_mask);
 
 struct SectionView final {
     SectionType type{};
@@ -100,52 +77,60 @@ class LoadFailure final : public std::runtime_error {
 
 [[nodiscard]] std::uint16_t read_u16_le(const std::span<const std::byte> bytes,
                                         const std::size_t offset) {
-    if (offset > bytes.size() || bytes.size() - offset < 2U) {
+    if (offset > bytes.size() || bytes.size() - offset < wwdb::u16_size) {
         fail("truncated-database", "u16 extends beyond WWDB image");
     }
     return static_cast<std::uint16_t>(byte_at(bytes, offset)) |
            static_cast<std::uint16_t>(
-               static_cast<std::uint16_t>(byte_at(bytes, offset + 1U)) << 8U);
+               static_cast<std::uint16_t>(byte_at(bytes, offset + 1U))
+               << wwdb::bits_per_byte);
 }
 
 [[nodiscard]] std::uint32_t read_u24_le(const std::span<const std::byte> bytes,
                                         const std::size_t offset) {
-    if (offset > bytes.size() || bytes.size() - offset < 3U) {
+    if (offset > bytes.size() || bytes.size() - offset < wwdb::u24_size) {
         fail("truncated-database", "u24 extends beyond WWDB image");
     }
     return static_cast<std::uint32_t>(byte_at(bytes, offset)) |
-           (static_cast<std::uint32_t>(byte_at(bytes, offset + 1U)) << 8U) |
-           (static_cast<std::uint32_t>(byte_at(bytes, offset + 2U)) << 16U);
+           (static_cast<std::uint32_t>(byte_at(bytes, offset + 1U))
+            << wwdb::bits_per_byte) |
+           (static_cast<std::uint32_t>(byte_at(bytes, offset + 2U))
+            << (2U * wwdb::bits_per_byte));
 }
 
 [[nodiscard]] std::uint32_t read_u32_le(const std::span<const std::byte> bytes,
                                         const std::size_t offset) {
-    if (offset > bytes.size() || bytes.size() - offset < 4U) {
+    if (offset > bytes.size() || bytes.size() - offset < wwdb::u32_size) {
         fail("truncated-database", "u32 extends beyond WWDB image");
     }
     return static_cast<std::uint32_t>(byte_at(bytes, offset)) |
-           (static_cast<std::uint32_t>(byte_at(bytes, offset + 1U)) << 8U) |
-           (static_cast<std::uint32_t>(byte_at(bytes, offset + 2U)) << 16U) |
-           (static_cast<std::uint32_t>(byte_at(bytes, offset + 3U)) << 24U);
+           (static_cast<std::uint32_t>(byte_at(bytes, offset + 1U))
+            << wwdb::bits_per_byte) |
+           (static_cast<std::uint32_t>(byte_at(bytes, offset + 2U))
+            << (2U * wwdb::bits_per_byte)) |
+           (static_cast<std::uint32_t>(byte_at(bytes, offset + 3U))
+            << (3U * wwdb::bits_per_byte));
 }
 
 [[nodiscard]] std::uint64_t read_u64_le(const std::span<const std::byte> bytes,
                                         const std::size_t offset) {
     const auto low = read_u32_le(bytes, offset);
-    const auto high = read_u32_le(bytes, offset + 4U);
+    const auto high = read_u32_le(bytes, offset + wwdb::u32_size);
     return static_cast<std::uint64_t>(low) |
-           (static_cast<std::uint64_t>(high) << 32U);
+           (static_cast<std::uint64_t>(high)
+            << std::numeric_limits<std::uint32_t>::digits);
 }
 
-[[nodiscard]] std::uint32_t crc32(const std::span<const std::byte> bytes,
-                                  std::uint32_t crc = 0) noexcept {
+[[nodiscard]] std::uint32_t
+crc32(const std::span<const std::byte> bytes,
+      std::uint32_t crc = wwdb::crc32_initial_value) noexcept {
     crc = ~crc;
     for (const auto item : bytes) {
         crc ^= std::to_integer<std::uint8_t>(item);
-        for (int bit = 0; bit < 8; ++bit) {
+        for (std::size_t bit = 0; bit < wwdb::bits_per_byte; ++bit) {
             const auto mask = static_cast<std::uint32_t>(
-                -static_cast<std::int32_t>(crc & 1U));
-            crc = (crc >> 1U) ^ (0xedb8'8320U & mask);
+                -static_cast<std::int32_t>(crc & wwdb::crc32_lsb_mask));
+            crc = (crc >> 1U) ^ (wwdb::crc32_reflected_polynomial & mask);
         }
     }
     return ~crc;
@@ -164,30 +149,31 @@ class LoadFailure final : public std::runtime_error {
     return value;
 }
 
-[[nodiscard]] int normalized_compare(const std::string_view left,
-                                     const std::string_view right) noexcept {
+[[nodiscard]] std::strong_ordering
+normalized_compare(const std::string_view left,
+                   const std::string_view right) noexcept {
     const auto common = std::min(left.size(), right.size());
     for (std::size_t index = 0; index < common; ++index) {
         const auto left_char = normalized_char(left[index]);
         const auto right_char = normalized_char(right[index]);
         if (left_char != right_char) {
-            return left_char < right_char ? -1 : 1;
+            return left_char <=> right_char;
         }
     }
     if (left.size() == right.size()) {
-        return 0;
+        return std::strong_ordering::equal;
     }
-    return left.size() < right.size() ? -1 : 1;
+    return left.size() <=> right.size();
 }
 
 [[nodiscard]] bool normalized_less(const std::string_view left,
                                    const std::string_view right) noexcept {
-    return normalized_compare(left, right) < 0;
+    return std::is_lt(normalized_compare(left, right));
 }
 
 [[nodiscard]] bool normalized_equal(const std::string_view left,
                                     const std::string_view right) noexcept {
-    return normalized_compare(left, right) == 0;
+    return std::is_eq(normalized_compare(left, right));
 }
 
 [[nodiscard]] std::span<const std::byte>
@@ -203,7 +189,7 @@ class RecordView final {
     RecordView(const std::span<const std::byte> bytes WORDS_LIFETIMEBOUND,
                const SectionView &section)
         : bytes_{bytes}, count_{section.count}, stride_{section.stride},
-          columnar_{section.flags == 2U} {}
+          columnar_{section.flags == wwdb::section_flag_columnar} {}
 
     [[nodiscard]] std::uint8_t byte(const std::uint32_t record,
                                     const std::uint32_t field) const {
@@ -220,34 +206,40 @@ class RecordView final {
                                          const std::uint32_t field) const {
         return static_cast<std::uint16_t>(byte(record, field)) |
                static_cast<std::uint16_t>(
-                   static_cast<std::uint16_t>(byte(record, field + 1U)) << 8U);
+                   static_cast<std::uint16_t>(byte(record, field + 1U))
+                   << wwdb::bits_per_byte);
     }
 
     [[nodiscard]] std::uint32_t read_u24(const std::uint32_t record,
                                          const std::uint32_t field) const {
         return static_cast<std::uint32_t>(byte(record, field)) |
-               (static_cast<std::uint32_t>(byte(record, field + 1U)) << 8U) |
-               (static_cast<std::uint32_t>(byte(record, field + 2U)) << 16U);
+               (static_cast<std::uint32_t>(byte(record, field + 1U))
+                << wwdb::bits_per_byte) |
+               (static_cast<std::uint32_t>(byte(record, field + 2U))
+                << (2U * wwdb::bits_per_byte));
     }
 
     [[nodiscard]] std::uint32_t read_u32(const std::uint32_t record,
                                          const std::uint32_t field) const {
         return read_u24(record, field) |
-               (static_cast<std::uint32_t>(byte(record, field + 3U)) << 24U);
+               (static_cast<std::uint32_t>(byte(record, field + 3U))
+                << (3U * wwdb::bits_per_byte));
     }
 
     [[nodiscard]] std::uint64_t read_u48(const std::uint32_t record,
                                          const std::uint32_t field) const {
         return static_cast<std::uint64_t>(read_u32(record, field)) |
-               (static_cast<std::uint64_t>(read_u16(record, field + 4U))
-                << 32U);
+               (static_cast<std::uint64_t>(
+                    read_u16(record, field + wwdb::u32_size))
+                << std::numeric_limits<std::uint32_t>::digits);
     }
 
     [[nodiscard]] std::uint64_t read_u64(const std::uint32_t record,
                                          const std::uint32_t field) const {
         return static_cast<std::uint64_t>(read_u32(record, field)) |
-               (static_cast<std::uint64_t>(read_u32(record, field + 4U))
-                << 32U);
+               (static_cast<std::uint64_t>(
+                    read_u32(record, field + wwdb::u32_size))
+                << std::numeric_limits<std::uint32_t>::digits);
     }
 
   private:
@@ -279,7 +271,7 @@ void require_shape(const SectionView &section, const std::uint32_t flags,
         fail("unsupported-section-layout",
              "WWDB section flags or stride are unsupported");
     }
-    if (stride != 0U &&
+    if (stride != wwdb::variable_stride &&
         section.bytes != static_cast<std::uint64_t>(section.count) * stride) {
         fail("invalid-section-size",
              "WWDB fixed-record section has inconsistent size");
@@ -311,7 +303,7 @@ void parse_string_pool(const std::span<const std::byte> bytes,
 
 [[nodiscard]] std::uint8_t checked_nibble(const std::uint8_t value,
                                           const char *field) {
-    if (value > 9U) {
+    if (value > wwdb::maximum_paradigm_digit) {
         fail("invalid-enum", std::string{field} + " is outside 0..9");
     }
     return value;
@@ -361,23 +353,25 @@ parse_inflection_quantities(const std::span<const std::byte> image,
     for (std::uint32_t ordinal = 0; ordinal < section.count; ++ordinal) {
         const auto packed =
             read_u16_le(bytes, static_cast<std::size_t>(ordinal) *
-                                   inflection_quantity_stride);
-        if ((packed & inflection_quantity_reserved_mask) != 0U) {
+                                   wwdb::inflection_quantity_stride);
+        if ((packed & wwdb::inflection_quantity_reserved_mask) !=
+            wwdb::reserved_value) {
             fail("reserved-bits",
                  "inflection quantity has nonzero reserved bits");
         }
         const QuantityMask quantity{
-            .known = static_cast<std::uint32_t>(packed &
-                                                inflection_quantity_value_mask),
-            .long_vowel =
-                static_cast<std::uint32_t>((packed >> maximum_ending_size) &
-                                           inflection_quantity_value_mask),
+            .known = static_cast<std::uint32_t>(
+                packed & wwdb::inflection_quantity_value_mask),
+            .long_vowel = static_cast<std::uint32_t>(
+                (packed >> wwdb::maximum_ending_size) &
+                wwdb::inflection_quantity_value_mask),
         };
         const auto ending = endings[rules[ordinal].ending.value()];
         const auto valid_bits = low_bits(ending.size());
-        if (ending.size() > maximum_ending_size ||
-            (quantity.long_vowel & ~quantity.known) != 0U ||
-            ((quantity.known | quantity.long_vowel) & ~valid_bits) != 0U ||
+        if (ending.size() > wwdb::maximum_ending_size ||
+            (quantity.long_vowel & ~quantity.known) != wwdb::no_quantity_bits ||
+            ((quantity.known | quantity.long_vowel) & ~valid_bits) !=
+                wwdb::no_quantity_bits ||
             !quantity_positions_are_vowels(ending, quantity.known)) {
             fail("invalid-quantity-mask",
                  "inflection quantity is inconsistent with its ending");
@@ -398,16 +392,18 @@ parse_stem_quantities(const std::span<const std::byte> image,
     std::optional<std::uint32_t> previous_key;
     for (std::uint32_t ordinal = 0; ordinal < section.count; ++ordinal) {
         const auto offset =
-            static_cast<std::size_t>(ordinal) * stem_quantity_stride;
+            static_cast<std::size_t>(ordinal) * wwdb::stem_quantity_stride;
         const auto key = read_u24_le(bytes, offset);
-        const auto lexeme_id = key & stem_quantity_lexeme_mask;
-        const auto lexical_slot =
-            (key >> stem_quantity_slot_shift) & stem_quantity_slot_mask;
+        const auto lexeme_id = key & wwdb::stem_quantity_lexeme_mask;
+        const auto lexical_slot = (key >> wwdb::stem_quantity_slot_shift) &
+                                  wwdb::stem_quantity_slot_mask;
         const QuantityMask quantity{
-            .known = read_u24_le(bytes, offset + 3U),
-            .long_vowel = read_u24_le(bytes, offset + 6U),
+            .known =
+                read_u24_le(bytes, offset + wwdb::stem_quantity_known_offset),
+            .long_vowel = read_u24_le(
+                bytes, offset + wwdb::stem_quantity_long_vowel_offset),
         };
-        if ((key >> stem_quantity_key_width) != 0U ||
+        if ((key >> wwdb::stem_quantity_key_width) != wwdb::reserved_value ||
             lexeme_id >= lexemes.size()) {
             fail("invalid-reference",
                  "stem quantity key is outside the lexical table");
@@ -421,10 +417,11 @@ parse_stem_quantities(const std::span<const std::byte> image,
         const auto stem =
             stems[lexeme.stems[static_cast<std::size_t>(lexical_slot)].value()];
         const auto valid_bits = low_bits(stem.size());
-        if (stem.empty() || stem.size() > maximum_stem_size ||
-            quantity.known == 0U ||
-            (quantity.long_vowel & ~quantity.known) != 0U ||
-            ((quantity.known | quantity.long_vowel) & ~valid_bits) != 0U ||
+        if (stem.empty() || stem.size() > wwdb::maximum_stem_size ||
+            quantity.known == wwdb::no_quantity_bits ||
+            (quantity.long_vowel & ~quantity.known) != wwdb::no_quantity_bits ||
+            ((quantity.known | quantity.long_vowel) & ~valid_bits) !=
+                wwdb::no_quantity_bits ||
             !quantity_positions_are_vowels(stem, quantity.known)) {
             fail("invalid-quantity-mask",
                  "stem quantity is inconsistent with its lexical slot");
@@ -437,7 +434,8 @@ parse_stem_quantities(const std::span<const std::byte> image,
 void validate_section_shapes(const std::vector<SectionView> &sections,
                              const DatabaseContent content) {
     const auto search = content == DatabaseContent::search;
-    const auto record_flags = search ? 2U : 1U;
+    const auto record_flags =
+        search ? wwdb::section_flag_columnar : wwdb::section_flag_row_major;
     const auto require_meaning_pool = [&](const SectionType type) {
         const auto *section = find_optional_section(sections, type);
         if (search) {
@@ -446,57 +444,78 @@ void validate_section_shapes(const std::vector<SectionView> &sections,
                      "search WWDB must not contain a meaning pool");
             }
         } else {
-            require_shape(find_section(sections, type), 0U, 0U);
+            require_shape(find_section(sections, type), wwdb::section_flag_pool,
+                          wwdb::variable_stride);
         }
     };
 
-    require_shape(find_section(sections, SectionType::stem_strings), 0U, 0U);
+    require_shape(find_section(sections, SectionType::stem_strings),
+                  wwdb::section_flag_pool, wwdb::variable_stride);
     require_meaning_pool(SectionType::meaning_strings);
-    require_shape(find_section(sections, SectionType::ending_strings), 0U, 0U);
+    require_shape(find_section(sections, SectionType::ending_strings),
+                  wwdb::section_flag_pool, wwdb::variable_stride);
     require_shape(find_section(sections, SectionType::lexemes), record_flags,
-                  search ? 14U : 16U);
+                  search ? wwdb::search_lexeme_stride
+                         : wwdb::full_lexeme_stride);
     require_shape(find_section(sections, SectionType::stem_references),
-                  record_flags, 3U);
+                  record_flags, wwdb::stem_reference_stride);
     require_shape(find_section(sections, SectionType::stem_prefix_boundaries),
-                  1U, 2U);
+                  wwdb::section_flag_row_major, wwdb::boundary_stride);
     require_shape(find_section(sections, SectionType::inflections),
-                  record_flags, 6U);
+                  record_flags, wwdb::inflection_stride);
     require_shape(
-        find_section(sections, SectionType::inflection_section_boundaries), 1U,
-        2U);
-    require_shape(find_section(sections, SectionType::suffix_strings), 0U, 0U);
+        find_section(sections, SectionType::inflection_section_boundaries),
+        wwdb::section_flag_row_major, wwdb::boundary_stride);
+    require_shape(find_section(sections, SectionType::suffix_strings),
+                  wwdb::section_flag_pool, wwdb::variable_stride);
     require_meaning_pool(SectionType::suffix_meanings);
-    require_shape(find_section(sections, SectionType::suffixes), 1U,
-                  search ? 12U : 14U);
-    require_shape(find_section(sections, SectionType::prefix_strings), 0U, 0U);
+    require_shape(find_section(sections, SectionType::suffixes),
+                  wwdb::section_flag_row_major,
+                  search ? wwdb::search_suffix_stride
+                         : wwdb::full_suffix_stride);
+    require_shape(find_section(sections, SectionType::prefix_strings),
+                  wwdb::section_flag_pool, wwdb::variable_stride);
     require_meaning_pool(SectionType::prefix_meanings);
-    require_shape(find_section(sections, SectionType::prefixes), 1U,
-                  search ? 6U : 8U);
-    require_shape(find_section(sections, SectionType::tackon_strings), 0U, 0U);
+    require_shape(find_section(sections, SectionType::prefixes),
+                  wwdb::section_flag_row_major,
+                  search ? wwdb::search_prefix_stride
+                         : wwdb::full_prefix_stride);
+    require_shape(find_section(sections, SectionType::tackon_strings),
+                  wwdb::section_flag_pool, wwdb::variable_stride);
     require_meaning_pool(SectionType::tackon_meanings);
-    require_shape(find_section(sections, SectionType::tackons), 1U,
-                  search ? 8U : 10U);
-    require_shape(find_section(sections, SectionType::uniques), 1U,
-                  search ? 10U : 12U);
-    require_shape(find_section(sections, SectionType::rewrite_strings), 0U, 0U);
+    require_shape(find_section(sections, SectionType::tackons),
+                  wwdb::section_flag_row_major,
+                  search ? wwdb::search_tackon_stride
+                         : wwdb::full_tackon_stride);
+    require_shape(find_section(sections, SectionType::uniques),
+                  wwdb::section_flag_row_major,
+                  search ? wwdb::search_unique_stride
+                         : wwdb::full_unique_stride);
+    require_shape(find_section(sections, SectionType::rewrite_strings),
+                  wwdb::section_flag_pool, wwdb::variable_stride);
     require_meaning_pool(SectionType::rewrite_meanings);
-    require_shape(find_section(sections, SectionType::rewrites), 1U,
-                  search ? 14U : 16U);
+    require_shape(find_section(sections, SectionType::rewrites),
+                  wwdb::section_flag_row_major,
+                  search ? wwdb::search_rewrite_stride
+                         : wwdb::full_rewrite_stride);
 
     if (const auto *section = find_optional_section(
             sections, SectionType::inflection_quantities)) {
-        require_shape(*section, 1U, inflection_quantity_stride);
+        require_shape(*section, wwdb::section_flag_row_major,
+                      wwdb::inflection_quantity_stride);
     }
     if (const auto *section =
             find_optional_section(sections, SectionType::stem_quantities)) {
-        require_shape(*section, 1U, stem_quantity_stride);
+        require_shape(*section, wwdb::section_flag_row_major,
+                      wwdb::stem_quantity_stride);
     }
 
     const auto &stem_boundaries =
         find_section(sections, SectionType::stem_prefix_boundaries);
     const auto &inflection_boundaries =
         find_section(sections, SectionType::inflection_section_boundaries);
-    if (stem_boundaries.count != 704U || inflection_boundaries.count != 6U) {
+    if (stem_boundaries.count != wwdb::stem_boundary_count ||
+        inflection_boundaries.count != wwdb::inflection_boundary_count) {
         fail("invalid-boundaries",
              "PoC boundary section has an unexpected count");
     }
@@ -506,55 +525,61 @@ void validate_section_shapes(const std::vector<SectionView> &sections,
 
 std::expected<std::unique_ptr<const Database>, LoadError>
 Database::load_poc(std::vector<std::byte> image) try {
-    if (image.size() < fixed_header_size) {
+    if (image.size() < wwdb::fixed_header_size) {
         fail("truncated-database", "WWDB header is incomplete");
     }
     const auto bytes = std::span<const std::byte>{image};
-    constexpr std::array<std::uint8_t, 8> expected_magic{
-        'W', 'W', 'D', 'B', '\r', '\n', 0x1a, '\n'};
-    for (std::size_t index = 0; index < expected_magic.size(); ++index) {
-        if (byte_at(bytes, index) != expected_magic[index]) {
+    for (std::size_t index = 0; index < wwdb::magic.size(); ++index) {
+        if (byte_at(bytes, index) != wwdb::magic[index]) {
             fail("invalid-magic", "file is not a WWDB image");
         }
     }
 
-    const auto major = read_u16_le(bytes, 8);
-    const auto minor = read_u16_le(bytes, 10);
-    const auto header_size = read_u32_le(bytes, 12);
-    const auto section_count = read_u32_le(bytes, 16);
-    const auto profile = read_u32_le(bytes, 20);
-    const auto declared_size = read_u64_le(bytes, 24);
-    const auto declared_crc = read_u32_le(bytes, 32);
-    const auto reserved = read_u32_le(bytes, 36);
-    if (major != 1U ||
-        (minor != legacy_wwdb_minor && minor != quantity_wwdb_minor &&
-         minor != typed_packon_wwdb_minor) ||
-        header_size != fixed_header_size) {
+    const auto major = read_u16_le(bytes, wwdb::header_major_offset);
+    const auto minor = read_u16_le(bytes, wwdb::header_minor_offset);
+    const auto header_size = read_u32_le(bytes, wwdb::header_size_offset);
+    const auto section_count =
+        read_u32_le(bytes, wwdb::header_section_count_offset);
+    const auto profile = read_u32_le(bytes, wwdb::header_profile_offset);
+    const auto declared_size =
+        read_u64_le(bytes, wwdb::header_file_size_offset);
+    const auto declared_crc = read_u32_le(bytes, wwdb::header_crc32_offset);
+    const auto reserved = read_u32_le(bytes, wwdb::header_reserved_offset);
+    if (major != wwdb::major_version ||
+        (minor != wwdb::legacy_minor_version &&
+         minor != wwdb::quantity_minor_version &&
+         minor != wwdb::typed_packon_minor_version) ||
+        header_size != wwdb::fixed_header_size) {
         fail("unsupported-version",
              "only PoC WWDB versions 1.6 through 1.8 are supported");
     }
-    if (profile != dense_profile && profile != search_profile) {
+    if (profile != std::to_underlying(wwdb::Profile::dense) &&
+        profile != std::to_underlying(wwdb::Profile::search_only)) {
         fail("unsupported-profile",
              "only the full dense and search-only PoC profiles are supported");
     }
-    const auto content = profile == search_profile ? DatabaseContent::search
-                                                   : DatabaseContent::full;
-    if (content == DatabaseContent::search && minor < typed_packon_wwdb_minor) {
+    const auto content =
+        profile == std::to_underlying(wwdb::Profile::search_only)
+            ? DatabaseContent::search
+            : DatabaseContent::full;
+    if (content == DatabaseContent::search &&
+        minor < wwdb::typed_packon_minor_version) {
         fail(
             "unsupported-version",
             "search-only WWDB requires typed packon metadata from version 1.8");
     }
-    if (reserved != 0U || declared_size != image.size()) {
+    if (reserved != wwdb::reserved_value || declared_size != image.size()) {
         fail("invalid-header", "WWDB reserved field or file size is invalid");
     }
-    if (section_count == 0U || section_count > 64U) {
+    if (section_count < minimum_section_count ||
+        section_count > safe_maximum_section_count) {
         fail("invalid-directory", "WWDB section count is outside safe limits");
     }
 
     const auto directory_bytes =
-        static_cast<std::uint64_t>(section_count) * directory_entry_size;
+        static_cast<std::uint64_t>(section_count) * wwdb::directory_entry_size;
     const auto payload_offset_u64 =
-        static_cast<std::uint64_t>(fixed_header_size) + directory_bytes;
+        static_cast<std::uint64_t>(wwdb::fixed_header_size) + directory_bytes;
     if (payload_offset_u64 > image.size()) {
         fail("truncated-database", "WWDB directory extends beyond the image");
     }
@@ -564,22 +589,28 @@ Database::load_poc(std::vector<std::byte> image) try {
     sections.reserve(section_count);
     for (std::uint32_t index = 0; index < section_count; ++index) {
         const auto offset =
-            fixed_header_size +
-            (static_cast<std::size_t>(index) * directory_entry_size);
-        const auto raw_type = read_u32_le(bytes, offset);
-        const auto maximum_section_type = minor >= quantity_wwdb_minor
-                                              ? quantity_maximum_section_type
-                                              : legacy_maximum_section_type;
-        if (raw_type < 1U || raw_type > maximum_section_type) {
+            wwdb::fixed_header_size +
+            (static_cast<std::size_t>(index) * wwdb::directory_entry_size);
+        const auto raw_type =
+            read_u32_le(bytes, offset + wwdb::directory_type_offset);
+        const auto maximum_section_type =
+            minor >= wwdb::quantity_minor_version
+                ? wwdb::quantity_maximum_section_type
+                : wwdb::legacy_maximum_section_type;
+        if (raw_type < wwdb::minimum_section_type ||
+            raw_type > maximum_section_type) {
             fail("unknown-section", "WWDB contains an unknown section type");
         }
         const SectionView section{
             .type = static_cast<SectionType>(raw_type),
-            .flags = read_u32_le(bytes, offset + 4U),
-            .offset = read_u64_le(bytes, offset + 8U),
-            .bytes = read_u64_le(bytes, offset + 16U),
-            .count = read_u32_le(bytes, offset + 24U),
-            .stride = read_u32_le(bytes, offset + 28U),
+            .flags = read_u32_le(bytes, offset + wwdb::directory_flags_offset),
+            .offset =
+                read_u64_le(bytes, offset + wwdb::directory_payload_offset),
+            .bytes =
+                read_u64_le(bytes, offset + wwdb::directory_byte_size_offset),
+            .count = read_u32_le(bytes, offset + wwdb::directory_count_offset),
+            .stride =
+                read_u32_le(bytes, offset + wwdb::directory_stride_offset),
         };
         if (std::ranges::find(sections, section.type, &SectionView::type) !=
             sections.end()) {
@@ -652,7 +683,7 @@ Database::load_poc(std::vector<std::byte> image) try {
         find_optional_section(sections, SectionType::inflection_quantities);
     const auto *stem_quantity_section =
         find_optional_section(sections, SectionType::stem_quantities);
-    if (minor >= quantity_wwdb_minor &&
+    if (minor >= wwdb::quantity_minor_version &&
         (inflection_quantity_section == nullptr ||
          stem_quantity_section == nullptr)) {
         fail("missing-section", "WWDB 1.7 requires both quantity sections");
@@ -708,19 +739,26 @@ Database::load_poc(std::vector<std::byte> image) try {
     database->rewrites_.reserve(rewrite_section.count);
     for (std::uint32_t ordinal = 0; ordinal < rewrite_section.count;
          ++ordinal) {
-        const auto id = rewrite_records.read_u16(ordinal, 0U);
-        const auto before_id = rewrite_records.read_u16(ordinal, 2U);
-        const auto after_id = rewrite_records.read_u16(ordinal, 4U);
-        const auto name_id = rewrite_records.read_u16(ordinal, 6U);
-        const auto meaning_id = content == DatabaseContent::full
-                                    ? rewrite_records.read_u16(ordinal, 8U)
-                                    : 0U;
-        const auto metadata_offset =
-            content == DatabaseContent::full ? 10U : 8U;
+        const auto id =
+            rewrite_records.read_u16(ordinal, wwdb::rewrite_id_offset);
+        const auto before_id =
+            rewrite_records.read_u16(ordinal, wwdb::rewrite_before_id_offset);
+        const auto after_id =
+            rewrite_records.read_u16(ordinal, wwdb::rewrite_after_id_offset);
+        const auto name_id =
+            rewrite_records.read_u16(ordinal, wwdb::rewrite_name_id_offset);
+        const auto meaning_id =
+            content == DatabaseContent::full
+                ? rewrite_records.read_u16(ordinal,
+                                           wwdb::rewrite_meaning_id_offset)
+                : wwdb::no_meaning_id;
+        const auto metadata_offset = content == DatabaseContent::full
+                                         ? wwdb::full_rewrite_metadata_offset
+                                         : wwdb::search_rewrite_metadata_offset;
         const auto metadata =
             rewrite_records.read_u32(ordinal, metadata_offset);
-        const auto behavior =
-            rewrite_records.read_u16(ordinal, metadata_offset + 4U);
+        const auto behavior = rewrite_records.read_u16(
+            ordinal, metadata_offset + wwdb::rewrite_behavior_relative_offset);
         if (id != ordinal || before_id >= database->rewrite_strings_.size() ||
             after_id >= database->rewrite_strings_.size() ||
             name_id >= database->rewrite_strings_.size() ||
@@ -729,10 +767,12 @@ Database::load_poc(std::vector<std::byte> image) try {
             fail("invalid-reference",
                  "rewrite ID or string reference is out of range");
         }
-        if ((metadata >> 29U) != 0U) {
+        if ((metadata >> wwdb::rewrite_metadata_used_bits) !=
+            wwdb::reserved_value) {
             fail("reserved-bits", "rewrite record has nonzero reserved bits");
         }
-        if ((behavior >> 7U) != 0U) {
+        if ((behavior >> wwdb::rewrite_behavior_used_bits) !=
+            wwdb::reserved_value) {
             fail("reserved-bits", "rewrite behavior has nonzero reserved bits");
         }
 
@@ -742,23 +782,31 @@ Database::load_poc(std::vector<std::byte> image) try {
         rewrite.after = RewriteStringId{after_id};
         rewrite.name = RewriteStringId{name_id};
         rewrite.meaning = RewriteMeaningId{meaning_id};
-        rewrite.kind = static_cast<RewriteKind>(metadata & 0x03U);
-        rewrite.scope = static_cast<RewriteScope>((metadata >> 2U) & 0x03U);
-        rewrite.priority = static_cast<std::uint8_t>((metadata >> 4U) & 0xffU);
-        rewrite.scan_reverse = ((metadata >> 12U) & 1U) != 0U;
-        rewrite.required_part =
-            static_cast<PartOfSpeech>((metadata >> 13U) & 0x0fU);
-        rewrite.required_stem_key =
-            static_cast<std::uint8_t>((metadata >> 17U) & 0x07U);
-        rewrite.minimum_before =
-            static_cast<std::uint8_t>((metadata >> 20U) & 0x0fU);
-        rewrite.minimum_after =
-            static_cast<std::uint8_t>((metadata >> 24U) & 0x0fU);
-        rewrite.medieval = ((metadata >> 28U) & 1U) != 0U;
-        rewrite.operation = static_cast<RewriteOperation>(behavior & 0x07U);
-        rewrite.stage = static_cast<RewriteStage>((behavior >> 3U) & 0x03U);
-        rewrite.constraint =
-            static_cast<RewriteConstraint>((behavior >> 5U) & 0x03U);
+        rewrite.kind = static_cast<RewriteKind>(metadata & wwdb::two_bit_mask);
+        rewrite.scope = static_cast<RewriteScope>(
+            (metadata >> wwdb::rewrite_scope_shift) & wwdb::two_bit_mask);
+        rewrite.priority = static_cast<std::uint8_t>(
+            (metadata >> wwdb::rewrite_priority_shift) & wwdb::byte_mask);
+        rewrite.scan_reverse = ((metadata >> wwdb::rewrite_scan_reverse_shift) &
+                                wwdb::single_bit_mask) != 0U;
+        rewrite.required_part = static_cast<PartOfSpeech>(
+            (metadata >> wwdb::rewrite_required_pos_shift) & wwdb::nibble_mask);
+        rewrite.required_stem_key = static_cast<std::uint8_t>(
+            (metadata >> wwdb::rewrite_stem_key_shift) & wwdb::three_bit_mask);
+        rewrite.minimum_before = static_cast<std::uint8_t>(
+            (metadata >> wwdb::rewrite_minimum_before_shift) &
+            wwdb::nibble_mask);
+        rewrite.minimum_after = static_cast<std::uint8_t>(
+            (metadata >> wwdb::rewrite_minimum_after_shift) &
+            wwdb::nibble_mask);
+        rewrite.medieval = ((metadata >> wwdb::rewrite_medieval_shift) &
+                            wwdb::single_bit_mask) != 0U;
+        rewrite.operation =
+            static_cast<RewriteOperation>(behavior & wwdb::three_bit_mask);
+        rewrite.stage = static_cast<RewriteStage>(
+            (behavior >> wwdb::rewrite_stage_shift) & wwdb::two_bit_mask);
+        rewrite.constraint = static_cast<RewriteConstraint>(
+            (behavior >> wwdb::rewrite_constraint_shift) & wwdb::two_bit_mask);
         if (std::to_underlying(rewrite.kind) <
                 std::to_underlying(RewriteKind::syncope) ||
             std::to_underlying(rewrite.kind) >
@@ -779,7 +827,7 @@ Database::load_poc(std::vector<std::byte> image) try {
                 std::to_underlying(RewriteStage::fallback) ||
             std::to_underlying(rewrite.constraint) >
                 std::to_underlying(RewriteConstraint::adjective_iis) ||
-            rewrite.required_stem_key > 4U ||
+            rewrite.required_stem_key > wwdb::maximum_stem_key ||
             (database->rewrite_string(rewrite.before).empty() &&
              rewrite.operation != RewriteOperation::double_consonant) ||
             database->rewrite_string(rewrite.name).empty()) {
@@ -798,16 +846,19 @@ Database::load_poc(std::vector<std::byte> image) try {
         record.dictionary_entry = ordinal;
         for (std::size_t slot = 0; slot < record.stems.size(); ++slot) {
             const auto id = lexeme_records.read_u16(
-                ordinal, static_cast<std::uint32_t>(slot * 2U));
+                ordinal,
+                static_cast<std::uint32_t>(slot * wwdb::lexeme_stem_id_size));
             if (id >= database->stem_strings_.size()) {
                 fail("invalid-reference",
                      "lexeme stem string ID is out of range");
             }
             record.stems[slot] = StringId{id};
         }
-        const auto meaning_id = content == DatabaseContent::full
-                                    ? lexeme_records.read_u16(ordinal, 8U)
-                                    : 0U;
+        const auto meaning_id =
+            content == DatabaseContent::full
+                ? lexeme_records.read_u16(ordinal,
+                                          wwdb::lexeme_meaning_id_offset)
+                : wwdb::no_meaning_id;
         if (content == DatabaseContent::full &&
             meaning_id >= database->meaning_strings_.size()) {
             fail("invalid-reference",
@@ -816,98 +867,127 @@ Database::load_poc(std::vector<std::byte> image) try {
         record.meaning = StringId{meaning_id};
 
         const auto metadata = lexeme_records.read_u48(
-            ordinal, content == DatabaseContent::full ? 10U : 8U);
-        const auto pofs = static_cast<std::uint8_t>(metadata & 0x0fU);
-        const auto paradigm =
-            static_cast<std::uint8_t>((metadata >> 4U) & 0xffU);
-        const auto translation =
-            static_cast<std::uint32_t>((metadata >> 12U) & 0x3f'ffffU);
-        const auto class_payload =
-            static_cast<std::uint16_t>((metadata >> 34U) & 0x1fffU);
+            ordinal, content == DatabaseContent::full
+                         ? wwdb::full_lexeme_metadata_offset
+                         : wwdb::search_lexeme_metadata_offset);
+        const auto pofs = static_cast<std::uint8_t>(metadata & wwdb::pos_mask);
+        const auto paradigm = static_cast<std::uint8_t>(
+            (metadata >> wwdb::paradigm_shift) & wwdb::paradigm_mask);
+        const auto translation = static_cast<std::uint32_t>(
+            (metadata >> wwdb::translation_shift) & wwdb::translation_mask);
+        const auto class_payload = static_cast<std::uint16_t>(
+            (metadata >> wwdb::lexeme_class_payload_shift) &
+            wwdb::lexeme_class_payload_mask);
         record.part_of_speech = static_cast<PartOfSpeech>(pofs);
         record.declension = checked_nibble(
-            static_cast<std::uint8_t>(paradigm >> 4U), "declension");
+            static_cast<std::uint8_t>(paradigm >> wwdb::paradigm_shift),
+            "declension");
         record.variant = checked_nibble(
-            static_cast<std::uint8_t>(paradigm & 0x0fU), "variant");
-        record.age = static_cast<std::uint8_t>(translation & 0x0fU);
-        record.subject = static_cast<std::uint8_t>((translation >> 4U) & 0x0fU);
-        record.geography =
-            static_cast<std::uint8_t>((translation >> 8U) & 0x1fU);
-        record.frequency =
-            static_cast<std::uint8_t>((translation >> 13U) & 0x0fU);
-        record.source = static_cast<std::uint8_t>((translation >> 17U) & 0x1fU);
-        if (record.age > 8U || record.subject > 11U || record.geography > 17U ||
-            record.frequency > 9U || record.source > 25U) {
+            static_cast<std::uint8_t>(paradigm & wwdb::nibble_mask), "variant");
+        record.age = static_cast<std::uint8_t>(
+            (translation >> wwdb::age_shift) & wwdb::age_mask);
+        record.subject = static_cast<std::uint8_t>(
+            (translation >> wwdb::subject_shift) & wwdb::subject_mask);
+        record.geography = static_cast<std::uint8_t>(
+            (translation >> wwdb::geography_shift) & wwdb::geography_mask);
+        record.frequency = static_cast<std::uint8_t>(
+            (translation >> wwdb::frequency_shift) & wwdb::frequency_mask);
+        record.source = static_cast<std::uint8_t>(
+            (translation >> wwdb::source_shift) & wwdb::source_mask);
+        if (record.age > wwdb::maximum_age_code ||
+            record.subject > wwdb::maximum_subject_code ||
+            record.geography > wwdb::maximum_geography_code ||
+            record.frequency > wwdb::maximum_frequency_code ||
+            record.source > wwdb::maximum_source_code) {
             fail("invalid-enum", "lexical metadata contains an invalid enum");
         }
         if (pofs == std::to_underlying(PartOfSpeech::noun)) {
-            record.gender = static_cast<Gender>(class_payload & 0x07U);
-            record.noun_kind =
-                static_cast<std::uint8_t>((class_payload >> 3U) & 0x0fU);
-            if ((class_payload >> 7U) != 0U ||
-                std::to_underlying(record.gender) > 4U ||
-                record.noun_kind > 9U) {
+            record.gender =
+                static_cast<Gender>(class_payload & wwdb::three_bit_mask);
+            record.noun_kind = static_cast<std::uint8_t>(
+                (class_payload >> wwdb::noun_kind_shift) & wwdb::nibble_mask);
+            if ((class_payload >> wwdb::noun_class_used_bits) !=
+                    wwdb::reserved_value ||
+                std::to_underlying(record.gender) >
+                    std::to_underlying(Gender::common) ||
+                record.noun_kind > wwdb::maximum_noun_kind_code) {
                 fail("invalid-enum",
                      "noun lexical payload contains an invalid enum");
             }
         } else if (pofs == std::to_underlying(PartOfSpeech::pronoun) ||
                    pofs == std::to_underlying(PartOfSpeech::pack)) {
             record.pronoun_kind =
-                static_cast<PronounKind>(class_payload & 0x0fU);
-            const auto packon_plus_one =
-                static_cast<std::uint16_t>(class_payload >> 4U);
+                static_cast<PronounKind>(class_payload & wwdb::nibble_mask);
+            const auto packon_plus_one = static_cast<std::uint16_t>(
+                class_payload >> wwdb::pronoun_packon_plus_one_shift);
             if (pofs == std::to_underlying(PartOfSpeech::pack) &&
-                minor >= typed_packon_wwdb_minor && packon_plus_one != 0U) {
-                record.required_packon = AddonId{packon_plus_one - 1U};
+                minor >= wwdb::typed_packon_minor_version &&
+                packon_plus_one != wwdb::no_required_packon) {
+                record.required_packon = AddonId{static_cast<std::uint32_t>(
+                    packon_plus_one - wwdb::packon_id_bias)};
             }
             if ((pofs == std::to_underlying(PartOfSpeech::pronoun) &&
-                 packon_plus_one != 0U) ||
-                (minor < typed_packon_wwdb_minor && packon_plus_one != 0U) ||
-                std::to_underlying(record.pronoun_kind) > 7U) {
+                 packon_plus_one != wwdb::no_required_packon) ||
+                (minor < wwdb::typed_packon_minor_version &&
+                 packon_plus_one != wwdb::no_required_packon) ||
+                std::to_underlying(record.pronoun_kind) >
+                    std::to_underlying(PronounKind::adjectival)) {
                 fail("invalid-enum",
                      "pronoun lexical payload contains an invalid kind");
             }
         } else if (pofs == std::to_underlying(PartOfSpeech::adjective)) {
             record.adjective_degree =
-                static_cast<Degree>(class_payload & 0x0fU);
-            if ((class_payload >> 4U) != 0U ||
-                std::to_underlying(record.adjective_degree) > 3U) {
+                static_cast<Degree>(class_payload & wwdb::nibble_mask);
+            if ((class_payload >> wwdb::simple_class_used_bits) !=
+                    wwdb::reserved_value ||
+                std::to_underlying(record.adjective_degree) >
+                    std::to_underlying(Degree::superlative)) {
                 fail("invalid-enum",
                      "adjective lexical payload contains an invalid degree");
             }
         } else if (pofs == std::to_underlying(PartOfSpeech::numeral)) {
             record.numeral_type =
-                static_cast<NumeralType>(class_payload & 0x07U);
-            record.numeral_value =
-                static_cast<std::uint16_t>((class_payload >> 3U) & 0x03ffU);
-            if (std::to_underlying(record.numeral_type) > 4U ||
-                record.numeral_value > 1000U) {
+                static_cast<NumeralType>(class_payload & wwdb::three_bit_mask);
+            record.numeral_value = static_cast<std::uint16_t>(
+                (class_payload >> wwdb::numeral_value_shift) &
+                wwdb::numeral_value_mask);
+            if (std::to_underlying(record.numeral_type) >
+                    std::to_underlying(NumeralType::adverbial) ||
+                record.numeral_value > wwdb::maximum_numeral_value) {
                 fail("invalid-enum",
                      "numeral lexical payload contains an invalid value");
             }
         } else if (pofs == std::to_underlying(PartOfSpeech::adverb)) {
-            record.adverb_degree = static_cast<Degree>(class_payload & 0x0fU);
-            if ((class_payload >> 4U) != 0U ||
-                std::to_underlying(record.adverb_degree) > 3U) {
+            record.adverb_degree =
+                static_cast<Degree>(class_payload & wwdb::nibble_mask);
+            if ((class_payload >> wwdb::simple_class_used_bits) !=
+                    wwdb::reserved_value ||
+                std::to_underlying(record.adverb_degree) >
+                    std::to_underlying(Degree::superlative)) {
                 fail("invalid-enum",
                      "adverb lexical payload contains an invalid degree");
             }
         } else if (pofs == std::to_underlying(PartOfSpeech::verb)) {
-            record.verb_kind = static_cast<VerbKind>(class_payload & 0x0fU);
-            if ((class_payload >> 4U) != 0U ||
-                std::to_underlying(record.verb_kind) > 11U) {
+            record.verb_kind =
+                static_cast<VerbKind>(class_payload & wwdb::nibble_mask);
+            if ((class_payload >> wwdb::simple_class_used_bits) !=
+                    wwdb::reserved_value ||
+                std::to_underlying(record.verb_kind) >
+                    std::to_underlying(VerbKind::perfect_definite)) {
                 fail("invalid-enum",
                      "verb lexical payload contains an invalid kind");
             }
         } else if (pofs == std::to_underlying(PartOfSpeech::preposition)) {
             record.governs =
-                static_cast<GrammaticalCase>(class_payload & 0x0fU);
-            if ((class_payload >> 4U) != 0U ||
-                std::to_underlying(record.governs) > 7U) {
+                static_cast<GrammaticalCase>(class_payload & wwdb::nibble_mask);
+            if ((class_payload >> wwdb::simple_class_used_bits) !=
+                    wwdb::reserved_value ||
+                std::to_underlying(record.governs) >
+                    std::to_underlying(GrammaticalCase::accusative)) {
                 fail("invalid-enum",
                      "preposition lexical payload contains an invalid case");
             }
-        } else if (class_payload != 0U) {
+        } else if (class_payload != wwdb::unused_field_value) {
             fail("reserved-bits", "unused lexical payload is nonzero");
         }
         database->lexemes_.push_back(record);
@@ -925,15 +1005,20 @@ Database::load_poc(std::vector<std::byte> image) try {
     for (std::uint32_t ordinal = 0; ordinal < stem_reference_section.count;
          ++ordinal) {
         const auto packed = stem_reference_records.read_u24(ordinal, 0U);
-        if ((packed >> 21U) != 0U) {
+        if ((packed >> wwdb::stem_reference_used_bits) !=
+            wwdb::reserved_value) {
             fail("reserved-bits", "stem reference has nonzero reserved bits");
         }
-        const auto lexeme_id = static_cast<std::uint16_t>(packed & 0xffffU);
-        const auto lexical_slot =
-            static_cast<std::uint8_t>((packed >> 16U) & 0x03U);
-        const auto stem_key =
-            static_cast<std::uint8_t>((packed >> 18U) & 0x07U);
-        if (lexeme_id >= database->lexemes_.size() || stem_key > 4U) {
+        const auto lexeme_id = static_cast<std::uint16_t>(
+            packed & wwdb::stem_reference_lexeme_mask);
+        const auto lexical_slot = static_cast<std::uint8_t>(
+            (packed >> wwdb::stem_reference_slot_shift) &
+            wwdb::stem_reference_slot_mask);
+        const auto stem_key = static_cast<std::uint8_t>(
+            (packed >> wwdb::stem_reference_key_shift) &
+            wwdb::stem_reference_key_mask);
+        if (lexeme_id >= database->lexemes_.size() ||
+            stem_key > wwdb::maximum_stem_key) {
             fail("invalid-reference",
                  "stem reference points outside lexical data");
         }
@@ -946,8 +1031,8 @@ Database::load_poc(std::vector<std::byte> image) try {
     std::ranges::sort(
         indexed_stems, [](const IndexedStem &left, const IndexedStem &right) {
             const auto key_order = normalized_compare(left.key, right.key);
-            if (key_order != 0) {
-                return key_order < 0;
+            if (!std::is_eq(key_order)) {
+                return std::is_lt(key_order);
             }
             return std::tuple{left.reference.lexeme.value(),
                               left.reference.lexical_slot,
@@ -981,18 +1066,21 @@ Database::load_poc(std::vector<std::byte> image) try {
     for (std::uint32_t ordinal = 0; ordinal < inflection_section.count;
          ++ordinal) {
         const auto packed = inflection_records.read_u48(ordinal, 0U);
-        if ((packed >> 47U) != 0U) {
+        if ((packed >> wwdb::inflection_used_bits) != wwdb::reserved_value) {
             fail("reserved-bits",
                  "inflection record has nonzero reserved bits");
         }
-        const auto pofs = static_cast<std::uint8_t>(packed & 0x0fU);
-        const auto paradigm = static_cast<std::uint8_t>((packed >> 4U) & 0xffU);
-        const auto morphology =
-            static_cast<std::uint16_t>((packed >> 12U) & 0xffffU);
-        const auto ending_id =
-            static_cast<std::uint16_t>((packed >> 28U) & 0x01ffU);
-        const auto stem_key =
-            static_cast<std::uint8_t>(((packed >> 37U) & 0x03U) + 1U);
+        const auto pofs = static_cast<std::uint8_t>(packed & wwdb::pos_mask);
+        const auto paradigm = static_cast<std::uint8_t>(
+            (packed >> wwdb::paradigm_shift) & wwdb::paradigm_mask);
+        const auto morphology = static_cast<std::uint16_t>(
+            (packed >> wwdb::morphology_shift) & wwdb::morphology_mask);
+        const auto ending_id = static_cast<std::uint16_t>(
+            (packed >> wwdb::ending_id_shift) & wwdb::ending_id_mask);
+        const auto stem_key = static_cast<std::uint8_t>(
+            ((packed >> wwdb::inflection_stem_key_shift) &
+             wwdb::inflection_stem_key_mask) +
+            wwdb::inflection_stem_key_bias);
         if (ending_id >= database->ending_strings_.size()) {
             fail("invalid-reference",
                  "inflection ending string ID is out of range");
@@ -1001,106 +1089,161 @@ Database::load_poc(std::vector<std::byte> image) try {
         rule.id = RuleId{ordinal};
         rule.part_of_speech = static_cast<PartOfSpeech>(pofs);
         rule.declension = checked_nibble(
-            static_cast<std::uint8_t>(paradigm >> 4U), "rule declension");
+            static_cast<std::uint8_t>(paradigm >> wwdb::paradigm_shift),
+            "rule declension");
         rule.variant = checked_nibble(
-            static_cast<std::uint8_t>(paradigm & 0x0fU), "rule variant");
+            static_cast<std::uint8_t>(paradigm & wwdb::nibble_mask),
+            "rule variant");
         rule.grammatical_case =
-            static_cast<GrammaticalCase>(morphology & 0x07U);
-        rule.number =
-            static_cast<GrammaticalNumber>((morphology >> 3U) & 0x03U);
-        rule.gender = static_cast<Gender>((morphology >> 5U) & 0x07U);
+            static_cast<GrammaticalCase>(morphology & wwdb::three_bit_mask);
+        rule.number = static_cast<GrammaticalNumber>(
+            (morphology >> wwdb::nominal_number_shift) & wwdb::two_bit_mask);
+        rule.gender = static_cast<Gender>(
+            (morphology >> wwdb::nominal_gender_shift) & wwdb::three_bit_mask);
         if (rule.part_of_speech == PartOfSpeech::adjective) {
-            rule.adjective_degree =
-                static_cast<Degree>((morphology >> 8U) & 0x03U);
+            rule.adjective_degree = static_cast<Degree>(
+                (morphology >> wwdb::morphology_byte_shift) &
+                wwdb::two_bit_mask);
         } else if (rule.part_of_speech == PartOfSpeech::numeral) {
-            rule.numeral_type =
-                static_cast<NumeralType>((morphology >> 8U) & 0x07U);
+            rule.numeral_type = static_cast<NumeralType>(
+                (morphology >> wwdb::morphology_byte_shift) &
+                wwdb::three_bit_mask);
         } else if (rule.part_of_speech == PartOfSpeech::adverb) {
-            rule.adjective_degree = static_cast<Degree>(morphology & 0x03U);
+            rule.adjective_degree =
+                static_cast<Degree>(morphology & wwdb::two_bit_mask);
         } else if (rule.part_of_speech == PartOfSpeech::verb) {
-            rule.tense = static_cast<Tense>(morphology & 0x07U);
-            rule.voice = static_cast<Voice>((morphology >> 3U) & 0x03U);
-            rule.mood = static_cast<Mood>((morphology >> 5U) & 0x07U);
-            rule.person = static_cast<std::uint8_t>((morphology >> 8U) & 0x03U);
-            rule.number =
-                static_cast<GrammaticalNumber>((morphology >> 10U) & 0x03U);
+            rule.tense = static_cast<Tense>(morphology & wwdb::three_bit_mask);
+            rule.voice =
+                static_cast<Voice>((morphology >> wwdb::nominal_number_shift) &
+                                   wwdb::two_bit_mask);
+            rule.mood =
+                static_cast<Mood>((morphology >> wwdb::nominal_gender_shift) &
+                                  wwdb::three_bit_mask);
+            rule.person = static_cast<std::uint8_t>(
+                (morphology >> wwdb::morphology_byte_shift) &
+                wwdb::two_bit_mask);
+            rule.number = static_cast<GrammaticalNumber>(
+                (morphology >> wwdb::verb_number_shift) & wwdb::two_bit_mask);
         } else if (rule.part_of_speech == PartOfSpeech::participle) {
-            rule.tense = static_cast<Tense>((morphology >> 8U) & 0x07U);
-            rule.voice = static_cast<Voice>((morphology >> 11U) & 0x03U);
-            rule.mood = static_cast<Mood>((morphology >> 13U) & 0x07U);
+            rule.tense =
+                static_cast<Tense>((morphology >> wwdb::morphology_byte_shift) &
+                                   wwdb::three_bit_mask);
+            rule.voice = static_cast<Voice>(
+                (morphology >> wwdb::participle_voice_shift) &
+                wwdb::two_bit_mask);
+            rule.mood =
+                static_cast<Mood>((morphology >> wwdb::participle_mood_shift) &
+                                  wwdb::three_bit_mask);
         }
         rule.ending = StringId{ending_id};
         rule.stem_key = stem_key;
-        rule.age = static_cast<std::uint8_t>((packed >> 39U) & 0x0fU);
-        rule.frequency = static_cast<std::uint8_t>((packed >> 43U) & 0x0fU);
-        if (rule.age > 8U || rule.frequency > 9U) {
+        rule.age = static_cast<std::uint8_t>(
+            (packed >> wwdb::inflection_age_shift) & wwdb::age_mask);
+        rule.frequency = static_cast<std::uint8_t>(
+            (packed >> wwdb::inflection_frequency_shift) &
+            wwdb::frequency_mask);
+        if (rule.age > wwdb::maximum_age_code ||
+            rule.frequency > wwdb::maximum_frequency_code) {
             fail("invalid-enum",
                  "inflection metadata contains an invalid enum");
         }
         if ((pofs == std::to_underlying(PartOfSpeech::noun) ||
              pofs == std::to_underlying(PartOfSpeech::pronoun) ||
              pofs == std::to_underlying(PartOfSpeech::pack)) &&
-            (std::to_underlying(rule.grammatical_case) > 7U ||
-             std::to_underlying(rule.number) > 2U ||
-             std::to_underlying(rule.gender) > 4U)) {
+            (std::to_underlying(rule.grammatical_case) >
+                 std::to_underlying(GrammaticalCase::accusative) ||
+             std::to_underlying(rule.number) >
+                 std::to_underlying(GrammaticalNumber::plural) ||
+             std::to_underlying(rule.gender) >
+                 std::to_underlying(Gender::common))) {
             fail("invalid-enum", "nominal inflection contains an invalid enum");
         }
         if (pofs == std::to_underlying(PartOfSpeech::adjective) &&
-            (std::to_underlying(rule.grammatical_case) > 7U ||
-             std::to_underlying(rule.number) > 2U ||
-             std::to_underlying(rule.gender) > 4U ||
-             std::to_underlying(rule.adjective_degree) > 3U ||
-             (morphology >> 10U) != 0U)) {
+            (std::to_underlying(rule.grammatical_case) >
+                 std::to_underlying(GrammaticalCase::accusative) ||
+             std::to_underlying(rule.number) >
+                 std::to_underlying(GrammaticalNumber::plural) ||
+             std::to_underlying(rule.gender) >
+                 std::to_underlying(Gender::common) ||
+             std::to_underlying(rule.adjective_degree) >
+                 std::to_underlying(Degree::superlative) ||
+             (morphology >> wwdb::adjective_morphology_used_bits) !=
+                 wwdb::reserved_value)) {
             fail("invalid-enum",
                  "adjective inflection contains an invalid enum");
         }
         if (pofs == std::to_underlying(PartOfSpeech::numeral) &&
-            (std::to_underlying(rule.grammatical_case) > 7U ||
-             std::to_underlying(rule.number) > 2U ||
-             std::to_underlying(rule.gender) > 4U ||
-             std::to_underlying(rule.numeral_type) > 4U ||
-             (morphology >> 11U) != 0U)) {
+            (std::to_underlying(rule.grammatical_case) >
+                 std::to_underlying(GrammaticalCase::accusative) ||
+             std::to_underlying(rule.number) >
+                 std::to_underlying(GrammaticalNumber::plural) ||
+             std::to_underlying(rule.gender) >
+                 std::to_underlying(Gender::common) ||
+             std::to_underlying(rule.numeral_type) >
+                 std::to_underlying(NumeralType::adverbial) ||
+             (morphology >> wwdb::numeral_morphology_used_bits) !=
+                 wwdb::reserved_value)) {
             fail("invalid-enum", "numeral inflection contains an invalid enum");
         }
         if (pofs == std::to_underlying(PartOfSpeech::adverb) &&
-            (std::to_underlying(rule.adjective_degree) > 3U ||
-             (morphology >> 2U) != 0U)) {
+            (std::to_underlying(rule.adjective_degree) >
+                 std::to_underlying(Degree::superlative) ||
+             (morphology >> wwdb::adverb_morphology_used_bits) !=
+                 wwdb::reserved_value)) {
             fail("invalid-enum", "adverb inflection contains an invalid enum");
         }
         if (pofs == std::to_underlying(PartOfSpeech::verb) &&
-            (std::to_underlying(rule.tense) > 6U ||
-             std::to_underlying(rule.voice) > 2U ||
-             std::to_underlying(rule.mood) > 5U || rule.person > 3U ||
-             std::to_underlying(rule.number) > 2U ||
-             (morphology >> 12U) != 0U)) {
+            (std::to_underlying(rule.tense) >
+                 std::to_underlying(Tense::future_perfect) ||
+             std::to_underlying(rule.voice) >
+                 std::to_underlying(Voice::passive) ||
+             std::to_underlying(rule.mood) >
+                 std::to_underlying(Mood::participle) ||
+             rule.person > wwdb::maximum_person_code ||
+             std::to_underlying(rule.number) >
+                 std::to_underlying(GrammaticalNumber::plural) ||
+             (morphology >> wwdb::verb_morphology_used_bits) !=
+                 wwdb::reserved_value)) {
             fail("invalid-enum", "verb inflection contains an invalid enum");
         }
         if (pofs == std::to_underlying(PartOfSpeech::participle) &&
-            (std::to_underlying(rule.grammatical_case) > 7U ||
-             std::to_underlying(rule.number) > 2U ||
-             std::to_underlying(rule.gender) > 4U ||
-             std::to_underlying(rule.tense) > 6U ||
-             std::to_underlying(rule.voice) > 2U ||
-             std::to_underlying(rule.mood) > 5U)) {
+            (std::to_underlying(rule.grammatical_case) >
+                 std::to_underlying(GrammaticalCase::accusative) ||
+             std::to_underlying(rule.number) >
+                 std::to_underlying(GrammaticalNumber::plural) ||
+             std::to_underlying(rule.gender) >
+                 std::to_underlying(Gender::common) ||
+             std::to_underlying(rule.tense) >
+                 std::to_underlying(Tense::future_perfect) ||
+             std::to_underlying(rule.voice) >
+                 std::to_underlying(Voice::passive) ||
+             std::to_underlying(rule.mood) >
+                 std::to_underlying(Mood::participle))) {
             fail("invalid-enum",
                  "participle inflection contains an invalid enum");
         }
         if (pofs == std::to_underlying(PartOfSpeech::supine) &&
-            (std::to_underlying(rule.grammatical_case) > 7U ||
-             std::to_underlying(rule.number) > 2U ||
-             std::to_underlying(rule.gender) > 4U ||
-             (morphology >> 8U) != 0U)) {
+            (std::to_underlying(rule.grammatical_case) >
+                 std::to_underlying(GrammaticalCase::accusative) ||
+             std::to_underlying(rule.number) >
+                 std::to_underlying(GrammaticalNumber::plural) ||
+             std::to_underlying(rule.gender) >
+                 std::to_underlying(Gender::common) ||
+             (morphology >> wwdb::supine_morphology_used_bits) !=
+                 wwdb::reserved_value)) {
             fail("invalid-enum", "supine inflection contains an invalid enum");
         }
         if (pofs == std::to_underlying(PartOfSpeech::preposition) &&
-            (std::to_underlying(rule.grammatical_case) > 7U ||
-             (morphology >> 3U) != 0U)) {
+            (std::to_underlying(rule.grammatical_case) >
+                 std::to_underlying(GrammaticalCase::accusative) ||
+             (morphology >> wwdb::preposition_morphology_used_bits) !=
+                 wwdb::reserved_value)) {
             fail("invalid-enum",
                  "preposition inflection contains an invalid case");
         }
         if ((pofs == std::to_underlying(PartOfSpeech::conjunction) ||
              pofs == std::to_underlying(PartOfSpeech::interjection)) &&
-            morphology != 0U) {
+            morphology != wwdb::unused_field_value) {
             fail("reserved-bits", "invariable inflection payload is nonzero");
         }
         database->rules_.push_back(rule);
@@ -1136,8 +1279,8 @@ Database::load_poc(std::vector<std::byte> image) try {
     std::ranges::sort(
         indexed_rules, [](const IndexedRule &left, const IndexedRule &right) {
             const auto key_order = normalized_compare(left.key, right.key);
-            if (key_order != 0) {
-                return key_order < 0;
+            if (!std::is_eq(key_order)) {
+                return std::is_lt(key_order);
             }
             return left.id < right.id;
         });
@@ -1167,29 +1310,35 @@ Database::load_poc(std::vector<std::byte> image) try {
     const RecordView unique_records{section_bytes(owned_bytes, unique_section),
                                     unique_section};
     for (std::uint32_t ordinal = 0; ordinal < unique_section.count; ++ordinal) {
-        const auto surface_id = unique_records.read_u16(ordinal, 0U);
-        const auto meaning_id = content == DatabaseContent::full
-                                    ? unique_records.read_u16(ordinal, 2U)
-                                    : 0U;
+        const auto surface_id =
+            unique_records.read_u16(ordinal, wwdb::unique_surface_id_offset);
+        const auto meaning_id =
+            content == DatabaseContent::full
+                ? unique_records.read_u16(ordinal,
+                                          wwdb::unique_meaning_id_offset)
+                : wwdb::no_meaning_id;
         const auto metadata = unique_records.read_u64(
-            ordinal, content == DatabaseContent::full ? 4U : 2U);
+            ordinal, content == DatabaseContent::full
+                         ? wwdb::full_unique_metadata_offset
+                         : wwdb::search_unique_metadata_offset);
         if (surface_id >= database->stem_strings_.size() ||
             (content == DatabaseContent::full &&
              meaning_id >= database->meaning_strings_.size())) {
             fail("invalid-reference",
                  "unique string or meaning ID is out of range");
         }
-        if ((metadata >> 50U) != 0U) {
+        if ((metadata >> wwdb::unique_used_bits) != wwdb::reserved_value) {
             fail("reserved-bits", "unique record has nonzero reserved bits");
         }
 
-        const auto part = static_cast<PartOfSpeech>(metadata & 0x0fU);
-        const auto paradigm =
-            static_cast<std::uint8_t>((metadata >> 4U) & 0xffU);
-        const auto morphology =
-            static_cast<std::uint16_t>((metadata >> 12U) & 0xffffU);
-        const auto translation =
-            static_cast<std::uint32_t>((metadata >> 28U) & 0x3f'ffffU);
+        const auto part = static_cast<PartOfSpeech>(metadata & wwdb::pos_mask);
+        const auto paradigm = static_cast<std::uint8_t>(
+            (metadata >> wwdb::paradigm_shift) & wwdb::paradigm_mask);
+        const auto morphology = static_cast<std::uint16_t>(
+            (metadata >> wwdb::morphology_shift) & wwdb::morphology_mask);
+        const auto translation = static_cast<std::uint32_t>(
+            (metadata >> wwdb::unique_translation_shift) &
+            wwdb::translation_mask);
 
         LexemeRecord lexeme;
         lexeme.stems.fill(StringId{surface_id});
@@ -1198,32 +1347,46 @@ Database::load_poc(std::vector<std::byte> image) try {
         lexeme.dictionary_entry = ordinal;
         lexeme.part_of_speech = part;
         lexeme.declension = checked_nibble(
-            static_cast<std::uint8_t>(paradigm >> 4U), "unique declension");
+            static_cast<std::uint8_t>(paradigm >> wwdb::paradigm_shift),
+            "unique declension");
         lexeme.variant = checked_nibble(
-            static_cast<std::uint8_t>(paradigm & 0x0fU), "unique variant");
-        lexeme.age = static_cast<std::uint8_t>(translation & 0x0fU);
-        lexeme.subject = static_cast<std::uint8_t>((translation >> 4U) & 0x0fU);
-        lexeme.geography =
-            static_cast<std::uint8_t>((translation >> 8U) & 0x1fU);
-        lexeme.frequency =
-            static_cast<std::uint8_t>((translation >> 13U) & 0x0fU);
-        lexeme.source = static_cast<std::uint8_t>((translation >> 17U) & 0x1fU);
-        if (lexeme.age > 8U || lexeme.subject > 11U || lexeme.geography > 17U ||
-            lexeme.frequency > 9U || lexeme.source > 25U) {
+            static_cast<std::uint8_t>(paradigm & wwdb::nibble_mask),
+            "unique variant");
+        lexeme.age = static_cast<std::uint8_t>(
+            (translation >> wwdb::age_shift) & wwdb::age_mask);
+        lexeme.subject = static_cast<std::uint8_t>(
+            (translation >> wwdb::subject_shift) & wwdb::subject_mask);
+        lexeme.geography = static_cast<std::uint8_t>(
+            (translation >> wwdb::geography_shift) & wwdb::geography_mask);
+        lexeme.frequency = static_cast<std::uint8_t>(
+            (translation >> wwdb::frequency_shift) & wwdb::frequency_mask);
+        lexeme.source = static_cast<std::uint8_t>(
+            (translation >> wwdb::source_shift) & wwdb::source_mask);
+        if (lexeme.age > wwdb::maximum_age_code ||
+            lexeme.subject > wwdb::maximum_subject_code ||
+            lexeme.geography > wwdb::maximum_geography_code ||
+            lexeme.frequency > wwdb::maximum_frequency_code ||
+            lexeme.source > wwdb::maximum_source_code) {
             fail("invalid-enum",
                  "unique lexical metadata contains an invalid enum");
         }
 
         Morphology decoded;
         const auto grammatical_case =
-            static_cast<GrammaticalCase>(morphology & 0x07U);
-        const auto number =
-            static_cast<GrammaticalNumber>((morphology >> 3U) & 0x03U);
-        const auto gender = static_cast<Gender>((morphology >> 5U) & 0x07U);
+            static_cast<GrammaticalCase>(morphology & wwdb::three_bit_mask);
+        const auto number = static_cast<GrammaticalNumber>(
+            (morphology >> wwdb::nominal_number_shift) & wwdb::two_bit_mask);
+        const auto gender = static_cast<Gender>(
+            (morphology >> wwdb::nominal_gender_shift) & wwdb::three_bit_mask);
         if (part == PartOfSpeech::noun || part == PartOfSpeech::pronoun) {
-            if (std::to_underlying(grammatical_case) > 7U ||
-                std::to_underlying(number) > 2U ||
-                std::to_underlying(gender) > 4U || (morphology >> 8U) != 0U) {
+            if (std::to_underlying(grammatical_case) >
+                    std::to_underlying(GrammaticalCase::accusative) ||
+                std::to_underlying(number) >
+                    std::to_underlying(GrammaticalNumber::plural) ||
+                std::to_underlying(gender) >
+                    std::to_underlying(Gender::common) ||
+                (morphology >> wwdb::nominal_morphology_used_bits) !=
+                    wwdb::reserved_value) {
                 fail("invalid-enum",
                      "unique nominal morphology contains an invalid enum");
             }
@@ -1242,11 +1405,19 @@ Database::load_poc(std::vector<std::byte> image) try {
                                       .gender = gender};
             }
         } else if (part == PartOfSpeech::adjective) {
-            const auto degree = static_cast<Degree>((morphology >> 8U) & 0x03U);
-            if (std::to_underlying(grammatical_case) > 7U ||
-                std::to_underlying(number) > 2U ||
-                std::to_underlying(gender) > 4U ||
-                std::to_underlying(degree) > 3U || (morphology >> 10U) != 0U) {
+            const auto degree = static_cast<Degree>(
+                (morphology >> wwdb::morphology_byte_shift) &
+                wwdb::two_bit_mask);
+            if (std::to_underlying(grammatical_case) >
+                    std::to_underlying(GrammaticalCase::accusative) ||
+                std::to_underlying(number) >
+                    std::to_underlying(GrammaticalNumber::plural) ||
+                std::to_underlying(gender) >
+                    std::to_underlying(Gender::common) ||
+                std::to_underlying(degree) >
+                    std::to_underlying(Degree::superlative) ||
+                (morphology >> wwdb::adjective_morphology_used_bits) !=
+                    wwdb::reserved_value) {
                 fail("invalid-enum",
                      "unique adjective morphology contains an invalid enum");
             }
@@ -1257,18 +1428,30 @@ Database::load_poc(std::vector<std::byte> image) try {
                                           .gender = gender,
                                           .degree = degree};
         } else if (part == PartOfSpeech::verb) {
-            const auto tense = static_cast<Tense>(morphology & 0x07U);
-            const auto voice = static_cast<Voice>((morphology >> 3U) & 0x03U);
-            const auto mood = static_cast<Mood>((morphology >> 5U) & 0x07U);
-            const auto person =
-                static_cast<std::uint8_t>((morphology >> 8U) & 0x03U);
-            const auto verb_number =
-                static_cast<GrammaticalNumber>((morphology >> 10U) & 0x03U);
-            if (std::to_underlying(tense) > 6U ||
-                std::to_underlying(voice) > 2U ||
-                std::to_underlying(mood) > 5U || person > 3U ||
-                std::to_underlying(verb_number) > 2U ||
-                (morphology >> 12U) != 0U) {
+            const auto tense =
+                static_cast<Tense>(morphology & wwdb::three_bit_mask);
+            const auto voice =
+                static_cast<Voice>((morphology >> wwdb::nominal_number_shift) &
+                                   wwdb::two_bit_mask);
+            const auto mood =
+                static_cast<Mood>((morphology >> wwdb::nominal_gender_shift) &
+                                  wwdb::three_bit_mask);
+            const auto person = static_cast<std::uint8_t>(
+                (morphology >> wwdb::morphology_byte_shift) &
+                wwdb::two_bit_mask);
+            const auto verb_number = static_cast<GrammaticalNumber>(
+                (morphology >> wwdb::verb_number_shift) & wwdb::two_bit_mask);
+            if (std::to_underlying(tense) >
+                    std::to_underlying(Tense::future_perfect) ||
+                std::to_underlying(voice) >
+                    std::to_underlying(Voice::passive) ||
+                std::to_underlying(mood) >
+                    std::to_underlying(Mood::participle) ||
+                person > wwdb::maximum_person_code ||
+                std::to_underlying(verb_number) >
+                    std::to_underlying(GrammaticalNumber::plural) ||
+                (morphology >> wwdb::verb_morphology_used_bits) !=
+                    wwdb::reserved_value) {
                 fail("invalid-enum",
                      "unique verb morphology contains an invalid enum");
             }
@@ -1294,8 +1477,8 @@ Database::load_poc(std::vector<std::byte> image) try {
     std::ranges::sort(indexed_uniques, [](const IndexedUnique &left,
                                           const IndexedUnique &right) {
         const auto key_order = normalized_compare(left.key, right.key);
-        if (key_order != 0) {
-            return key_order < 0;
+        if (!std::is_eq(key_order)) {
+            return std::is_lt(key_order);
         }
         return left.reference.lexeme < right.reference.lexeme;
     });
@@ -1321,20 +1504,26 @@ Database::load_poc(std::vector<std::byte> image) try {
                                     suffix_section};
     database->suffixes_.reserve(suffix_section.count);
     for (std::uint32_t ordinal = 0; ordinal < suffix_section.count; ++ordinal) {
-        const auto addon_id = suffix_records.read_u16(ordinal, 0U);
-        const auto fix_id = suffix_records.read_u16(ordinal, 2U);
-        const auto meaning_id = content == DatabaseContent::full
-                                    ? suffix_records.read_u16(ordinal, 4U)
-                                    : 0U;
+        const auto addon_id =
+            suffix_records.read_u16(ordinal, wwdb::addon_id_offset);
+        const auto fix_id =
+            suffix_records.read_u16(ordinal, wwdb::addon_fix_id_offset);
+        const auto meaning_id =
+            content == DatabaseContent::full
+                ? suffix_records.read_u16(ordinal,
+                                          wwdb::addon_meaning_id_offset)
+                : wwdb::no_meaning_id;
         const auto metadata = suffix_records.read_u64(
-            ordinal, content == DatabaseContent::full ? 6U : 4U);
+            ordinal, content == DatabaseContent::full
+                         ? wwdb::full_addon_metadata_offset
+                         : wwdb::search_addon_metadata_offset);
         if (fix_id >= database->suffix_strings_.size() ||
             (content == DatabaseContent::full &&
              meaning_id >= database->suffix_meanings_.size())) {
             fail("invalid-reference",
                  "suffix string or meaning ID is out of range");
         }
-        if ((metadata >> 46U) != 0U) {
+        if ((metadata >> wwdb::suffix_used_bits) != wwdb::reserved_value) {
             fail("reserved-bits", "suffix record has nonzero reserved bits");
         }
 
@@ -1342,65 +1531,71 @@ Database::load_poc(std::vector<std::byte> image) try {
         suffix.id = AddonId{addon_id};
         suffix.fix = SuffixStringId{fix_id};
         suffix.meaning = SuffixMeaningId{meaning_id};
-        suffix.root = static_cast<PartOfSpeech>(metadata & 0x0fU);
-        suffix.root_key = static_cast<std::uint8_t>((metadata >> 4U) & 0x07U);
-        suffix.target = static_cast<PartOfSpeech>((metadata >> 7U) & 0x0fU);
-        suffix.target_key =
-            static_cast<std::uint8_t>((metadata >> 11U) & 0x07U);
-        const auto paradigm =
-            static_cast<std::uint8_t>((metadata >> 14U) & 0xffU);
-        suffix.target_declension =
-            checked_nibble(static_cast<std::uint8_t>(paradigm >> 4U),
-                           "suffix target declension");
-        suffix.target_variant =
-            checked_nibble(static_cast<std::uint8_t>(paradigm & 0x0fU),
-                           "suffix target variant");
-        const auto attribute_0 =
-            static_cast<std::uint8_t>((metadata >> 22U) & 0x0fU);
+        suffix.root = static_cast<PartOfSpeech>(metadata & wwdb::pos_mask);
+        suffix.root_key = static_cast<std::uint8_t>(
+            (metadata >> wwdb::suffix_root_key_shift) & wwdb::three_bit_mask);
+        suffix.target = static_cast<PartOfSpeech>(
+            (metadata >> wwdb::suffix_target_pos_shift) & wwdb::pos_mask);
+        suffix.target_key = static_cast<std::uint8_t>(
+            (metadata >> wwdb::suffix_target_key_shift) & wwdb::three_bit_mask);
+        const auto paradigm = static_cast<std::uint8_t>(
+            (metadata >> wwdb::suffix_paradigm_shift) & wwdb::byte_mask);
+        suffix.target_declension = checked_nibble(
+            static_cast<std::uint8_t>(paradigm >> wwdb::paradigm_shift),
+            "suffix target declension");
+        suffix.target_variant = checked_nibble(
+            static_cast<std::uint8_t>(paradigm & wwdb::nibble_mask),
+            "suffix target variant");
+        const auto attribute_0 = static_cast<std::uint8_t>(
+            (metadata >> wwdb::suffix_attribute_shift) & wwdb::nibble_mask);
         suffix.target_attribute = attribute_0;
-        suffix.target_noun_kind =
-            static_cast<std::uint8_t>((metadata >> 26U) & 0x0fU);
-        suffix.numeric_value =
-            static_cast<std::uint8_t>((metadata >> 30U) & 0xffU);
-        const auto connector =
-            static_cast<std::uint8_t>((metadata >> 38U) & 0xffU);
+        suffix.target_noun_kind = static_cast<std::uint8_t>(
+            (metadata >> wwdb::suffix_noun_kind_shift) & wwdb::nibble_mask);
+        suffix.numeric_value = static_cast<std::uint8_t>(
+            (metadata >> wwdb::suffix_numeric_value_shift) & wwdb::byte_mask);
+        const auto connector = static_cast<std::uint8_t>(
+            (metadata >> wwdb::suffix_connector_shift) & wwdb::byte_mask);
         suffix.connector = static_cast<char>(connector);
 
         if (std::to_underlying(suffix.root) >
                 std::to_underlying(PartOfSpeech::verb) ||
             std::to_underlying(suffix.target) >
                 std::to_underlying(PartOfSpeech::verb) ||
-            suffix.root_key > 4U || suffix.target_key > 4U ||
-            connector > 0x7fU) {
+            suffix.root_key > wwdb::maximum_stem_key ||
+            suffix.target_key > wwdb::maximum_stem_key ||
+            connector > wwdb::ascii_max_code_point) {
             fail("invalid-enum", "suffix metadata contains an invalid enum");
         }
         if (suffix.target == PartOfSpeech::noun) {
             suffix.target_gender = static_cast<Gender>(attribute_0);
             if (attribute_0 > std::to_underlying(Gender::common) ||
-                suffix.target_noun_kind > 9U) {
+                suffix.target_noun_kind > wwdb::maximum_noun_kind_code) {
                 fail("invalid-enum", "noun suffix target is invalid");
             }
         } else if (suffix.target == PartOfSpeech::adjective) {
             suffix.target_degree = static_cast<Degree>(attribute_0);
             if (attribute_0 > std::to_underlying(Degree::superlative) ||
-                suffix.target_noun_kind != 0U || suffix.numeric_value != 0U) {
+                suffix.target_noun_kind != wwdb::unused_field_value ||
+                suffix.numeric_value != wwdb::unused_field_value) {
                 fail("invalid-enum", "adjective suffix target is invalid");
             }
         } else if (suffix.target == PartOfSpeech::numeral) {
             suffix.target_numeral_type = static_cast<NumeralType>(attribute_0);
             if (attribute_0 > std::to_underlying(NumeralType::adverbial) ||
-                suffix.target_noun_kind != 0U) {
+                suffix.target_noun_kind != wwdb::unused_field_value) {
                 fail("invalid-enum", "numeral suffix target is invalid");
             }
         } else if (suffix.target == PartOfSpeech::adverb) {
             suffix.target_degree = static_cast<Degree>(attribute_0);
             if (attribute_0 > std::to_underlying(Degree::superlative) ||
-                suffix.target_noun_kind != 0U || suffix.numeric_value != 0U) {
+                suffix.target_noun_kind != wwdb::unused_field_value ||
+                suffix.numeric_value != wwdb::unused_field_value) {
                 fail("invalid-enum", "adverb suffix target is invalid");
             }
         } else if (suffix.target == PartOfSpeech::verb) {
-            if (attribute_0 != 0U || suffix.target_noun_kind != 0U ||
-                suffix.numeric_value != 0U) {
+            if (attribute_0 != wwdb::unused_field_value ||
+                suffix.target_noun_kind != wwdb::unused_field_value ||
+                suffix.numeric_value != wwdb::unused_field_value) {
                 fail("invalid-enum", "verb suffix target is invalid");
             }
         } else {
@@ -1425,8 +1620,8 @@ Database::load_poc(std::vector<std::byte> image) try {
     std::ranges::sort(indexed_suffixes, [](const IndexedSuffix &left,
                                            const IndexedSuffix &right) {
         const auto key_order = normalized_compare(left.key, right.key);
-        if (key_order != 0) {
-            return key_order < 0;
+        if (!std::is_eq(key_order)) {
+            return std::is_lt(key_order);
         }
         return left.id < right.id;
     });
@@ -1450,13 +1645,19 @@ Database::load_poc(std::vector<std::byte> image) try {
                                     prefix_section};
     database->prefixes_.reserve(prefix_section.count);
     for (std::uint32_t ordinal = 0; ordinal < prefix_section.count; ++ordinal) {
-        const auto addon_id = prefix_records.read_u16(ordinal, 0U);
-        const auto fix_id = prefix_records.read_u16(ordinal, 2U);
-        const auto meaning_id = content == DatabaseContent::full
-                                    ? prefix_records.read_u16(ordinal, 4U)
-                                    : 0U;
+        const auto addon_id =
+            prefix_records.read_u16(ordinal, wwdb::addon_id_offset);
+        const auto fix_id =
+            prefix_records.read_u16(ordinal, wwdb::addon_fix_id_offset);
+        const auto meaning_id =
+            content == DatabaseContent::full
+                ? prefix_records.read_u16(ordinal,
+                                          wwdb::addon_meaning_id_offset)
+                : wwdb::no_meaning_id;
         const auto metadata = prefix_records.read_u16(
-            ordinal, content == DatabaseContent::full ? 6U : 4U);
+            ordinal, content == DatabaseContent::full
+                         ? wwdb::full_addon_metadata_offset
+                         : wwdb::search_addon_metadata_offset);
         if (fix_id >= database->prefix_strings_.size() ||
             (content == DatabaseContent::full &&
              meaning_id >= database->prefix_meanings_.size())) {
@@ -1468,13 +1669,16 @@ Database::load_poc(std::vector<std::byte> image) try {
         prefix.id = AddonId{addon_id};
         prefix.fix = PrefixStringId{fix_id};
         prefix.meaning = PrefixMeaningId{meaning_id};
-        prefix.root = static_cast<PartOfSpeech>(metadata & 0x0fU);
-        prefix.target = static_cast<PartOfSpeech>((metadata >> 4U) & 0x0fU);
-        const auto connector = static_cast<std::uint8_t>(metadata >> 8U);
+        prefix.root = static_cast<PartOfSpeech>(metadata & wwdb::pos_mask);
+        prefix.target = static_cast<PartOfSpeech>(
+            (metadata >> wwdb::prefix_target_shift) & wwdb::pos_mask);
+        const auto connector =
+            static_cast<std::uint8_t>(metadata >> wwdb::prefix_connector_shift);
         prefix.connector = static_cast<char>(connector);
         if (std::to_underlying(prefix.root) >
                 std::to_underlying(PartOfSpeech::verb) ||
-            prefix.root != prefix.target || connector > 0x7fU) {
+            prefix.root != prefix.target ||
+            connector > wwdb::ascii_max_code_point) {
             fail("invalid-enum", "prefix metadata contains an invalid enum");
         }
         database->prefixes_.push_back(prefix);
@@ -1484,20 +1688,26 @@ Database::load_poc(std::vector<std::byte> image) try {
                                     tackon_section};
     database->tackons_.reserve(tackon_section.count);
     for (std::uint32_t ordinal = 0; ordinal < tackon_section.count; ++ordinal) {
-        const auto addon_id = tackon_records.read_u16(ordinal, 0U);
-        const auto fix_id = tackon_records.read_u16(ordinal, 2U);
-        const auto meaning_id = content == DatabaseContent::full
-                                    ? tackon_records.read_u16(ordinal, 4U)
-                                    : 0U;
+        const auto addon_id =
+            tackon_records.read_u16(ordinal, wwdb::addon_id_offset);
+        const auto fix_id =
+            tackon_records.read_u16(ordinal, wwdb::addon_fix_id_offset);
+        const auto meaning_id =
+            content == DatabaseContent::full
+                ? tackon_records.read_u16(ordinal,
+                                          wwdb::addon_meaning_id_offset)
+                : wwdb::no_meaning_id;
         const auto metadata = tackon_records.read_u32(
-            ordinal, content == DatabaseContent::full ? 6U : 4U);
+            ordinal, content == DatabaseContent::full
+                         ? wwdb::full_addon_metadata_offset
+                         : wwdb::search_addon_metadata_offset);
         if (fix_id >= database->tackon_strings_.size() ||
             (content == DatabaseContent::full &&
              meaning_id >= database->tackon_meanings_.size())) {
             fail("invalid-reference",
                  "tackon string or meaning ID is out of range");
         }
-        if ((metadata >> 22U) != 0U) {
+        if ((metadata >> wwdb::tackon_used_bits) != wwdb::reserved_value) {
             fail("reserved-bits", "tackon record has nonzero reserved bits");
         }
 
@@ -1505,18 +1715,23 @@ Database::load_poc(std::vector<std::byte> image) try {
         tackon.id = AddonId{addon_id};
         tackon.fix = TackonStringId{fix_id};
         tackon.meaning = TackonMeaningId{meaning_id};
-        tackon.base = static_cast<PartOfSpeech>(metadata & 0x0fU);
-        const auto paradigm =
-            static_cast<std::uint8_t>((metadata >> 4U) & 0xffU);
+        tackon.base = static_cast<PartOfSpeech>(metadata & wwdb::pos_mask);
+        const auto paradigm = static_cast<std::uint8_t>(
+            (metadata >> wwdb::paradigm_shift) & wwdb::paradigm_mask);
         tackon.declension = checked_nibble(
-            static_cast<std::uint8_t>(paradigm >> 4U), "tackon declension");
+            static_cast<std::uint8_t>(paradigm >> wwdb::paradigm_shift),
+            "tackon declension");
         tackon.variant = checked_nibble(
-            static_cast<std::uint8_t>(paradigm & 0x0fU), "tackon variant");
-        const auto attribute_0 =
-            static_cast<std::uint8_t>((metadata >> 12U) & 0x0fU);
-        tackon.noun_kind = static_cast<std::uint8_t>((metadata >> 16U) & 0x0fU);
-        tackon.packon = ((metadata >> 20U) & 1U) != 0U;
-        tackon.enclitic = ((metadata >> 21U) & 1U) != 0U;
+            static_cast<std::uint8_t>(paradigm & wwdb::nibble_mask),
+            "tackon variant");
+        const auto attribute_0 = static_cast<std::uint8_t>(
+            (metadata >> wwdb::tackon_attribute_shift) & wwdb::nibble_mask);
+        tackon.noun_kind = static_cast<std::uint8_t>(
+            (metadata >> wwdb::tackon_noun_kind_shift) & wwdb::nibble_mask);
+        tackon.packon = ((metadata >> wwdb::tackon_packon_shift) &
+                         wwdb::single_bit_mask) != 0U;
+        tackon.enclitic = ((metadata >> wwdb::tackon_enclitic_shift) &
+                           wwdb::single_bit_mask) != 0U;
         if (std::to_underlying(tackon.base) >
             std::to_underlying(PartOfSpeech::adjective)) {
             fail("invalid-enum", "tackon base class is invalid");
@@ -1524,24 +1739,26 @@ Database::load_poc(std::vector<std::byte> image) try {
         if (tackon.base == PartOfSpeech::noun) {
             tackon.gender = static_cast<Gender>(attribute_0);
             if (attribute_0 > std::to_underlying(Gender::common) ||
-                tackon.noun_kind > 9U) {
+                tackon.noun_kind > wwdb::maximum_noun_kind_code) {
                 fail("invalid-enum", "noun tackon target is invalid");
             }
         } else if (tackon.base == PartOfSpeech::pronoun ||
                    tackon.base == PartOfSpeech::pack) {
             tackon.pronoun_kind = static_cast<PronounKind>(attribute_0);
             if (attribute_0 > std::to_underlying(PronounKind::adjectival) ||
-                tackon.noun_kind != 0U) {
+                tackon.noun_kind != wwdb::unused_field_value) {
                 fail("invalid-enum", "pronoun tackon target is invalid");
             }
         } else if (tackon.base == PartOfSpeech::adjective) {
             tackon.adjective_degree = static_cast<Degree>(attribute_0);
             if (attribute_0 > std::to_underlying(Degree::superlative) ||
-                tackon.noun_kind != 0U) {
+                tackon.noun_kind != wwdb::unused_field_value) {
                 fail("invalid-enum", "adjective tackon target is invalid");
             }
-        } else if (attribute_0 != 0U || tackon.noun_kind != 0U ||
-                   tackon.declension != 0U || tackon.variant != 0U) {
+        } else if (attribute_0 != wwdb::unused_field_value ||
+                   tackon.noun_kind != wwdb::unused_field_value ||
+                   tackon.declension != wwdb::unused_field_value ||
+                   tackon.variant != wwdb::unused_field_value) {
             fail("invalid-enum", "generic tackon target is not empty");
         }
         if (tackon.packon != (tackon.base == PartOfSpeech::pack) ||
@@ -1626,8 +1843,8 @@ Database::load_poc(std::vector<std::byte> image) try {
     std::ranges::sort(indexed_prefixes, [](const IndexedPrefix &left,
                                            const IndexedPrefix &right) {
         const auto key_order = normalized_compare(left.key, right.key);
-        if (key_order != 0) {
-            return key_order < 0;
+        if (!std::is_eq(key_order)) {
+            return std::is_lt(key_order);
         }
         return left.id < right.id;
     });
@@ -1650,8 +1867,8 @@ Database::load_poc(std::vector<std::byte> image) try {
     std::ranges::sort(indexed_tickons, [](const IndexedPrefix &left,
                                           const IndexedPrefix &right) {
         const auto key_order = normalized_compare(left.key, right.key);
-        if (key_order != 0) {
-            return key_order < 0;
+        if (!std::is_eq(key_order)) {
+            return std::is_lt(key_order);
         }
         return left.id < right.id;
     });
@@ -1684,8 +1901,8 @@ Database::load_poc(std::vector<std::byte> image) try {
         std::ranges::sort(
             source, [](const IndexedTackon &left, const IndexedTackon &right) {
                 const auto key_order = normalized_compare(left.key, right.key);
-                if (key_order != 0) {
-                    return key_order < 0;
+                if (!std::is_eq(key_order)) {
+                    return std::is_lt(key_order);
                 }
                 return left.id < right.id;
             });
@@ -1713,7 +1930,8 @@ Database::load_poc(std::vector<std::byte> image) try {
     const auto validate_boundaries = [](const std::span<const std::byte> values,
                                         const std::uint32_t expected_last) {
         std::uint16_t previous = 0;
-        for (std::size_t offset = 0; offset < values.size(); offset += 2U) {
+        for (std::size_t offset = 0; offset < values.size();
+             offset += wwdb::boundary_stride) {
             const auto current = read_u16_le(values, offset);
             if (current < previous) {
                 fail("invalid-boundaries", "PoC boundaries are not monotonic");
@@ -1883,12 +2101,12 @@ QuantityMask Database::inflection_quantity(const RuleId id) const noexcept {
 QuantityMask
 Database::stem_quantity(const LexemeId id,
                         const std::uint8_t lexical_slot) const noexcept {
-    if (lexical_slot >= stem_quantity_slot_count) {
+    if (lexical_slot >= wwdb::lexical_slot_count) {
         return {};
     }
-    const auto key =
-        static_cast<std::uint32_t>(id.value()) |
-        (static_cast<std::uint32_t>(lexical_slot) << stem_quantity_slot_shift);
+    const auto key = static_cast<std::uint32_t>(id.value()) |
+                     (static_cast<std::uint32_t>(lexical_slot)
+                      << wwdb::stem_quantity_slot_shift);
     const auto found = std::ranges::lower_bound(stem_quantities_, key, {},
                                                 &StemQuantityRecord::key);
     return found != stem_quantities_.end() && found->key == key

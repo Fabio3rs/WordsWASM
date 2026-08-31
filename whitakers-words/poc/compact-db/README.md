@@ -189,6 +189,7 @@ Na raiz do repositório:
 ```bash
 g++-14 -std=c++23 -O2 \
   -Wall -Wextra -Wpedantic -Wconversion \
+  -I../include \
   poc/compact-db/wwdb_poc_pack.cpp \
   -o /tmp/wwdb_poc_pack
 

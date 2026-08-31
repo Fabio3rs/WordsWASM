@@ -6,9 +6,34 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <ranges>
 
 namespace words {
+namespace {
+
+constexpr std::size_t test_header_major_offset = 8U;
+constexpr std::size_t test_header_minor_offset = 10U;
+constexpr std::size_t test_header_size_offset = 12U;
+constexpr std::size_t test_header_section_count_offset = 16U;
+constexpr std::size_t test_directory_offset = 40U;
+constexpr std::size_t test_directory_flags_offset = test_directory_offset + 4U;
+
+void write_u16_le(std::vector<std::byte> &bytes, const std::size_t offset,
+                  const std::uint16_t value) {
+    bytes[offset] = static_cast<std::byte>(value & 0xffU);
+    bytes[offset + 1U] = static_cast<std::byte>(value >> 8U);
+}
+
+void write_u32_le(std::vector<std::byte> &bytes, const std::size_t offset,
+                  const std::uint32_t value) {
+    bytes[offset] = static_cast<std::byte>(value & 0xffU);
+    bytes[offset + 1U] = static_cast<std::byte>((value >> 8U) & 0xffU);
+    bytes[offset + 2U] = static_cast<std::byte>((value >> 16U) & 0xffU);
+    bytes[offset + 3U] = static_cast<std::byte>(value >> 24U);
+}
+
+} // namespace
 
 TEST(DatabaseTest, LoadsDensePocAndFindsRealData) {
     auto database = Database::load_poc(test::read_database());
@@ -28,6 +53,154 @@ TEST(DatabaseTest, LoadsColumnarSearchPocWithoutMeaningPools) {
     EXPECT_FALSE((*database)->lookup_ending("ae").empty());
     EXPECT_EQ((*database)->lookup_unique("eadem").size(), 3U);
     EXPECT_EQ((*database)->lookup_suffix("icul").size(), 3U);
+}
+
+TEST(DatabaseTest, DenseAndSearchProfilesAgreeOnWireSemantics) {
+    auto dense = Database::load_poc(test::read_database());
+    auto search = Database::load_poc(test::read_search_database());
+    ASSERT_TRUE(dense) << dense.error().message;
+    ASSERT_TRUE(search) << search.error().message;
+
+    const auto dense_stems = (*dense)->lookup_stem("puell");
+    const auto search_stems = (*search)->lookup_stem("puell");
+    ASSERT_FALSE(dense_stems.empty());
+    const auto matching_stem = std::ranges::find(
+        search_stems, dense_stems.front().lexeme, &StemReference::lexeme);
+    ASSERT_NE(matching_stem, search_stems.end());
+    EXPECT_EQ(matching_stem->lexical_slot, dense_stems.front().lexical_slot);
+    EXPECT_EQ(matching_stem->stem_key, dense_stems.front().stem_key);
+    const auto &dense_lexeme = (*dense)->lexeme(dense_stems.front().lexeme);
+    const auto &search_lexeme = (*search)->lexeme(matching_stem->lexeme);
+    EXPECT_EQ(search_lexeme.stems, dense_lexeme.stems);
+    EXPECT_EQ(search_lexeme.part_of_speech, dense_lexeme.part_of_speech);
+    EXPECT_EQ(search_lexeme.declension, dense_lexeme.declension);
+    EXPECT_EQ(search_lexeme.variant, dense_lexeme.variant);
+    EXPECT_EQ(search_lexeme.gender, dense_lexeme.gender);
+    EXPECT_EQ(search_lexeme.noun_kind, dense_lexeme.noun_kind);
+    EXPECT_EQ(search_lexeme.age, dense_lexeme.age);
+    EXPECT_EQ(search_lexeme.subject, dense_lexeme.subject);
+    EXPECT_EQ(search_lexeme.geography, dense_lexeme.geography);
+    EXPECT_EQ(search_lexeme.frequency, dense_lexeme.frequency);
+    EXPECT_EQ(search_lexeme.source, dense_lexeme.source);
+
+    constexpr RuleId rule_id{146U};
+    const auto &dense_rule = (*dense)->rule(rule_id);
+    const auto &search_rule = (*search)->rule(rule_id);
+    EXPECT_EQ(search_rule.part_of_speech, dense_rule.part_of_speech);
+    EXPECT_EQ(search_rule.declension, dense_rule.declension);
+    EXPECT_EQ(search_rule.variant, dense_rule.variant);
+    EXPECT_EQ(search_rule.grammatical_case, dense_rule.grammatical_case);
+    EXPECT_EQ(search_rule.number, dense_rule.number);
+    EXPECT_EQ(search_rule.gender, dense_rule.gender);
+    EXPECT_EQ(search_rule.ending, dense_rule.ending);
+    EXPECT_EQ(search_rule.stem_key, dense_rule.stem_key);
+    EXPECT_EQ(search_rule.age, dense_rule.age);
+    EXPECT_EQ(search_rule.frequency, dense_rule.frequency);
+    EXPECT_EQ((*search)->inflection_quantity(rule_id).known,
+              (*dense)->inflection_quantity(rule_id).known);
+    EXPECT_EQ((*search)->inflection_quantity(rule_id).long_vowel,
+              (*dense)->inflection_quantity(rule_id).long_vowel);
+
+    const auto compare_addon =
+        [&](const std::string_view spelling, const auto dense_lookup,
+            const auto search_lookup, const auto accessor) {
+            const auto dense_ids = ((*dense).get()->*dense_lookup)(spelling);
+            const auto search_ids = ((*search).get()->*search_lookup)(spelling);
+            ASSERT_FALSE(dense_ids.empty());
+            ASSERT_NE(std::ranges::find(search_ids, dense_ids.front()),
+                      search_ids.end());
+            const auto &dense_rule_value =
+                ((*dense).get()->*accessor)(dense_ids.front());
+            const auto &search_rule_value =
+                ((*search).get()->*accessor)(dense_ids.front());
+            EXPECT_EQ(search_rule_value.id, dense_rule_value.id);
+            EXPECT_EQ(search_rule_value.fix, dense_rule_value.fix);
+        };
+    compare_addon("icul", &Database::lookup_suffix, &Database::lookup_suffix,
+                  &Database::suffix);
+    compare_addon("archi", &Database::lookup_prefix, &Database::lookup_prefix,
+                  &Database::prefix);
+    compare_addon("que", &Database::lookup_tackon, &Database::lookup_tackon,
+                  &Database::tackon);
+    compare_addon("dam", &Database::lookup_packon, &Database::lookup_packon,
+                  &Database::tackon);
+
+    const auto suffix_id = (*dense)->lookup_suffix("icul").front();
+    const auto &dense_suffix = (*dense)->suffix(suffix_id);
+    const auto &search_suffix = (*search)->suffix(suffix_id);
+    EXPECT_EQ(search_suffix.root, dense_suffix.root);
+    EXPECT_EQ(search_suffix.root_key, dense_suffix.root_key);
+    EXPECT_EQ(search_suffix.target, dense_suffix.target);
+    EXPECT_EQ(search_suffix.target_key, dense_suffix.target_key);
+    EXPECT_EQ(search_suffix.target_declension, dense_suffix.target_declension);
+    EXPECT_EQ(search_suffix.target_variant, dense_suffix.target_variant);
+    EXPECT_EQ(search_suffix.target_attribute, dense_suffix.target_attribute);
+    EXPECT_EQ(search_suffix.target_noun_kind, dense_suffix.target_noun_kind);
+    EXPECT_EQ(search_suffix.numeric_value, dense_suffix.numeric_value);
+    EXPECT_EQ(search_suffix.connector, dense_suffix.connector);
+
+    const auto prefix_id = (*dense)->lookup_prefix("archi").front();
+    const auto &dense_prefix = (*dense)->prefix(prefix_id);
+    const auto &search_prefix = (*search)->prefix(prefix_id);
+    EXPECT_EQ(search_prefix.root, dense_prefix.root);
+    EXPECT_EQ(search_prefix.target, dense_prefix.target);
+    EXPECT_EQ(search_prefix.connector, dense_prefix.connector);
+
+    const auto compare_tackon_fields = [&](const AddonId id) {
+        const auto &dense_tackon = (*dense)->tackon(id);
+        const auto &search_tackon = (*search)->tackon(id);
+        EXPECT_EQ(search_tackon.base, dense_tackon.base);
+        EXPECT_EQ(search_tackon.declension, dense_tackon.declension);
+        EXPECT_EQ(search_tackon.variant, dense_tackon.variant);
+        EXPECT_EQ(search_tackon.gender, dense_tackon.gender);
+        EXPECT_EQ(search_tackon.noun_kind, dense_tackon.noun_kind);
+        EXPECT_EQ(search_tackon.pronoun_kind, dense_tackon.pronoun_kind);
+        EXPECT_EQ(search_tackon.adjective_degree,
+                  dense_tackon.adjective_degree);
+        EXPECT_EQ(search_tackon.packon, dense_tackon.packon);
+        EXPECT_EQ(search_tackon.enclitic, dense_tackon.enclitic);
+    };
+    compare_tackon_fields((*dense)->lookup_tackon("que").front());
+    compare_tackon_fields((*dense)->lookup_packon("dam").front());
+
+    const auto &dense_rewrite = (*dense)->rewrite(RewriteId{0U});
+    const auto &search_rewrite = (*search)->rewrite(RewriteId{0U});
+    EXPECT_EQ(search_rewrite.id, dense_rewrite.id);
+    EXPECT_EQ(search_rewrite.before, dense_rewrite.before);
+    EXPECT_EQ(search_rewrite.after, dense_rewrite.after);
+    EXPECT_EQ(search_rewrite.name, dense_rewrite.name);
+    EXPECT_EQ(search_rewrite.kind, dense_rewrite.kind);
+    EXPECT_EQ(search_rewrite.scope, dense_rewrite.scope);
+    EXPECT_EQ(search_rewrite.priority, dense_rewrite.priority);
+    EXPECT_EQ(search_rewrite.scan_reverse, dense_rewrite.scan_reverse);
+    EXPECT_EQ(search_rewrite.required_part, dense_rewrite.required_part);
+    EXPECT_EQ(search_rewrite.required_stem_key,
+              dense_rewrite.required_stem_key);
+    EXPECT_EQ(search_rewrite.minimum_before, dense_rewrite.minimum_before);
+    EXPECT_EQ(search_rewrite.minimum_after, dense_rewrite.minimum_after);
+    EXPECT_EQ(search_rewrite.medieval, dense_rewrite.medieval);
+    EXPECT_EQ(search_rewrite.operation, dense_rewrite.operation);
+    EXPECT_EQ(search_rewrite.stage, dense_rewrite.stage);
+    EXPECT_EQ(search_rewrite.constraint, dense_rewrite.constraint);
+
+    const auto dense_uniques = (*dense)->lookup_unique("eadem");
+    const auto search_uniques = (*search)->lookup_unique("eadem");
+    ASSERT_EQ(search_uniques.size(), dense_uniques.size());
+    EXPECT_TRUE(std::ranges::equal(dense_uniques, search_uniques, {},
+                                   &UniqueReference::lexeme,
+                                   &UniqueReference::lexeme));
+    for (std::size_t index = 0; index < dense_uniques.size(); ++index) {
+        const auto &dense_morphology =
+            std::get<PronounMorphology>(dense_uniques[index].morphology);
+        const auto &search_morphology =
+            std::get<PronounMorphology>(search_uniques[index].morphology);
+        EXPECT_EQ(search_morphology.declension, dense_morphology.declension);
+        EXPECT_EQ(search_morphology.variant, dense_morphology.variant);
+        EXPECT_EQ(search_morphology.grammatical_case,
+                  dense_morphology.grammatical_case);
+        EXPECT_EQ(search_morphology.number, dense_morphology.number);
+        EXPECT_EQ(search_morphology.gender, dense_morphology.gender);
+    }
 }
 
 TEST(DatabaseTest, LoadsInflectionAndSparseStemQuantities) {
@@ -290,6 +463,57 @@ TEST(DatabaseTest, RejectsUnsupportedProfile) {
     const auto database = Database::load_poc(std::move(bytes));
     ASSERT_FALSE(database);
     EXPECT_EQ(database.error().code, "unsupported-profile");
+}
+
+TEST(DatabaseTest, RejectsUnsupportedVersionAndHeaderSize) {
+    for (const auto minor : {std::uint16_t{5U}, std::uint16_t{9U}}) {
+        SCOPED_TRACE(minor);
+        auto bytes = test::read_database();
+        write_u16_le(bytes, test_header_minor_offset, minor);
+        const auto database = Database::load_poc(std::move(bytes));
+        ASSERT_FALSE(database);
+        EXPECT_EQ(database.error().code, "unsupported-version");
+    }
+
+    auto wrong_major = test::read_database();
+    write_u16_le(wrong_major, test_header_major_offset, 2U);
+    const auto major_result = Database::load_poc(std::move(wrong_major));
+    ASSERT_FALSE(major_result);
+    EXPECT_EQ(major_result.error().code, "unsupported-version");
+
+    auto wrong_header_size = test::read_database();
+    write_u32_le(wrong_header_size, test_header_size_offset, 39U);
+    const auto header_result = Database::load_poc(std::move(wrong_header_size));
+    ASSERT_FALSE(header_result);
+    EXPECT_EQ(header_result.error().code, "unsupported-version");
+}
+
+TEST(DatabaseTest, RejectsUnsafeSectionCountsAndTypes) {
+    for (const auto count : {std::uint32_t{0U}, std::uint32_t{65U}}) {
+        SCOPED_TRACE(count);
+        auto bytes = test::read_database();
+        write_u32_le(bytes, test_header_section_count_offset, count);
+        const auto database = Database::load_poc(std::move(bytes));
+        ASSERT_FALSE(database);
+        EXPECT_EQ(database.error().code, "invalid-directory");
+    }
+
+    for (const auto type : {std::uint32_t{0U}, std::uint32_t{24U}}) {
+        SCOPED_TRACE(type);
+        auto bytes = test::read_database();
+        write_u32_le(bytes, test_directory_offset, type);
+        const auto database = Database::load_poc(std::move(bytes));
+        ASSERT_FALSE(database);
+        EXPECT_EQ(database.error().code, "unknown-section");
+    }
+}
+
+TEST(DatabaseTest, RejectsUnsupportedSectionShape) {
+    auto bytes = test::read_database();
+    write_u32_le(bytes, test_directory_flags_offset, 1U);
+    const auto database = Database::load_poc(std::move(bytes));
+    ASSERT_FALSE(database);
+    EXPECT_EQ(database.error().code, "unsupported-section-layout");
 }
 
 TEST(DatabaseTest, RejectsTruncation) {
