@@ -480,7 +480,7 @@ TEST(EngineTest, AllowsPerfectSyncopeInsideOneOuterEnclitic) {
 }
 
 TEST(EngineTest, DoesNotRewriteOrdinaryOrUnvalidatedForms) {
-    for (const auto word : {"amavisti", "servus", "zzzzaszz"}) {
+    for (const auto *const word : {"amavisti", "servus", "zzzzaszz"}) {
         const auto result = test::engine().analyze(word);
         EXPECT_TRUE(std::ranges::none_of(result.analyses, [](const AnalysisIR
                                                                  &analysis) {
@@ -599,26 +599,55 @@ TEST(EngineTest, AnalyzesBoundedCompoundsWithSum) {
         GrammaticalNumber number;
     };
     constexpr std::array fixtures{
-        Fixture{"amata est", CompoundKind::finite_sum, Tense::perfect,
-                Voice::passive, Mood::indicative, 3U,
-                GrammaticalNumber::singular},
-        Fixture{"amati sunt", CompoundKind::finite_sum, Tense::perfect,
-                Voice::passive, Mood::indicative, 3U,
-                GrammaticalNumber::plural},
-        Fixture{"amata fuerit", CompoundKind::finite_sum, Tense::unknown,
-                Voice::passive, Mood::indicative, 3U,
-                GrammaticalNumber::singular},
-        Fixture{"amaturus est", CompoundKind::finite_sum, Tense::present,
-                Voice::passive, Mood::indicative, 3U,
-                GrammaticalNumber::singular},
-        Fixture{"amatus esse", CompoundKind::esse, Tense::perfect,
-                Voice::passive, Mood::infinitive, 0U,
-                GrammaticalNumber::unknown},
-        Fixture{"amaturus fuisse", CompoundKind::fuisse, Tense::perfect,
-                Voice::active, Mood::infinitive, 0U,
-                GrammaticalNumber::unknown},
-        Fixture{"amatum iri", CompoundKind::iri, Tense::future, Voice::passive,
-                Mood::infinitive, 0U, GrammaticalNumber::unknown},
+        Fixture{.text = "amata est",
+                .kind = CompoundKind::finite_sum,
+                .tense = Tense::perfect,
+                .voice = Voice::passive,
+                .mood = Mood::indicative,
+                .person = 3U,
+                .number = GrammaticalNumber::singular},
+        Fixture{.text = "amati sunt",
+                .kind = CompoundKind::finite_sum,
+                .tense = Tense::perfect,
+                .voice = Voice::passive,
+                .mood = Mood::indicative,
+                .person = 3U,
+                .number = GrammaticalNumber::plural},
+        Fixture{.text = "amata fuerit",
+                .kind = CompoundKind::finite_sum,
+                .tense = Tense::unknown,
+                .voice = Voice::passive,
+                .mood = Mood::indicative,
+                .person = 3U,
+                .number = GrammaticalNumber::singular},
+        Fixture{.text = "amaturus est",
+                .kind = CompoundKind::finite_sum,
+                .tense = Tense::present,
+                .voice = Voice::passive,
+                .mood = Mood::indicative,
+                .person = 3U,
+                .number = GrammaticalNumber::singular},
+        Fixture{.text = "amatus esse",
+                .kind = CompoundKind::esse,
+                .tense = Tense::perfect,
+                .voice = Voice::passive,
+                .mood = Mood::infinitive,
+                .person = 0U,
+                .number = GrammaticalNumber::unknown},
+        Fixture{.text = "amaturus fuisse",
+                .kind = CompoundKind::fuisse,
+                .tense = Tense::perfect,
+                .voice = Voice::active,
+                .mood = Mood::infinitive,
+                .person = 0U,
+                .number = GrammaticalNumber::unknown},
+        Fixture{.text = "amatum iri",
+                .kind = CompoundKind::iri,
+                .tense = Tense::future,
+                .voice = Voice::passive,
+                .mood = Mood::infinitive,
+                .person = 0U,
+                .number = GrammaticalNumber::unknown},
     };
 
     for (const auto &fixture : fixtures) {
@@ -666,7 +695,7 @@ TEST(EngineTest, PreservesAuxiliaryDerivationInCompoundAnalysis) {
 }
 
 TEST(EngineTest, RejectsGeneralPhraseParsingOutsideCompoundGrammar) {
-    for (const auto text : {"amata amat", "puella amat servum"}) {
+    for (const auto *const text : {"amata amat", "puella amat servum"}) {
         const auto result = test::engine().analyze_text(text);
         EXPECT_EQ(result.status, QueryStatus::error) << text;
         EXPECT_TRUE(result.analyses.empty()) << text;
@@ -894,7 +923,7 @@ TEST(EngineTest, EmitsSuffixInFullAndSearchJson) {
 }
 
 TEST(EngineTest, AppliesOnePrefixIncludingConnectorConstraint) {
-    for (const auto word : {"archipuella", "appuella"}) {
+    for (const auto *const word : {"archipuella", "appuella"}) {
         const auto result = test::engine().analyze(word);
         ASSERT_EQ(result.status, QueryStatus::analyzed) << word;
         ASSERT_EQ(result.analyses.size(), 3U) << word;
@@ -1108,7 +1137,7 @@ TEST(EngineTest, CoversAliquPronounsAndDeduplicatesCuiquePackons) {
 }
 
 TEST(EngineTest, AppliesPackonWithOptionalTickon) {
-    for (const auto word : {"quidam", "ecquidam"}) {
+    for (const auto *const word : {"quidam", "ecquidam"}) {
         const auto result = test::engine().analyze(word);
         ASSERT_EQ(result.status, QueryStatus::analyzed) << word;
         ASSERT_EQ(result.analyses.size(), 3U) << word;

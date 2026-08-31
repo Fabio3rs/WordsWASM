@@ -42,18 +42,21 @@ parse_options(const int argc, char *const argv[]) {
 
         if (argument == "--database") {
             auto value = require_value(argument);
-            if (!value)
+            if (!value) {
                 return std::unexpected(std::move(value.error()));
+            }
             options.database = *value;
         } else if (argument == "--dataset-id") {
             auto value = require_value(argument);
-            if (!value)
+            if (!value) {
                 return std::unexpected(std::move(value.error()));
+            }
             options.dataset_id = *value;
         } else if (argument == "--format") {
             auto value = require_value(argument);
-            if (!value)
+            if (!value) {
                 return std::unexpected(std::move(value.error()));
+            }
             options.format = *value;
         } else if (argument == "--two-words=legacy") {
             options.two_words = words::TwoWordsMode::legacy_first_match;

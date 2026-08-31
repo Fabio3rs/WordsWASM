@@ -749,7 +749,7 @@ simple_dictionary_form(const Database &database, const LexemeRecord &lexeme,
     return Json{{"governs", case_json(morphology.governs)}};
 }
 
-[[nodiscard]] Json morphology_json(const InvariableMorphology &) {
+[[nodiscard]] Json morphology_json(const InvariableMorphology & /*unused*/) {
     return Json::object();
 }
 

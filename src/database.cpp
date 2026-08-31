@@ -75,7 +75,7 @@ struct SectionView final {
 
 class LoadFailure final : public std::runtime_error {
   public:
-    LoadFailure(std::string code, std::string message)
+    LoadFailure(std::string code, const std::string &message)
         : std::runtime_error{message}, code_{std::move(code)} {}
 
     [[nodiscard]] const std::string &code() const noexcept WORDS_LIFETIMEBOUND {
@@ -86,8 +86,8 @@ class LoadFailure final : public std::runtime_error {
     std::string code_;
 };
 
-[[noreturn]] void fail(std::string code, std::string message) {
-    throw LoadFailure{std::move(code), std::move(message)};
+[[noreturn]] void fail(std::string code, const std::string &message) {
+    throw LoadFailure{std::move(code), message};
 }
 
 [[nodiscard]] std::uint8_t byte_at(const std::span<const std::byte> bytes,
@@ -210,11 +210,9 @@ class RecordView final {
         if (record >= count_ || field >= stride_) {
             fail("truncated-database", "record field is outside its section");
         }
-        const auto offset = columnar_
-                                ? static_cast<std::size_t>(field) * count_ +
-                                      record
-                                : static_cast<std::size_t>(record) * stride_ +
-                                      field;
+        const auto offset =
+            columnar_ ? (static_cast<std::size_t>(field) * count_) + record
+                      : (static_cast<std::size_t>(record) * stride_) + field;
         return byte_at(bytes_, offset);
     }
 
@@ -301,6 +299,7 @@ void parse_string_pool(const std::span<const std::byte> bytes,
             fail("invalid-string-pool", "string extends beyond its WWDB pool");
         }
         const auto string_bytes = bytes.subspan(offset, length);
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
         output.emplace_back(reinterpret_cast<const char *>(string_bytes.data()),
                             string_bytes.size());
         offset += length;
@@ -368,9 +367,11 @@ parse_inflection_quantities(const std::span<const std::byte> image,
                  "inflection quantity has nonzero reserved bits");
         }
         const QuantityMask quantity{
-            static_cast<std::uint32_t>(packed & inflection_quantity_value_mask),
-            static_cast<std::uint32_t>((packed >> maximum_ending_size) &
-                                       inflection_quantity_value_mask),
+            .known = static_cast<std::uint32_t>(packed &
+                                                inflection_quantity_value_mask),
+            .long_vowel =
+                static_cast<std::uint32_t>((packed >> maximum_ending_size) &
+                                           inflection_quantity_value_mask),
         };
         const auto ending = endings[rules[ordinal].ending.value()];
         const auto valid_bits = low_bits(ending.size());
@@ -403,8 +404,8 @@ parse_stem_quantities(const std::span<const std::byte> image,
         const auto lexical_slot =
             (key >> stem_quantity_slot_shift) & stem_quantity_slot_mask;
         const QuantityMask quantity{
-            read_u24_le(bytes, offset + 3U),
-            read_u24_le(bytes, offset + 6U),
+            .known = read_u24_le(bytes, offset + 3U),
+            .long_vowel = read_u24_le(bytes, offset + 6U),
         };
         if ((key >> stem_quantity_key_width) != 0U ||
             lexeme_id >= lexemes.size()) {
@@ -538,10 +539,10 @@ Database::load_poc(std::vector<std::byte> image) try {
     }
     const auto content = profile == search_profile ? DatabaseContent::search
                                                    : DatabaseContent::full;
-    if (content == DatabaseContent::search &&
-        minor < typed_packon_wwdb_minor) {
-        fail("unsupported-version",
-             "search-only WWDB requires typed packon metadata from version 1.8");
+    if (content == DatabaseContent::search && minor < typed_packon_wwdb_minor) {
+        fail(
+            "unsupported-version",
+            "search-only WWDB requires typed packon metadata from version 1.8");
     }
     if (reserved != 0U || declared_size != image.size()) {
         fail("invalid-header", "WWDB reserved field or file size is invalid");
@@ -564,7 +565,7 @@ Database::load_poc(std::vector<std::byte> image) try {
     for (std::uint32_t index = 0; index < section_count; ++index) {
         const auto offset =
             fixed_header_size +
-            static_cast<std::size_t>(index) * directory_entry_size;
+            (static_cast<std::size_t>(index) * directory_entry_size);
         const auto raw_type = read_u32_le(bytes, offset);
         const auto maximum_section_type = minor >= quantity_wwdb_minor
                                               ? quantity_maximum_section_type
@@ -573,12 +574,12 @@ Database::load_poc(std::vector<std::byte> image) try {
             fail("unknown-section", "WWDB contains an unknown section type");
         }
         const SectionView section{
-            static_cast<SectionType>(raw_type),
-            read_u32_le(bytes, offset + 4U),
-            read_u64_le(bytes, offset + 8U),
-            read_u64_le(bytes, offset + 16U),
-            read_u32_le(bytes, offset + 24U),
-            read_u32_le(bytes, offset + 28U),
+            .type = static_cast<SectionType>(raw_type),
+            .flags = read_u32_le(bytes, offset + 4U),
+            .offset = read_u64_le(bytes, offset + 8U),
+            .bytes = read_u64_le(bytes, offset + 16U),
+            .count = read_u32_le(bytes, offset + 24U),
+            .stride = read_u32_le(bytes, offset + 28U),
         };
         if (std::ranges::find(sections, section.type, &SectionView::type) !=
             sections.end()) {
@@ -661,8 +662,8 @@ Database::load_poc(std::vector<std::byte> image) try {
     // finish before any record is decoded into runtime objects.
     validate_section_shapes(sections, content);
 
-    auto database = std::unique_ptr<Database>{
-        new Database{std::move(image), content}};
+    auto database =
+        std::unique_ptr<Database>{new Database{std::move(image), content}};
     const auto owned_bytes = std::span<const std::byte>{database->image_};
     parse_string_pool(section_bytes(owned_bytes, stem_pool_section),
                       stem_pool_section.count, database->stem_strings_);
@@ -936,25 +937,25 @@ Database::load_poc(std::vector<std::byte> image) try {
             fail("invalid-reference",
                  "stem reference points outside lexical data");
         }
-        const StemReference reference{LexemeId{lexeme_id}, lexical_slot,
-                                      stem_key};
+        const StemReference reference{.lexeme = LexemeId{lexeme_id},
+                                      .lexical_slot = lexical_slot,
+                                      .stem_key = stem_key};
         const auto stem_id = database->lexemes_[lexeme_id].stems[lexical_slot];
         indexed_stems.push_back({database->stem_string(stem_id), reference});
     }
-    std::ranges::sort(indexed_stems,
-                      [](const IndexedStem &left, const IndexedStem &right) {
-                          const auto key_order =
-                              normalized_compare(left.key, right.key);
-                          if (key_order != 0) {
-                              return key_order < 0;
-                          }
-                          return std::tuple{left.reference.lexeme.value(),
-                                            left.reference.lexical_slot,
-                                            left.reference.stem_key} <
-                                 std::tuple{right.reference.lexeme.value(),
-                                            right.reference.lexical_slot,
-                                            right.reference.stem_key};
-                      });
+    std::ranges::sort(
+        indexed_stems, [](const IndexedStem &left, const IndexedStem &right) {
+            const auto key_order = normalized_compare(left.key, right.key);
+            if (key_order != 0) {
+                return key_order < 0;
+            }
+            return std::tuple{left.reference.lexeme.value(),
+                              left.reference.lexical_slot,
+                              left.reference.stem_key} <
+                   std::tuple{right.reference.lexeme.value(),
+                              right.reference.lexical_slot,
+                              right.reference.stem_key};
+        });
     database->stem_references_.reserve(indexed_stems.size());
     database->stem_groups_.reserve(stem_pool_section.count);
     for (std::size_t index = 0; index < indexed_stems.size();) {
@@ -1132,15 +1133,14 @@ Database::load_poc(std::vector<std::byte> image) try {
         indexed_rules.push_back(
             {database->ending_string(rule.ending), rule.id});
     }
-    std::ranges::sort(indexed_rules,
-                      [](const IndexedRule &left, const IndexedRule &right) {
-                          const auto key_order =
-                              normalized_compare(left.key, right.key);
-                          if (key_order != 0) {
-                              return key_order < 0;
-                          }
-                          return left.id < right.id;
-                      });
+    std::ranges::sort(
+        indexed_rules, [](const IndexedRule &left, const IndexedRule &right) {
+            const auto key_order = normalized_compare(left.key, right.key);
+            if (key_order != 0) {
+                return key_order < 0;
+            }
+            return left.id < right.id;
+        });
     database->ending_rule_ids_.reserve(indexed_rules.size());
     for (std::size_t index = 0; index < indexed_rules.size();) {
         const auto first = database->ending_rule_ids_.size();
@@ -1228,11 +1228,18 @@ Database::load_poc(std::vector<std::byte> image) try {
                      "unique nominal morphology contains an invalid enum");
             }
             if (part == PartOfSpeech::noun) {
-                decoded = NounMorphology{lexeme.declension, lexeme.variant,
-                                         grammatical_case, number, gender};
+                decoded = NounMorphology{.declension = lexeme.declension,
+                                         .variant = lexeme.variant,
+                                         .grammatical_case = grammatical_case,
+                                         .number = number,
+                                         .gender = gender};
             } else {
-                decoded = PronounMorphology{lexeme.declension, lexeme.variant,
-                                            grammatical_case, number, gender};
+                decoded =
+                    PronounMorphology{.declension = lexeme.declension,
+                                      .variant = lexeme.variant,
+                                      .grammatical_case = grammatical_case,
+                                      .number = number,
+                                      .gender = gender};
             }
         } else if (part == PartOfSpeech::adjective) {
             const auto degree = static_cast<Degree>((morphology >> 8U) & 0x03U);
@@ -1243,12 +1250,12 @@ Database::load_poc(std::vector<std::byte> image) try {
                 fail("invalid-enum",
                      "unique adjective morphology contains an invalid enum");
             }
-            decoded = AdjectiveMorphology{lexeme.declension,
-                                          lexeme.variant,
-                                          grammatical_case,
-                                          number,
-                                          gender,
-                                          degree};
+            decoded = AdjectiveMorphology{.declension = lexeme.declension,
+                                          .variant = lexeme.variant,
+                                          .grammatical_case = grammatical_case,
+                                          .number = number,
+                                          .gender = gender,
+                                          .degree = degree};
         } else if (part == PartOfSpeech::verb) {
             const auto tense = static_cast<Tense>(morphology & 0x07U);
             const auto voice = static_cast<Voice>((morphology >> 3U) & 0x03U);
@@ -1265,9 +1272,13 @@ Database::load_poc(std::vector<std::byte> image) try {
                 fail("invalid-enum",
                      "unique verb morphology contains an invalid enum");
             }
-            decoded = VerbMorphology{
-                lexeme.declension, lexeme.variant, tense, voice, mood, person,
-                verb_number};
+            decoded = VerbMorphology{.conjugation = lexeme.declension,
+                                     .variant = lexeme.variant,
+                                     .tense = tense,
+                                     .voice = voice,
+                                     .mood = mood,
+                                     .person = person,
+                                     .number = verb_number};
         } else {
             fail("invalid-enum", "unsupported unique part of speech");
         }
@@ -1277,11 +1288,11 @@ Database::load_poc(std::vector<std::byte> image) try {
         database->lexemes_.push_back(lexeme);
         indexed_uniques.push_back(
             {database->stem_string(StringId{surface_id}),
-             UniqueReference{lexeme_id, std::move(decoded)}});
+             UniqueReference{.lexeme = lexeme_id, .morphology = decoded}});
     }
 
     std::ranges::sort(indexed_uniques, [](const IndexedUnique &left,
-                                         const IndexedUnique &right) {
+                                          const IndexedUnique &right) {
         const auto key_order = normalized_compare(left.key, right.key);
         if (key_order != 0) {
             return key_order < 0;
@@ -1294,7 +1305,7 @@ Database::load_poc(std::vector<std::byte> image) try {
         const auto key = indexed_uniques[index].key;
         do {
             database->unique_references_.push_back(
-                std::move(indexed_uniques[index].reference));
+                indexed_uniques[index].reference);
             ++index;
         } while (index < indexed_uniques.size() &&
                  normalized_equal(key, indexed_uniques[index].key));
@@ -1412,7 +1423,7 @@ Database::load_poc(std::vector<std::byte> image) try {
             {database->suffix_string(suffix.fix), suffix.id});
     }
     std::ranges::sort(indexed_suffixes, [](const IndexedSuffix &left,
-                                          const IndexedSuffix &right) {
+                                           const IndexedSuffix &right) {
         const auto key_order = normalized_compare(left.key, right.key);
         if (key_order != 0) {
             return key_order < 0;
@@ -1553,7 +1564,8 @@ Database::load_poc(std::vector<std::byte> image) try {
                 AddonKind::unknown) {
             fail("invalid-reference", "addon ID is not dense and unique");
         }
-        database->addon_references_[id.value()] = {kind, ordinal};
+        database->addon_references_[id.value()] = {.kind = kind,
+                                                   .ordinal = ordinal};
     };
     for (std::uint32_t ordinal = 0; ordinal < database->prefixes_.size();
          ++ordinal) {
@@ -1585,8 +1597,8 @@ Database::load_poc(std::vector<std::byte> image) try {
         if (lexeme.required_packon &&
             (lexeme.required_packon->value() >=
                  database->addon_references_.size() ||
-             database->addon_references_[lexeme.required_packon->value()].kind !=
-                 AddonKind::packon)) {
+             database->addon_references_[lexeme.required_packon->value()]
+                     .kind != AddonKind::packon)) {
             fail("invalid-reference",
                  "lexeme packon metadata does not name a packon addon");
         }
@@ -1612,7 +1624,7 @@ Database::load_poc(std::vector<std::byte> image) try {
         indexed_prefixes.push_back({key, prefix.id});
     }
     std::ranges::sort(indexed_prefixes, [](const IndexedPrefix &left,
-                                          const IndexedPrefix &right) {
+                                           const IndexedPrefix &right) {
         const auto key_order = normalized_compare(left.key, right.key);
         if (key_order != 0) {
             return key_order < 0;
@@ -1636,7 +1648,7 @@ Database::load_poc(std::vector<std::byte> image) try {
     }
 
     std::ranges::sort(indexed_tickons, [](const IndexedPrefix &left,
-                                         const IndexedPrefix &right) {
+                                          const IndexedPrefix &right) {
         const auto key_order = normalized_compare(left.key, right.key);
         if (key_order != 0) {
             return key_order < 0;
@@ -1671,8 +1683,7 @@ Database::load_poc(std::vector<std::byte> image) try {
     const auto build_tackon_index = [](auto &source, auto &ids, auto &groups) {
         std::ranges::sort(
             source, [](const IndexedTackon &left, const IndexedTackon &right) {
-                const auto key_order =
-                    normalized_compare(left.key, right.key);
+                const auto key_order = normalized_compare(left.key, right.key);
                 if (key_order != 0) {
                     return key_order < 0;
                 }
@@ -1719,10 +1730,11 @@ Database::load_poc(std::vector<std::byte> image) try {
 
     return std::unique_ptr<const Database>{std::move(database)};
 } catch (const LoadFailure &error) {
-    return std::unexpected(LoadError{error.code(), error.what()});
-} catch (const std::bad_alloc &) {
     return std::unexpected(
-        LoadError{"out-of-memory", "cannot allocate WWDB snapshot"});
+        LoadError{.code = error.code(), .message = error.what()});
+} catch (const std::bad_alloc &) {
+    return std::unexpected(LoadError{
+        .code = "out-of-memory", .message = "cannot allocate WWDB snapshot"});
 }
 
 std::span<const StemReference>

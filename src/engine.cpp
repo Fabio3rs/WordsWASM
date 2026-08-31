@@ -403,14 +403,11 @@ struct EnumerationState final {
     }
 };
 
-void append_regular_analyses(const Database &database,
-                             const SurfaceForm &surface,
-                             const CandidateIR &candidate,
-                             const std::span<const StemReference> stems,
-                             const bool surface_has_quantity,
-                             const DerivationIR &derivation,
-                             std::vector<AnalysisIR> &output,
-                             EnumerationState &state) {
+void append_regular_analyses(
+    const Database &database, const SurfaceForm &surface,
+    const CandidateIR &candidate, const std::span<const StemReference> stems,
+    const bool surface_has_quantity, const DerivationIR &derivation,
+    std::vector<AnalysisIR> &output, EnumerationState &state) {
     const auto &rule = database.rule(candidate.rule);
     for (const auto &stem : stems) {
         const auto &lexeme = database.lexeme(stem.lexeme);
@@ -418,9 +415,8 @@ void append_regular_analyses(const Database &database,
             !stem_key_matches(stem, rule) || !paradigm_matches(lexeme, rule)) {
             continue;
         }
-        const auto quantity_match =
-            candidate_quantity_match(database, surface, candidate, stem,
-                                     surface_has_quantity);
+        const auto quantity_match = candidate_quantity_match(
+            database, surface, candidate, stem, surface_has_quantity);
         if (!quantity_match) {
             continue;
         }
@@ -430,16 +426,19 @@ void append_regular_analyses(const Database &database,
                 continue;
             }
             output.push_back(AnalysisIR{
-                stem.lexeme,
-                candidate.rule,
-                rule.stem_key,
-                candidate.stem,
-                candidate.ending,
-                NounMorphology{lexeme.declension, lexeme.variant,
-                               rule.grammatical_case, rule.number,
-                               lexeme.gender},
-                *quantity_match,
-                derivation,
+                .lexeme = stem.lexeme,
+                .rule = candidate.rule,
+                .stem_key = rule.stem_key,
+                .stem = candidate.stem,
+                .ending = candidate.ending,
+                .morphology =
+                    NounMorphology{.declension = lexeme.declension,
+                                   .variant = lexeme.variant,
+                                   .grammatical_case = rule.grammatical_case,
+                                   .number = rule.number,
+                                   .gender = lexeme.gender},
+                .quantity_match = *quantity_match,
+                .derivation = derivation,
             });
             continue;
         }
@@ -450,16 +449,21 @@ void append_regular_analyses(const Database &database,
                 continue;
             }
             output.push_back(AnalysisIR{
-                stem.lexeme,
-                candidate.rule,
-                rule.stem_key,
-                candidate.stem,
-                candidate.ending,
-                AdjectiveMorphology{
-                    lexeme.declension, lexeme.variant, rule.grammatical_case,
-                    rule.number, rule.gender, adjective_degree(lexeme, stem)},
-                *quantity_match,
-                derivation,
+                .lexeme = stem.lexeme,
+                .rule = candidate.rule,
+                .stem_key = rule.stem_key,
+                .stem = candidate.stem,
+                .ending = candidate.ending,
+                .morphology =
+                    AdjectiveMorphology{
+                        .declension = lexeme.declension,
+                        .variant = lexeme.variant,
+                        .grammatical_case = rule.grammatical_case,
+                        .number = rule.number,
+                        .gender = rule.gender,
+                        .degree = adjective_degree(lexeme, stem)},
+                .quantity_match = *quantity_match,
+                .derivation = derivation,
             });
             continue;
         }
@@ -469,32 +473,40 @@ void append_regular_analyses(const Database &database,
                 continue; // The dedicated qu-/cu-/aliqu- path owns this key.
             }
             output.push_back(AnalysisIR{
-                stem.lexeme,
-                candidate.rule,
-                rule.stem_key,
-                candidate.stem,
-                candidate.ending,
-                PronounMorphology{lexeme.declension, lexeme.variant,
-                                  rule.grammatical_case, rule.number,
-                                  rule.gender},
-                *quantity_match,
-                derivation,
+                .lexeme = stem.lexeme,
+                .rule = candidate.rule,
+                .stem_key = rule.stem_key,
+                .stem = candidate.stem,
+                .ending = candidate.ending,
+                .morphology =
+                    PronounMorphology{.declension = lexeme.declension,
+                                      .variant = lexeme.variant,
+                                      .grammatical_case = rule.grammatical_case,
+                                      .number = rule.number,
+                                      .gender = rule.gender},
+                .quantity_match = *quantity_match,
+                .derivation = derivation,
             });
             continue;
         }
         if (rule.part_of_speech == PartOfSpeech::numeral &&
             lexeme.part_of_speech == PartOfSpeech::numeral) {
             output.push_back(AnalysisIR{
-                stem.lexeme,
-                candidate.rule,
-                rule.stem_key,
-                candidate.stem,
-                candidate.ending,
-                NumeralMorphology{lexeme.declension, lexeme.variant,
-                                  rule.grammatical_case, rule.number,
-                                  rule.gender, numeral_type(lexeme, stem)},
-                *quantity_match,
-                derivation,
+                .lexeme = stem.lexeme,
+                .rule = candidate.rule,
+                .stem_key = rule.stem_key,
+                .stem = candidate.stem,
+                .ending = candidate.ending,
+                .morphology =
+                    NumeralMorphology{.declension = lexeme.declension,
+                                      .variant = lexeme.variant,
+                                      .grammatical_case = rule.grammatical_case,
+                                      .number = rule.number,
+                                      .gender = rule.gender,
+                                      .numeral_type =
+                                          numeral_type(lexeme, stem)},
+                .quantity_match = *quantity_match,
+                .derivation = derivation,
             });
             continue;
         }
@@ -504,14 +516,14 @@ void append_regular_analyses(const Database &database,
                 continue;
             }
             output.push_back(AnalysisIR{
-                stem.lexeme,
-                candidate.rule,
-                rule.stem_key,
-                candidate.stem,
-                candidate.ending,
-                AdverbMorphology{adverb_degree(lexeme, stem)},
-                *quantity_match,
-                derivation,
+                .lexeme = stem.lexeme,
+                .rule = candidate.rule,
+                .stem_key = rule.stem_key,
+                .stem = candidate.stem,
+                .ending = candidate.ending,
+                .morphology = AdverbMorphology{adverb_degree(lexeme, stem)},
+                .quantity_match = *quantity_match,
+                .derivation = derivation,
             });
             continue;
         }
@@ -523,47 +535,61 @@ void append_regular_analyses(const Database &database,
             const auto [conjugation, variant] =
                 public_verb_paradigm(lexeme.declension, lexeme.variant);
             output.push_back(AnalysisIR{
-                stem.lexeme,
-                candidate.rule,
-                rule.stem_key,
-                candidate.stem,
-                candidate.ending,
-                VerbMorphology{conjugation, variant, rule.tense, rule.voice,
-                               rule.mood, rule.person, rule.number},
-                *quantity_match,
-                derivation,
+                .lexeme = stem.lexeme,
+                .rule = candidate.rule,
+                .stem_key = rule.stem_key,
+                .stem = candidate.stem,
+                .ending = candidate.ending,
+                .morphology = VerbMorphology{.conjugation = conjugation,
+                                             .variant = variant,
+                                             .tense = rule.tense,
+                                             .voice = rule.voice,
+                                             .mood = rule.mood,
+                                             .person = rule.person,
+                                             .number = rule.number},
+                .quantity_match = *quantity_match,
+                .derivation = derivation,
             });
             continue;
         }
         if (lexeme.part_of_speech == PartOfSpeech::verb &&
             rule.part_of_speech == PartOfSpeech::participle) {
             output.push_back(AnalysisIR{
-                stem.lexeme,
-                candidate.rule,
-                rule.stem_key,
-                candidate.stem,
-                candidate.ending,
-                ParticipleMorphology{lexeme.declension, lexeme.variant,
-                                     rule.grammatical_case, rule.number,
-                                     rule.gender, rule.tense, rule.voice},
-                *quantity_match,
-                derivation,
+                .lexeme = stem.lexeme,
+                .rule = candidate.rule,
+                .stem_key = rule.stem_key,
+                .stem = candidate.stem,
+                .ending = candidate.ending,
+                .morphology =
+                    ParticipleMorphology{.conjugation = lexeme.declension,
+                                         .variant = lexeme.variant,
+                                         .grammatical_case =
+                                             rule.grammatical_case,
+                                         .number = rule.number,
+                                         .gender = rule.gender,
+                                         .tense = rule.tense,
+                                         .voice = rule.voice},
+                .quantity_match = *quantity_match,
+                .derivation = derivation,
             });
             continue;
         }
         if (lexeme.part_of_speech == PartOfSpeech::verb &&
             rule.part_of_speech == PartOfSpeech::supine) {
             output.push_back(AnalysisIR{
-                stem.lexeme,
-                candidate.rule,
-                rule.stem_key,
-                candidate.stem,
-                candidate.ending,
-                SupineMorphology{lexeme.declension, lexeme.variant,
-                                 rule.grammatical_case, rule.number,
-                                 rule.gender},
-                *quantity_match,
-                derivation,
+                .lexeme = stem.lexeme,
+                .rule = candidate.rule,
+                .stem_key = rule.stem_key,
+                .stem = candidate.stem,
+                .ending = candidate.ending,
+                .morphology =
+                    SupineMorphology{.conjugation = lexeme.declension,
+                                     .variant = lexeme.variant,
+                                     .grammatical_case = rule.grammatical_case,
+                                     .number = rule.number,
+                                     .gender = rule.gender},
+                .quantity_match = *quantity_match,
+                .derivation = derivation,
             });
             continue;
         }
@@ -573,14 +599,14 @@ void append_regular_analyses(const Database &database,
                 continue;
             }
             output.push_back(AnalysisIR{
-                stem.lexeme,
-                candidate.rule,
-                rule.stem_key,
-                candidate.stem,
-                candidate.ending,
-                PrepositionMorphology{rule.grammatical_case},
-                *quantity_match,
-                derivation,
+                .lexeme = stem.lexeme,
+                .rule = candidate.rule,
+                .stem_key = rule.stem_key,
+                .stem = candidate.stem,
+                .ending = candidate.ending,
+                .morphology = PrepositionMorphology{rule.grammatical_case},
+                .quantity_match = *quantity_match,
+                .derivation = derivation,
             });
             continue;
         }
@@ -588,14 +614,14 @@ void append_regular_analyses(const Database &database,
              rule.part_of_speech == PartOfSpeech::interjection) &&
             lexeme.part_of_speech == rule.part_of_speech) {
             output.push_back(AnalysisIR{
-                stem.lexeme,
-                candidate.rule,
-                rule.stem_key,
-                candidate.stem,
-                candidate.ending,
-                InvariableMorphology{},
-                *quantity_match,
-                derivation,
+                .lexeme = stem.lexeme,
+                .rule = candidate.rule,
+                .stem_key = rule.stem_key,
+                .stem = candidate.stem,
+                .ending = candidate.ending,
+                .morphology = InvariableMorphology{},
+                .quantity_match = *quantity_match,
+                .derivation = derivation,
             });
             continue;
         }
@@ -740,9 +766,10 @@ void append_prefix_analyses(const Database &database,
                 previous_stem = candidate.stem;
                 const auto stem_text = candidate_stem(surface, candidate);
                 matching_prefix = prefix_matches(database, prefix, stem_text);
-                base_stems = matching_prefix
-                                 ? database.lookup_stem(stem_text.substr(fix_size))
-                                 : std::span<const StemReference>{};
+                base_stems =
+                    matching_prefix
+                        ? database.lookup_stem(stem_text.substr(fix_size))
+                        : std::span<const StemReference>{};
             }
             if (!matching_prefix) {
                 continue;
@@ -828,16 +855,19 @@ void append_suffix_semantics(
                 continue;
             }
             output.push_back(AnalysisIR{
-                stem.lexeme,
-                candidate.rule,
-                rule.stem_key,
-                candidate.stem,
-                candidate.ending,
-                NounMorphology{suffix.target_declension, suffix.target_variant,
-                               rule.grammatical_case, rule.number,
-                               suffix.target_gender},
-                quantity_match,
-                *derivation,
+                .lexeme = stem.lexeme,
+                .rule = candidate.rule,
+                .stem_key = rule.stem_key,
+                .stem = candidate.stem,
+                .ending = candidate.ending,
+                .morphology =
+                    NounMorphology{.declension = suffix.target_declension,
+                                   .variant = suffix.target_variant,
+                                   .grammatical_case = rule.grammatical_case,
+                                   .number = rule.number,
+                                   .gender = suffix.target_gender},
+                .quantity_match = quantity_match,
+                .derivation = *derivation,
             });
             continue;
         }
@@ -847,34 +877,42 @@ void append_suffix_semantics(
                 continue;
             }
             output.push_back(AnalysisIR{
-                stem.lexeme,
-                candidate.rule,
-                rule.stem_key,
-                candidate.stem,
-                candidate.ending,
-                AdjectiveMorphology{
-                    suffix.target_declension, suffix.target_variant,
-                    rule.grammatical_case, rule.number, rule.gender,
-                    transformed_adjective_degree(suffix)},
-                quantity_match,
-                *derivation,
+                .lexeme = stem.lexeme,
+                .rule = candidate.rule,
+                .stem_key = rule.stem_key,
+                .stem = candidate.stem,
+                .ending = candidate.ending,
+                .morphology =
+                    AdjectiveMorphology{
+                        .declension = suffix.target_declension,
+                        .variant = suffix.target_variant,
+                        .grammatical_case = rule.grammatical_case,
+                        .number = rule.number,
+                        .gender = rule.gender,
+                        .degree = transformed_adjective_degree(suffix)},
+                .quantity_match = quantity_match,
+                .derivation = *derivation,
             });
             continue;
         }
         if (suffix.target == PartOfSpeech::numeral &&
             rule.part_of_speech == PartOfSpeech::numeral) {
             output.push_back(AnalysisIR{
-                stem.lexeme,
-                candidate.rule,
-                rule.stem_key,
-                candidate.stem,
-                candidate.ending,
-                NumeralMorphology{suffix.target_declension,
-                                  suffix.target_variant, rule.grammatical_case,
-                                  rule.number, rule.gender,
-                                  transformed_numeral_type(suffix)},
-                quantity_match,
-                *derivation,
+                .lexeme = stem.lexeme,
+                .rule = candidate.rule,
+                .stem_key = rule.stem_key,
+                .stem = candidate.stem,
+                .ending = candidate.ending,
+                .morphology =
+                    NumeralMorphology{.declension = suffix.target_declension,
+                                      .variant = suffix.target_variant,
+                                      .grammatical_case = rule.grammatical_case,
+                                      .number = rule.number,
+                                      .gender = rule.gender,
+                                      .numeral_type =
+                                          transformed_numeral_type(suffix)},
+                .quantity_match = quantity_match,
+                .derivation = *derivation,
             });
             continue;
         }
@@ -884,14 +922,15 @@ void append_suffix_semantics(
                 continue;
             }
             output.push_back(AnalysisIR{
-                stem.lexeme,
-                candidate.rule,
-                rule.stem_key,
-                candidate.stem,
-                candidate.ending,
-                AdverbMorphology{transformed_adverb_degree(suffix)},
-                quantity_match,
-                *derivation,
+                .lexeme = stem.lexeme,
+                .rule = candidate.rule,
+                .stem_key = rule.stem_key,
+                .stem = candidate.stem,
+                .ending = candidate.ending,
+                .morphology =
+                    AdverbMorphology{transformed_adverb_degree(suffix)},
+                .quantity_match = quantity_match,
+                .derivation = *derivation,
             });
             continue;
         }
@@ -900,48 +939,61 @@ void append_suffix_semantics(
             const auto [conjugation, variant] = public_verb_paradigm(
                 suffix.target_declension, suffix.target_variant);
             output.push_back(AnalysisIR{
-                stem.lexeme,
-                candidate.rule,
-                rule.stem_key,
-                candidate.stem,
-                candidate.ending,
-                VerbMorphology{conjugation, variant, rule.tense, rule.voice,
-                               rule.mood, rule.person, rule.number},
-                quantity_match,
-                *derivation,
+                .lexeme = stem.lexeme,
+                .rule = candidate.rule,
+                .stem_key = rule.stem_key,
+                .stem = candidate.stem,
+                .ending = candidate.ending,
+                .morphology = VerbMorphology{.conjugation = conjugation,
+                                             .variant = variant,
+                                             .tense = rule.tense,
+                                             .voice = rule.voice,
+                                             .mood = rule.mood,
+                                             .person = rule.person,
+                                             .number = rule.number},
+                .quantity_match = quantity_match,
+                .derivation = *derivation,
             });
             continue;
         }
         if (suffix.target == PartOfSpeech::verb &&
             rule.part_of_speech == PartOfSpeech::participle) {
             output.push_back(AnalysisIR{
-                stem.lexeme,
-                candidate.rule,
-                rule.stem_key,
-                candidate.stem,
-                candidate.ending,
-                ParticipleMorphology{suffix.target_declension,
-                                     suffix.target_variant,
-                                     rule.grammatical_case, rule.number,
-                                     rule.gender, rule.tense, rule.voice},
-                quantity_match,
-                *derivation,
+                .lexeme = stem.lexeme,
+                .rule = candidate.rule,
+                .stem_key = rule.stem_key,
+                .stem = candidate.stem,
+                .ending = candidate.ending,
+                .morphology =
+                    ParticipleMorphology{
+                        .conjugation = suffix.target_declension,
+                        .variant = suffix.target_variant,
+                        .grammatical_case = rule.grammatical_case,
+                        .number = rule.number,
+                        .gender = rule.gender,
+                        .tense = rule.tense,
+                        .voice = rule.voice},
+                .quantity_match = quantity_match,
+                .derivation = *derivation,
             });
             continue;
         }
         if (suffix.target == PartOfSpeech::verb &&
             rule.part_of_speech == PartOfSpeech::supine) {
             output.push_back(AnalysisIR{
-                stem.lexeme,
-                candidate.rule,
-                rule.stem_key,
-                candidate.stem,
-                candidate.ending,
-                SupineMorphology{suffix.target_declension,
-                                 suffix.target_variant, rule.grammatical_case,
-                                 rule.number, rule.gender},
-                quantity_match,
-                *derivation,
+                .lexeme = stem.lexeme,
+                .rule = candidate.rule,
+                .stem_key = rule.stem_key,
+                .stem = candidate.stem,
+                .ending = candidate.ending,
+                .morphology =
+                    SupineMorphology{.conjugation = suffix.target_declension,
+                                     .variant = suffix.target_variant,
+                                     .grammatical_case = rule.grammatical_case,
+                                     .number = rule.number,
+                                     .gender = rule.gender},
+                .quantity_match = quantity_match,
+                .derivation = *derivation,
             });
             continue;
         }
@@ -973,9 +1025,9 @@ void append_suffix_analyses(const Database &database,
     for (const auto suffix_id : suffix_ids) {
         const auto &suffix = database.suffix(suffix_id);
         if (!allow_prefix_fallback &&
-            !(database.suffix_string(suffix.fix) == "e" &&
-              suffix.root == PartOfSpeech::adjective &&
-              suffix.target == PartOfSpeech::adverb)) {
+            (database.suffix_string(suffix.fix) != "e" ||
+             PartOfSpeech::adjective != suffix.root ||
+             PartOfSpeech::adverb != suffix.target)) {
             // WHY: coexistence with a regular word is a narrow property of
             // the productive adjective-to-adverb -e rule.  Treating every
             // suffix as a concurrent grammar floods ordinary forms with
@@ -994,11 +1046,10 @@ void append_suffix_analyses(const Database &database,
                 previous_stem = candidate.stem;
                 const auto stem_text = candidate_stem(surface, candidate);
                 matching_suffix = suffix_matches(database, suffix, stem_text);
-                base_stems =
-                    matching_suffix
-                        ? database.lookup_stem(stem_text.substr(
-                              0, stem_text.size() - suffix_size))
-                        : std::span<const StemReference>{};
+                base_stems = matching_suffix
+                                 ? database.lookup_stem(stem_text.substr(
+                                       0, stem_text.size() - suffix_size))
+                                 : std::span<const StemReference>{};
             }
             if (matching_suffix && !base_stems.empty()) {
                 dictionary_hit = true;
@@ -1016,17 +1067,16 @@ void append_suffix_analyses(const Database &database,
                     const auto stem_text = candidate_stem(surface, candidate);
                     matching_suffix =
                         suffix_matches(database, suffix, stem_text);
-                    base_stems =
-                        matching_suffix
-                            ? database.lookup_stem(stem_text.substr(
-                                  0, stem_text.size() - suffix_size))
-                            : std::span<const StemReference>{};
+                    base_stems = matching_suffix
+                                     ? database.lookup_stem(stem_text.substr(
+                                           0, stem_text.size() - suffix_size))
+                                     : std::span<const StemReference>{};
                 }
                 if (!matching_suffix) {
                     continue;
                 }
-                append_suffix_semantics(database, candidate, suffix,
-                                        base_stems, std::nullopt, quantity_match,
+                append_suffix_semantics(database, candidate, suffix, base_stems,
+                                        std::nullopt, quantity_match,
                                         initial_derivation, output, state);
             }
             continue;
@@ -1072,18 +1122,16 @@ void append_suffix_analyses(const Database &database,
                     matching_suffix =
                         suffix_matches(database, suffix, stem_text);
                     const auto without_suffix =
-                        matching_suffix
-                            ? stem_text.substr(0,
-                                               stem_text.size() - suffix_size)
-                            : std::string_view{};
+                        matching_suffix ? stem_text.substr(0, stem_text.size() -
+                                                                  suffix_size)
+                                        : std::string_view{};
                     matching_prefix =
                         matching_suffix &&
                         prefix_matches(database, prefix, without_suffix);
-                    base_stems =
-                        matching_prefix
-                            ? database.lookup_stem(
-                                  without_suffix.substr(prefix_size))
-                            : std::span<const StemReference>{};
+                    base_stems = matching_prefix
+                                     ? database.lookup_stem(
+                                           without_suffix.substr(prefix_size))
+                                     : std::span<const StemReference>{};
                 }
                 if (!matching_prefix) {
                     continue;
@@ -1093,9 +1141,9 @@ void append_suffix_analyses(const Database &database,
                     static_cast<std::uint32_t>(prefix_size);
                 projected_candidate.stem.count -=
                     static_cast<std::uint32_t>(prefix_size);
-                append_suffix_semantics(
-                    database, projected_candidate, suffix, base_stems, prefix_id,
-                    quantity_match, initial_derivation, output, state);
+                append_suffix_semantics(database, projected_candidate, suffix,
+                                        base_stems, prefix_id, quantity_match,
+                                        initial_derivation, output, state);
             }
             if (output.size() != output_before ||
                 state.unsupported != unsupported_before) {
@@ -1128,7 +1176,8 @@ enumerate_candidates(const Database &database, const SurfaceForm &surface,
         const auto stem_size = word_text.size() - ending_size;
         const auto ending_text = word_text.substr(stem_size);
         const auto rules = database.lookup_ending(ending_text);
-        groups[group_count++] = EndingGroup{stem_size, ending_size, rules};
+        groups[group_count++] = EndingGroup{
+            .stem_size = stem_size, .ending_size = ending_size, .rules = rules};
         candidate_count += rules.size();
         if (ending_size == 0U) {
             break;
@@ -1140,12 +1189,15 @@ enumerate_candidates(const Database &database, const SurfaceForm &surface,
     for (const auto &group : std::span{groups}.first(group_count)) {
         for (const auto rule_id : group.rules) {
             candidates.push_back(CandidateIR{
-                rule_id,
-                SurfaceRange{word.begin,
-                             static_cast<std::uint32_t>(group.stem_size)},
-                SurfaceRange{
-                    word.begin + static_cast<std::uint32_t>(group.stem_size),
-                    static_cast<std::uint32_t>(group.ending_size)},
+                .rule = rule_id,
+                .stem = SurfaceRange{.begin = word.begin,
+                                     .count = static_cast<std::uint32_t>(
+                                         group.stem_size)},
+                .ending =
+                    SurfaceRange{
+                        .begin = word.begin +
+                                 static_cast<std::uint32_t>(group.stem_size),
+                        .count = static_cast<std::uint32_t>(group.ending_size)},
             });
         }
     }
@@ -1171,14 +1223,15 @@ void append_unique_analyses(const Database &database,
         // as the complete surface and the ending empty matches Ada and avoids
         // implying a decomposition that the source never asserted.
         output.push_back(AnalysisIR{
-            unique.lexeme,
-            std::nullopt,
-            0U,
-            word,
-            SurfaceRange{word.begin + word.count, 0U},
-            std::move(morphology),
-            quantity_match,
-            derivation,
+            .lexeme = unique.lexeme,
+            .rule = std::nullopt,
+            .stem_key = 0U,
+            .stem = word,
+            .ending =
+                SurfaceRange{.begin = word.begin + word.count, .count = 0U},
+            .morphology = morphology,
+            .quantity_match = quantity_match,
+            .derivation = derivation,
         });
     }
 }
@@ -1220,8 +1273,8 @@ void append_word_analyses(const Database &database, const SurfaceForm &surface,
         });
     if (!had_direct_analysis && !regular_hit && !state.unsupported) {
         append_prefix_analyses(database, surface, candidates,
-                               surface_has_quantity,
-                               initial_derivation, output, state);
+                               surface_has_quantity, initial_derivation, output,
+                               state);
     }
     const auto prefix_hit = output.size() != output_after_regular;
     if (!had_direct_analysis && !prefix_hit && !regular_has_adverb &&
@@ -1344,18 +1397,21 @@ void append_tackon_analyses(const Database &database,
         EnumerationState local_state;
         append_unique_analyses(
             database, surface,
-            SurfaceRange{word.begin,
-                         word.count - static_cast<std::uint32_t>(fix_size)},
+            SurfaceRange{.begin = word.begin,
+                         .count =
+                             word.count - static_cast<std::uint32_t>(fix_size)},
             quantity_match, derivation, derived);
         append_qu_pronoun_analyses(
             database, surface,
-            SurfaceRange{word.begin,
-                         word.count - static_cast<std::uint32_t>(fix_size)},
+            SurfaceRange{.begin = word.begin,
+                         .count =
+                             word.count - static_cast<std::uint32_t>(fix_size)},
             quantity_match, derivation, derived);
         append_word_analyses(
             database, surface,
-            SurfaceRange{word.begin,
-                         word.count - static_cast<std::uint32_t>(fix_size)},
+            SurfaceRange{.begin = word.begin,
+                         .count =
+                             word.count - static_cast<std::uint32_t>(fix_size)},
             quantity_match, derivation, derived, local_state);
         std::erase_if(derived, [&](const AnalysisIR &analysis) {
             return !tackon_accepts(tackon, analysis.morphology);
@@ -1404,7 +1460,7 @@ roman_numeral_with_tackon(const Database &database, const SurfaceForm &surface,
         // deliberately cautious public label is “ill-formed” even when the
         // stripped base is independently valid.
         result.well_formed = false;
-        result.stem = SurfaceRange{word.begin, base_size};
+        result.stem = SurfaceRange{.begin = word.begin, .count = base_size};
         result.derivation.addon_ids.front() = id;
         result.derivation.count = 1U;
         return result;
@@ -1440,7 +1496,8 @@ void append_packon_analyses(const Database &database,
             continue;
         }
         const SurfaceRange base_word{
-            word.begin, word.count - static_cast<std::uint32_t>(fix.size())};
+            .begin = word.begin,
+            .count = word.count - static_cast<std::uint32_t>(fix.size())};
         const auto base_text = std::string_view{surface.lookup_ascii}.substr(
             base_word.begin, base_word.count);
         if (base_text.size() < 3U ||
@@ -1466,7 +1523,8 @@ void append_packon_analyses(const Database &database,
                 previous_stem->begin != candidate.stem.begin ||
                 previous_stem->count != candidate.stem.count) {
                 previous_stem = candidate.stem;
-                stems = database.lookup_stem(candidate_stem(surface, candidate));
+                stems =
+                    database.lookup_stem(candidate_stem(surface, candidate));
             }
             for (const auto &stem : stems) {
                 const auto &lexeme = database.lexeme(stem.lexeme);
@@ -1480,24 +1538,27 @@ void append_packon_analyses(const Database &database,
                         return false;
                     }
                     const auto meaning = database.meaning(lexeme.meaning);
-                    const auto marker =
-                        std::string{"(w/-"} + std::string{fix};
+                    const auto marker = std::string{"(w/-"} + std::string{fix};
                     return meaning.starts_with(marker);
                 }();
                 if (!typed_match && !legacy_match) {
                     continue;
                 }
                 output.push_back(AnalysisIR{
-                    stem.lexeme,
-                    candidate.rule,
-                    rule.stem_key,
-                    candidate.stem,
-                    candidate.ending,
-                    PronounMorphology{rule.declension, 0U,
-                                      rule.grammatical_case, rule.number,
-                                      rule.gender},
-                    quantity_match,
-                    *derivation,
+                    .lexeme = stem.lexeme,
+                    .rule = candidate.rule,
+                    .stem_key = rule.stem_key,
+                    .stem = candidate.stem,
+                    .ending = candidate.ending,
+                    .morphology =
+                        PronounMorphology{.declension = rule.declension,
+                                          .variant = 0U,
+                                          .grammatical_case =
+                                              rule.grammatical_case,
+                                          .number = rule.number,
+                                          .gender = rule.gender},
+                    .quantity_match = quantity_match,
+                    .derivation = *derivation,
                 });
             }
         }
@@ -1545,15 +1606,19 @@ void append_qu_pronoun_analyses(const Database &database,
                 continue;
             }
             output.push_back(AnalysisIR{
-                stem.lexeme,
-                candidate.rule,
-                rule.stem_key,
-                candidate.stem,
-                candidate.ending,
-                PronounMorphology{rule.declension, 0U, rule.grammatical_case,
-                                  rule.number, rule.gender},
-                quantity_match,
-                derivation,
+                .lexeme = stem.lexeme,
+                .rule = candidate.rule,
+                .stem_key = rule.stem_key,
+                .stem = candidate.stem,
+                .ending = candidate.ending,
+                .morphology =
+                    PronounMorphology{.declension = rule.declension,
+                                      .variant = 0U,
+                                      .grammatical_case = rule.grammatical_case,
+                                      .number = rule.number,
+                                      .gender = rule.gender},
+                .quantity_match = quantity_match,
+                .derivation = derivation,
             });
         }
     }
@@ -1586,8 +1651,8 @@ void append_tickon_analyses(const Database &database,
         }
         const auto fix_size = database.prefix_string(tickon.fix).size();
         const SurfaceRange base_word{
-            word.begin + static_cast<std::uint32_t>(fix_size),
-            word.count - static_cast<std::uint32_t>(fix_size)};
+            .begin = word.begin + static_cast<std::uint32_t>(fix_size),
+            .count = word.count - static_cast<std::uint32_t>(fix_size)};
         const auto base_text = std::string_view{surface.lookup_ascii}.substr(
             base_word.begin, base_word.count);
         if (base_text.size() < 3U ||
@@ -1673,7 +1738,8 @@ struct LexicalBatch final {
     const auto quantity_match = has_quantity(surface)
                                     ? QuantityMatch::unknown
                                     : QuantityMatch::unspecified;
-    const SurfaceRange full_word{0U, static_cast<std::uint32_t>(logical_size)};
+    const SurfaceRange full_word{
+        .begin = 0U, .count = static_cast<std::uint32_t>(logical_size)};
 
     append_unique_analyses(database, surface, full_word, quantity_match,
                            DerivationIR{}, result.analyses);
@@ -1731,9 +1797,8 @@ struct LexicalBatch final {
             // WHY: a confirmed marked form is stronger evidence than a row
             // whose quantity is still absent from the gradually enriched DB.
             // Stable partitioning preserves every legacy tie inside each tier.
-            std::stable_partition(
-                result.analyses.begin(), result.analyses.end(),
-                [](const AnalysisIR &analysis) {
+            std::ranges::stable_partition(
+                result.analyses, [](const AnalysisIR &analysis) {
                     return analysis.quantity_match == QuantityMatch::exact;
                 });
         }
@@ -1802,14 +1867,15 @@ analyze_two_words(const Database &database, const LatinLexer &lexer,
         const bool both_contain_numeral =
             contains_numeral(left.analyses) && contains_numeral(right.analyses);
         return TwoWordSuggestionIR{
-            static_cast<std::uint32_t>(split),
-            std::array{
-                WordSegmentIR{std::move(*left_surface),
-                              std::move(left.analyses)},
-                WordSegmentIR{std::move(*right_surface),
-                              std::move(right.analyses)},
-            },
-            both_contain_numeral,
+            .logical_split = static_cast<std::uint32_t>(split),
+            .segments =
+                std::array{
+                    WordSegmentIR{.surface = std::move(*left_surface),
+                                  .analyses = std::move(left.analyses)},
+                    WordSegmentIR{.surface = std::move(*right_surface),
+                                  .analyses = std::move(right.analyses)},
+                },
+            .both_contain_numeral = both_contain_numeral,
         };
     }
     return std::nullopt;
@@ -2131,8 +2197,8 @@ analyze_orthography_with_tackon(const Database &database,
         }
 
         const auto base_count = word.size() - fix.size();
-        auto base = lexer.lex(
-            surface.slice({0U, static_cast<std::uint32_t>(base_count)}));
+        auto base = lexer.lex(surface.slice(
+            {.begin = 0U, .count = static_cast<std::uint32_t>(base_count)}));
         if (!base) {
             return {};
         }
@@ -2260,15 +2326,15 @@ void append_compound(const AnalysisIR &source, const CompoundKind kind,
                      const VerbMorphology morphology,
                      std::vector<CompoundAnalysisIR> &output) {
     output.push_back(CompoundAnalysisIR{
-        source.lexeme,
-        source.rule,
-        morphology,
-        source.derivation,
-        auxiliary_derivation,
-        kind,
-        source_tense,
-        source_voice,
-        std::string{auxiliary},
+        .lexeme = source.lexeme,
+        .source_rule = source.rule,
+        .morphology = morphology,
+        .source_derivation = source.derivation,
+        .auxiliary_derivation = auxiliary_derivation,
+        .kind = kind,
+        .source_tense = source_tense,
+        .source_voice = source_voice,
+        .auxiliary = std::string{auxiliary},
     });
 }
 
@@ -2276,14 +2342,14 @@ void analyze_compound(const Database &database, QueryResult &result,
                       const QueryResult &auxiliary) {
     const auto auxiliary_word = auxiliary.surface.lookup_ascii;
     const auto *finite_analysis = finite_sum_morphology(database, auxiliary);
-    const auto *finite = finite_analysis == nullptr
-                             ? nullptr
-                             : std::get_if<VerbMorphology>(
-                                   &finite_analysis->morphology);
+    const auto *finite =
+        finite_analysis == nullptr
+            ? nullptr
+            : std::get_if<VerbMorphology>(&finite_analysis->morphology);
     const auto kind = auxiliary_word == "esse"     ? CompoundKind::esse
                       : auxiliary_word == "fuisse" ? CompoundKind::fuisse
                       : auxiliary_word == "iri"    ? CompoundKind::iri
-                      : finite                     ? CompoundKind::finite_sum
+                      : (finite != nullptr)        ? CompoundKind::finite_sum
                                                    : CompoundKind{};
 
     std::vector<AnalysisIR> sources;
@@ -2295,10 +2361,10 @@ void analyze_compound(const Database &database, QueryResult &result,
                 continue;
             }
 
-            VerbMorphology morphology{participle->conjugation,
-                                      participle->variant};
+            VerbMorphology morphology{.conjugation = participle->conjugation,
+                                      .variant = participle->variant};
             bool accepts{};
-            if (kind == CompoundKind::finite_sum && finite &&
+            if (kind == CompoundKind::finite_sum && (finite != nullptr) &&
                 participle->grammatical_case == GrammaticalCase::nominative &&
                 participle->number == finite->number) {
                 accepts = true;
@@ -2351,11 +2417,14 @@ void analyze_compound(const Database &database, QueryResult &result,
         const auto [conjugation, variant] =
             public_verb_paradigm(supine->conjugation, supine->variant);
         append_compound(analysis, kind, Tense::unknown, Voice::unknown,
-                        auxiliary.surface.normalized_nfc,
-                        DerivationIR{},
-                        VerbMorphology{conjugation, variant, Tense::future,
-                                       Voice::passive, Mood::infinitive, 0U,
-                                       GrammaticalNumber::unknown},
+                        auxiliary.surface.normalized_nfc, DerivationIR{},
+                        VerbMorphology{.conjugation = conjugation,
+                                       .variant = variant,
+                                       .tense = Tense::future,
+                                       .voice = Voice::passive,
+                                       .mood = Mood::infinitive,
+                                       .person = 0U,
+                                       .number = GrammaticalNumber::unknown},
                         result.compound_analyses);
         sources.push_back(std::move(analysis));
     }
@@ -2373,9 +2442,10 @@ bool valid_dataset_id(const std::string_view value) noexcept {
 std::expected<std::unique_ptr<const Engine>, LoadError>
 Engine::create(std::vector<std::byte> database_image, EngineConfig config) {
     if (!valid_dataset_id(config.dataset_id)) {
-        return std::unexpected(LoadError{
-            "invalid-dataset-id",
-            "datasetId must be sha256: followed by 64 lowercase hex digits"});
+        return std::unexpected(
+            LoadError{.code = "invalid-dataset-id",
+                      .message = "datasetId must be sha256: followed by 64 "
+                                 "lowercase hex digits"});
     }
     auto database = Database::load_poc(std::move(database_image));
     if (!database) {
@@ -2399,7 +2469,8 @@ QueryResult Engine::analyze(const std::string_view utf8,
     QueryResult result;
     result.surface = std::move(*lexed);
     const auto logical_size = result.surface.lookup_ascii.size();
-    const SurfaceRange full_word{0U, static_cast<std::uint32_t>(logical_size)};
+    const SurfaceRange full_word{
+        .begin = 0U, .count = static_cast<std::uint32_t>(logical_size)};
 
     // A valid numeral is an independent reading and therefore coexists with
     // lexical homographs such as mi and di.  The permissive medieval reading
@@ -2546,7 +2617,8 @@ QueryResult Engine::analyze_text(const std::string_view utf8,
         auto result = analyze(tokenized.tokens.front(), options);
         if (tokenized.tokens.front() != utf8) {
             result.multi_token_query = MultiTokenQueryIR{
-                std::string{utf8}, result.surface.normalized_nfc};
+                .original_utf8 = std::string{utf8},
+                .normalized_nfc = result.surface.normalized_nfc};
         }
         return result;
     }
@@ -2554,7 +2626,8 @@ QueryResult Engine::analyze_text(const std::string_view utf8,
     if (tokenized.count != 2U) {
         QueryResult result;
         result.surface.original_utf8.assign(utf8);
-        result.multi_token_query = MultiTokenQueryIR{std::string{utf8}, {}};
+        result.multi_token_query = MultiTokenQueryIR{
+            .original_utf8 = std::string{utf8}, .normalized_nfc = {}};
         result.status = QueryStatus::error;
         result.diagnostics.push_back({"unsupported-token-count", "error", {}});
         return result;
@@ -2566,7 +2639,8 @@ QueryResult Engine::analyze_text(const std::string_view utf8,
     normalized.push_back(' ');
     normalized.append(auxiliary.surface.normalized_nfc);
     result.multi_token_query =
-        MultiTokenQueryIR{std::string{utf8}, std::move(normalized)};
+        MultiTokenQueryIR{.original_utf8 = std::string{utf8},
+                          .normalized_nfc = std::move(normalized)};
 
     if (result.status == QueryStatus::error ||
         auxiliary.status == QueryStatus::error) {
@@ -2584,7 +2658,9 @@ QueryResult Engine::analyze_text(const std::string_view utf8,
     if (result.compound_analyses.empty()) {
         result.analyses.clear();
         result.status = QueryStatus::error;
-        result.diagnostics = {{"unsupported-multi-token", "error", {}}};
+        result.diagnostics = {{.code = "unsupported-multi-token",
+                               .severity = "error",
+                               .part_of_speech = {}}};
         return result;
     }
     result.status = QueryStatus::analyzed;

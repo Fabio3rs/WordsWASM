@@ -182,8 +182,8 @@ struct CompiledLexeme final {
 
 std::uint8_t pack_paradigm(std::uint32_t which, std::uint32_t variant);
 
-[[noreturn]] void fail(std::string message) {
-    throw std::runtime_error(std::move(message));
+[[noreturn]] void fail(const std::string &message) {
+    throw std::runtime_error(message);
 }
 
 std::string_view trim(std::string_view value);
@@ -538,7 +538,7 @@ std::uint8_t enum_value(std::string_view value,
             return lower(first) == lower(second);
         });
     };
-    const auto found =
+    const auto *const found =
         std::ranges::find_if(names, [&](const std::string_view name) {
             return ascii_equal(name, value);
         });
@@ -553,7 +553,7 @@ std::uint8_t part_of_speech(std::string_view value,
                             std::string_view source = "ADDONS.LAT") {
     constexpr std::array<std::string_view, 8> names{
         "X", "N", "PRON", "PACK", "ADJ", "NUM", "ADV", "V"};
-    const auto found = std::ranges::find(names, value);
+    const auto *const found = std::ranges::find(names, value);
     if (found == names.end()) {
         fail("invalid part of speech in " + std::string(source) + ": " +
              std::string(value));
@@ -1237,7 +1237,7 @@ std::size_t stem_bucket(std::string_view stem) {
     }
 
     const auto first = static_cast<std::size_t>(first_character - 'a');
-    const auto base = 1 + first * 27;
+    const auto base = 1 + (first * 27);
     if (stem.size() == 1) {
         return base;
     }
@@ -1270,7 +1270,7 @@ Bytes byte_shuffle(Bytes rows, std::size_t count, std::size_t stride) {
     columns.reserve(rows.size());
     for (std::size_t byte_column = 0; byte_column < stride; ++byte_column) {
         for (std::size_t row = 0; row < count; ++row) {
-            columns.push_back(rows[row * stride + byte_column]);
+            columns.push_back(rows[(row * stride) + byte_column]);
         }
     }
     return columns;
@@ -1282,7 +1282,7 @@ Bytes make_image(std::vector<Section> sections, PackingProfile profile) {
 
     const auto section_count = static_cast<std::uint32_t>(sections.size());
     const auto header_bytes =
-        fixed_header_size + section_count * directory_entry_size;
+        fixed_header_size + (section_count * directory_entry_size);
 
     std::uint64_t file_size = header_bytes;
     std::uint32_t payload_crc = 0;
@@ -1686,7 +1686,9 @@ int main(int argc, char **argv) try {
             dictionary_record_size);
         std::size_t lexical_slot = 4;
         if (key >= 1 && key <= 4 &&
-            fixed_string(dictionary_record, (key - 1) * 18, 18) == stem) {
+            fixed_string(dictionary_record,
+                         static_cast<std::size_t>((key - 1) * 18),
+                         18) == stem) {
             lexical_slot = key - 1;
         } else {
             for (std::size_t candidate = 0; candidate < 4; ++candidate) {
@@ -1700,8 +1702,10 @@ int main(int argc, char **argv) try {
             fail("STEMFILE stem is absent from referenced lexeme: " + stem);
         }
         stem_buckets.at(bucket).push_back(PendingStemReference{
-            stem, lexeme_id, static_cast<std::uint8_t>(lexical_slot),
-            static_cast<std::uint8_t>(key)});
+            .stem = stem,
+            .lexeme_id = lexeme_id,
+            .lexical_slot = static_cast<std::uint8_t>(lexical_slot),
+            .stem_key = static_cast<std::uint8_t>(key)});
     }
 
     for (std::size_t imported_index = 0;
@@ -1718,9 +1722,12 @@ int main(int argc, char **argv) try {
             if (stem.empty()) {
                 continue;
             }
-            stem_buckets.at(stem_bucket(stem)).push_back(PendingStemReference{
-                stem, lexeme_id, static_cast<std::uint8_t>(lexical_slot),
-                static_cast<std::uint8_t>(lexical_slot + 1U)});
+            stem_buckets.at(stem_bucket(stem))
+                .push_back(PendingStemReference{
+                    .stem = stem,
+                    .lexeme_id = lexeme_id,
+                    .lexical_slot = static_cast<std::uint8_t>(lexical_slot),
+                    .stem_key = static_cast<std::uint8_t>(lexical_slot + 1U)});
         }
     }
 
