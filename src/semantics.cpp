@@ -23,28 +23,28 @@ enum_token(const Enum value,
 
 } // namespace
 
-std::string_view age_name(const std::uint8_t value) noexcept {
+std::string_view age_name(const Age value) noexcept {
     constexpr std::array<std::string_view, 9> values{
         "",      "archaic",  "early",     "classical", "late",
         "later", "medieval", "scholarly", "modern"};
-    return token(value, values);
+    return enum_token(value, values);
 }
 
-std::string_view lexical_frequency_name(const std::uint8_t value) noexcept {
+std::string_view lexical_frequency_name(const LexicalFrequency value) noexcept {
     constexpr std::array<std::string_view, 10> values{
         "",         "very-frequent", "frequent",    "common",   "lesser",
         "uncommon", "very-rare",     "inscription", "graffiti", "pliny"};
-    return token(value, values);
+    return enum_token(value, values);
 }
 
-std::string_view rule_frequency_name(const std::uint8_t value) noexcept {
+std::string_view rule_frequency_name(const RuleFrequency value) noexcept {
     constexpr std::array<std::string_view, 10> values{
         "",     "most-frequent", "sometimes",   "uncommon",   "infrequent",
         "rare", "very-rare",     "inscription", "reserved-m", "reserved-n"};
-    return token(value, values);
+    return enum_token(value, values);
 }
 
-std::string_view subject_name(const std::uint8_t value) noexcept {
+std::string_view subject_name(const SubjectArea value) noexcept {
     constexpr std::array<std::string_view, 12> values{"",
                                                       "agriculture",
                                                       "biological-medical",
@@ -57,19 +57,19 @@ std::string_view subject_name(const std::uint8_t value) noexcept {
                                                       "technical",
                                                       "military",
                                                       "mythology"};
-    return token(value, values);
+    return enum_token(value, values);
 }
 
-std::string_view geography_name(const std::uint8_t value) noexcept {
+std::string_view geography_name(const Geography value) noexcept {
     constexpr std::array<std::string_view, 18> values{
         "",       "africa",       "britain",       "china",  "scandinavia",
         "egypt",  "france-gaul",  "germany",       "greece", "italy-rome",
         "india",  "balkans",      "netherlands",   "persia", "near-east",
         "russia", "spain-iberia", "eastern-europe"};
-    return token(value, values);
+    return enum_token(value, values);
 }
 
-std::string_view source_name(const std::uint8_t value) noexcept {
+std::string_view source_name(const Source value) noexcept {
     constexpr std::array<std::string_view, 26> values{
         "",
         "source-a",
@@ -97,15 +97,15 @@ std::string_view source_name(const std::uint8_t value) noexcept {
         "whitaker",
         "temporary",
         "user-submitted"};
-    return token(value, values);
+    return enum_token(value, values);
 }
 
-std::string_view noun_kind_name(const std::uint8_t value) noexcept {
+std::string_view noun_kind_name(const NounKind value) noexcept {
     constexpr std::array<std::string_view, 10> values{
         "",       "singular-only", "plural-only", "abstract",
         "group",  "proper-name",   "person",      "thing",
         "locale", "place"};
-    return token(value, values);
+    return enum_token(value, values);
 }
 
 std::string_view pronoun_kind_name(const PronounKind value) noexcept {

@@ -35,7 +35,7 @@ struct LexemeRecord final {
     std::uint8_t declension{};
     std::uint8_t variant{};
     Gender gender{Gender::unknown};
-    std::uint8_t noun_kind{};
+    NounKind noun_kind{NounKind::unknown};
     PronounKind pronoun_kind{PronounKind::unknown};
     std::optional<AddonId> required_packon;
     Degree adjective_degree{Degree::unknown};
@@ -44,11 +44,11 @@ struct LexemeRecord final {
     Degree adverb_degree{Degree::unknown};
     VerbKind verb_kind{VerbKind::unknown};
     GrammaticalCase governs{GrammaticalCase::unknown};
-    std::uint8_t age{};
-    std::uint8_t subject{};
-    std::uint8_t geography{};
-    std::uint8_t frequency{};
-    std::uint8_t source{};
+    Age age{Age::unknown};
+    SubjectArea subject{SubjectArea::unknown};
+    Geography geography{Geography::unknown};
+    LexicalFrequency frequency{LexicalFrequency::unknown};
+    Source source{Source::unknown};
 };
 
 struct StemReference final {
@@ -75,11 +75,11 @@ struct InflectionRule final {
     Tense tense{Tense::unknown};
     Voice voice{Voice::unknown};
     Mood mood{Mood::unknown};
-    std::uint8_t person{};
+    Person person{Person::unknown};
     StringId ending;
     std::uint8_t stem_key{};
-    std::uint8_t age{};
-    std::uint8_t frequency{};
+    Age age{Age::unknown};
+    RuleFrequency frequency{RuleFrequency::unknown};
 };
 
 struct SuffixRule final {
@@ -93,10 +93,9 @@ struct SuffixRule final {
     std::uint8_t target_declension{};
     std::uint8_t target_variant{};
     Gender target_gender{Gender::unknown};
-    std::uint8_t target_noun_kind{};
+    NounKind target_noun_kind{NounKind::unknown};
     Degree target_degree{Degree::unknown};
     NumeralType target_numeral_type{NumeralType::unknown};
-    std::uint8_t target_attribute{};
     std::uint8_t numeric_value{};
     char connector{};
 };
@@ -118,7 +117,7 @@ struct TackonRule final {
     std::uint8_t declension{};
     std::uint8_t variant{};
     Gender gender{Gender::unknown};
-    std::uint8_t noun_kind{};
+    NounKind noun_kind{NounKind::unknown};
     PronounKind pronoun_kind{PronounKind::unknown};
     Degree adjective_degree{Degree::unknown};
     bool packon{};
@@ -186,16 +185,43 @@ class Database final {
         return content_ == DatabaseContent::full;
     }
 
-    [[nodiscard]] const LexemeRecord &lexeme(LexemeId id) const WORDS_LIFETIMEBOUND;
-    [[nodiscard]] const InflectionRule &rule(RuleId id) const WORDS_LIFETIMEBOUND;
+    [[nodiscard]] const LexemeRecord &
+    lexeme(LexemeId id) const WORDS_LIFETIMEBOUND;
+    [[nodiscard]] const InflectionRule &
+    rule(RuleId id) const WORDS_LIFETIMEBOUND;
+    [[nodiscard]] std::span<const LexemeRecord>
+    lexemes() const noexcept WORDS_LIFETIMEBOUND {
+        return lexemes_;
+    }
+    [[nodiscard]] std::span<const InflectionRule>
+    rules() const noexcept WORDS_LIFETIMEBOUND {
+        return rules_;
+    }
     [[nodiscard]] QuantityMask inflection_quantity(RuleId id) const noexcept;
     [[nodiscard]] QuantityMask
     stem_quantity(LexemeId id, std::uint8_t lexical_slot) const noexcept;
-    [[nodiscard]] const SuffixRule &suffix(AddonId id) const WORDS_LIFETIMEBOUND;
-    [[nodiscard]] const PrefixRule &prefix(AddonId id) const WORDS_LIFETIMEBOUND;
-    [[nodiscard]] const TackonRule &tackon(AddonId id) const WORDS_LIFETIMEBOUND;
-    [[nodiscard]] const RewriteRule &rewrite(RewriteId id) const WORDS_LIFETIMEBOUND;
-    [[nodiscard]] std::span<const RewriteRule> rewrites() const noexcept WORDS_LIFETIMEBOUND {
+    [[nodiscard]] const SuffixRule &
+    suffix(AddonId id) const WORDS_LIFETIMEBOUND;
+    [[nodiscard]] const PrefixRule &
+    prefix(AddonId id) const WORDS_LIFETIMEBOUND;
+    [[nodiscard]] const TackonRule &
+    tackon(AddonId id) const WORDS_LIFETIMEBOUND;
+    [[nodiscard]] const RewriteRule &
+    rewrite(RewriteId id) const WORDS_LIFETIMEBOUND;
+    [[nodiscard]] std::span<const SuffixRule>
+    suffixes() const noexcept WORDS_LIFETIMEBOUND {
+        return suffixes_;
+    }
+    [[nodiscard]] std::span<const PrefixRule>
+    prefixes() const noexcept WORDS_LIFETIMEBOUND {
+        return prefixes_;
+    }
+    [[nodiscard]] std::span<const TackonRule>
+    tackons() const noexcept WORDS_LIFETIMEBOUND {
+        return tackons_;
+    }
+    [[nodiscard]] std::span<const RewriteRule>
+    rewrites() const noexcept WORDS_LIFETIMEBOUND {
         return rewrites_;
     }
     [[nodiscard]] AddonKind addon_kind(AddonId id) const;

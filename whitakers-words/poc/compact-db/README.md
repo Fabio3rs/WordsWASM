@@ -34,7 +34,10 @@ bytes.
 
 O 1.8 aproveita bits antes reservados do payload de lexemas `PACK` para gravar
 o seletor tipado do packon. O dado não aumenta o registro: ele substitui a
-inferência histórica por prefixo de texto como `(w/-cum)`. Isso é necessário
+inferência histórica por prefixo de texto como `(w/-cum)`. A projeção desses
+marcadores está materializada em `PACKON_REQUIREMENTS.LAT` e é conferida
+integralmente contra `DICTLINE.GEN`; o packer e a engine consomem somente o
+ledger tipado, nunca o meaning. Isso é necessário
 para que `search-only` reproduza `cuique`, `quicumque` e as demais formas sem
 carregar nenhum significado editorial.
 

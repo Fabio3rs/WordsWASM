@@ -27,6 +27,14 @@ if (analysisHit.morphology.kind === "verb") {
   // @ts-expect-error Verb morphology has no nominal case.
   analysisHit.morphology.case;
 }
+if (analysisHit.kind !== "artificial" &&
+    analysisHit.lexical.partOfSpeech === "verb") {
+  analysisHit.lexical.verbKind satisfies import(
+    "../wasmsrc/words-engine.mjs"
+  ).VerbKind | null;
+}
+declare const addonStep: import("../wasmsrc/words-engine.mjs").AddonStepBase;
+addonStep.enclitic satisfies boolean;
 
 void createWordsAnalysisEngine({
   datasetId: "sha256:test",

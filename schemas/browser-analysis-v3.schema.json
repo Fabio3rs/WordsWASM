@@ -17,11 +17,11 @@
   "$defs": {
     "addonStep": {
       "type": "object", "additionalProperties": false,
-      "required": ["kind", "target", "id", "type", "text", "meaning"],
+      "required": ["kind", "target", "id", "type", "text", "enclitic", "meaning"],
       "properties": {
         "kind": {"const": "addon"}, "target": {"enum": ["form", "source", "auxiliary"]}, "id": {"type": "integer", "minimum": 0},
         "type": {"enum": ["prefix", "tickon", "suffix", "tackon", "packon"]},
-        "text": {"type": "string"}, "meaning": {"type": "string"}
+        "text": {"type": "string"}, "enclitic": {"type": "boolean"}, "meaning": {"type": "string"}
       }
     },
     "rewriteStep": {

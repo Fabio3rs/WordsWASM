@@ -78,6 +78,8 @@ struct BrowserLexicalFlags final {
     std::string gender;
     std::string noun_kind;
     std::string pronoun_kind;
+    bool has_required_packon{};
+    std::uint32_t required_packon_id{};
     std::string degree;
     std::string numeral_type;
     std::uint32_t numeral_value{};
@@ -113,6 +115,7 @@ struct BrowserDerivationStep final {
     std::uint32_t id{};
     std::string type;
     std::string text;
+    bool enclitic{};
     std::string rule;
     std::string before;
     std::string after;
@@ -242,15 +245,14 @@ browser_morphology(const words::Morphology &morphology,
                                                 words::AdverbMorphology>) {
                 output.kind = "adverb";
                 output.degree = degree_name(value.degree);
-            } else if constexpr (std::is_same_v<Value,
-                                                words::VerbMorphology>) {
+            } else if constexpr (std::is_same_v<Value, words::VerbMorphology>) {
                 output.kind = "verb";
                 output.conjugation = value.conjugation;
                 output.variant = value.variant;
                 output.tense = tense_name(value.tense);
                 output.voice = voice_name(value.voice);
                 output.mood = mood_name(value.mood);
-                output.person = value.person;
+                output.person = std::to_underlying(value.person);
                 output.number = number_name(value.number);
             } else if constexpr (std::is_same_v<Value,
                                                 words::ParticipleMorphology>) {
@@ -270,12 +272,12 @@ browser_morphology(const words::Morphology &morphology,
                 output.grammatical_case = case_name(value.grammatical_case);
                 output.number = number_name(value.number);
                 output.gender = gender_name(value.gender);
-            } else if constexpr (std::is_same_v<
-                                     Value, words::PrepositionMorphology>) {
+            } else if constexpr (std::is_same_v<Value,
+                                                words::PrepositionMorphology>) {
                 output.kind = "preposition";
                 output.governs = case_name(value.governs);
-            } else if constexpr (std::is_same_v<
-                                     Value, words::InvariableMorphology>) {
+            } else if constexpr (std::is_same_v<Value,
+                                                words::InvariableMorphology>) {
                 if (lexical_part != words::PartOfSpeech::conjunction &&
                     lexical_part != words::PartOfSpeech::interjection) {
                     throw std::logic_error{
@@ -285,8 +287,9 @@ browser_morphology(const words::Morphology &morphology,
                                   ? "interjection"
                                   : "conjunction";
             } else {
-                static_assert(sizeof(Value) == 0U,
-                              "new Morphology variant requires browser projection");
+                static_assert(
+                    sizeof(Value) == 0U,
+                    "new Morphology variant requires browser projection");
             }
         },
         morphology);
@@ -319,6 +322,10 @@ browser_lexical_flags(const words::LexemeRecord &lexeme) {
         flags.declension = lexeme.declension;
         flags.variant = lexeme.variant;
         flags.pronoun_kind = pronoun_kind_name(lexeme.pronoun_kind);
+        flags.has_required_packon = lexeme.required_packon.has_value();
+        if (lexeme.required_packon) {
+            flags.required_packon_id = lexeme.required_packon->value();
+        }
         break;
     case std::to_underlying(words::PartOfSpeech::adjective):
         flags.declension = lexeme.declension;
@@ -357,8 +364,7 @@ browser_addon_step(const words::Database &database, const words::AddonId id,
     step.id = id.value();
     const auto kind = database.addon_kind(id);
     step.type = addon_kind_name(kind);
-    if (kind == words::AddonKind::prefix ||
-        kind == words::AddonKind::tickon) {
+    if (kind == words::AddonKind::prefix || kind == words::AddonKind::tickon) {
         const auto &prefix = database.prefix(id);
         step.text = database.prefix_string(prefix.fix);
         if (include_meaning) {
@@ -375,6 +381,7 @@ browser_addon_step(const words::Database &database, const words::AddonId id,
     } else {
         const auto &tackon = database.tackon(id);
         step.text = database.tackon_string(tackon.fix);
+        step.enclitic = tackon.enclitic;
         if (include_meaning) {
             step.has_meaning = true;
             step.meaning = database.tackon_meaning(tackon.meaning);
@@ -384,8 +391,7 @@ browser_addon_step(const words::Database &database, const words::AddonId id,
 }
 
 [[nodiscard]] BrowserDerivationStep
-browser_rewrite_step(const words::Database &database,
-                     const words::RewriteId id,
+browser_rewrite_step(const words::Database &database, const words::RewriteId id,
                      const bool include_meaning,
                      const std::string_view target) {
     const auto &rewrite = database.rewrite(id);
@@ -404,20 +410,18 @@ browser_rewrite_step(const words::Database &database,
     return step;
 }
 
-[[nodiscard]] BrowserDerivation
-browser_derivation(const words::Database &database,
-                   const words::DerivationIR &derivation,
-                   const words::DictionaryKind dictionary,
-                   const bool include_meaning,
-                   const std::string_view method_override = {},
-                   const std::string_view target = "form") {
+[[nodiscard]] BrowserDerivation browser_derivation(
+    const words::Database &database, const words::DerivationIR &derivation,
+    const words::DictionaryKind dictionary, const bool include_meaning,
+    const std::string_view method_override = {},
+    const std::string_view target = "form") {
     BrowserDerivation output;
     const auto addons = derivation.steps();
-    const auto leading = derivation.rewritten_form
-                             ? std::min<std::size_t>(
-                                   derivation.rewritten_form->leading_addon_count,
-                                   addons.size())
-                             : 0U;
+    const auto leading =
+        derivation.rewritten_form
+            ? std::min<std::size_t>(
+                  derivation.rewritten_form->leading_addon_count, addons.size())
+            : 0U;
     output.steps.reserve(addons.size() +
                          (derivation.rewritten_form
                               ? derivation.rewritten_form->steps().size()
@@ -451,9 +455,8 @@ browser_derivation(const words::Database &database,
     return output;
 }
 
-[[nodiscard]] BrowserForm
-browser_form(const words::SurfaceForm &surface,
-             const words::AnalysisIR &analysis) {
+[[nodiscard]] BrowserForm browser_form(const words::SurfaceForm &surface,
+                                       const words::AnalysisIR &analysis) {
     BrowserForm form;
     form.has_stem_key = analysis.stem_key != 0U;
     form.stem_key = analysis.stem_key;
@@ -467,9 +470,10 @@ browser_form(const words::SurfaceForm &surface,
     return form;
 }
 
-[[nodiscard]] BrowserSearchHit
-browser_hit(const words::Database &database, const words::SurfaceForm &surface,
-            const words::AnalysisIR &analysis, const bool include_meaning) {
+[[nodiscard]] BrowserSearchHit browser_hit(const words::Database &database,
+                                           const words::SurfaceForm &surface,
+                                           const words::AnalysisIR &analysis,
+                                           const bool include_meaning) {
     BrowserSearchHit hit;
     hit.lexeme_id = analysis.lexeme.value();
     hit.has_rule = analysis.rule.has_value();
@@ -477,8 +481,9 @@ browser_hit(const words::Database &database, const words::SurfaceForm &surface,
         hit.rule_id = analysis.rule->value();
         const auto &rule = database.rule(*analysis.rule);
         hit.rule = BrowserRuleFlags{
-            true, std::string{age_name(rule.age)},
-            std::string{rule_frequency_name(rule.frequency)}};
+            .present = true,
+            .age = std::string{age_name(rule.age)},
+            .frequency = std::string{rule_frequency_name(rule.frequency)}};
     }
     const auto &lexeme = database.lexeme(analysis.lexeme);
     hit.lemma = words::citation_lemma(database, lexeme, surface.normalized_nfc);
@@ -486,8 +491,8 @@ browser_hit(const words::Database &database, const words::SurfaceForm &surface,
         hit.has_meaning = true;
         hit.meaning = normalized_meaning(database.meaning(lexeme.meaning));
     }
-    hit.morphology = browser_morphology(analysis.morphology,
-                                        lexeme.part_of_speech);
+    hit.morphology =
+        browser_morphology(analysis.morphology, lexeme.part_of_speech);
     hit.part_of_speech = hit.morphology.kind;
     hit.form = browser_form(surface, analysis);
     hit.quantity_match = quantity_match_name(analysis.quantity_match);
@@ -500,8 +505,7 @@ browser_hit(const words::Database &database, const words::SurfaceForm &surface,
 [[nodiscard]] BrowserSearchHit
 browser_hit(const words::Database &database, const words::SurfaceForm &surface,
             const words::CompoundAnalysisIR &analysis,
-            const bool include_meaning,
-            const std::string_view recognized) {
+            const bool include_meaning, const std::string_view recognized) {
     BrowserSearchHit hit;
     hit.kind = "compound";
     hit.lexeme_id = analysis.lexeme.value();
@@ -510,8 +514,9 @@ browser_hit(const words::Database &database, const words::SurfaceForm &surface,
         hit.rule_id = analysis.source_rule->value();
         const auto &rule = database.rule(*analysis.source_rule);
         hit.rule = BrowserRuleFlags{
-            true, std::string{age_name(rule.age)},
-            std::string{rule_frequency_name(rule.frequency)}};
+            .present = true,
+            .age = std::string{age_name(rule.age)},
+            .frequency = std::string{rule_frequency_name(rule.frequency)}};
     }
     const auto &lexeme = database.lexeme(analysis.lexeme);
     hit.lemma = words::citation_lemma(database, lexeme, surface.normalized_nfc);
@@ -519,20 +524,20 @@ browser_hit(const words::Database &database, const words::SurfaceForm &surface,
         hit.has_meaning = true;
         hit.meaning = normalized_meaning(database.meaning(lexeme.meaning));
     }
-    hit.morphology = browser_morphology(analysis.morphology,
-                                        words::PartOfSpeech::verb);
+    hit.morphology =
+        browser_morphology(analysis.morphology, words::PartOfSpeech::verb);
     hit.part_of_speech = "verb";
     hit.lexical = browser_lexical_flags(lexeme);
-    hit.form.stem = analysis.kind == words::CompoundKind::iri ? "SUPINE + "
-                                                               : "PPL+";
+    hit.form.stem =
+        analysis.kind == words::CompoundKind::iri ? "SUPINE + " : "PPL+";
     hit.form.stem.append(analysis.auxiliary);
     hit.form.recognized = recognized;
-    hit.derivation = browser_derivation(
-        database, analysis.source_derivation, lexeme.dictionary,
-        include_meaning, "compound", "source");
+    hit.derivation = browser_derivation(database, analysis.source_derivation,
+                                        lexeme.dictionary, include_meaning,
+                                        "compound", "source");
     auto auxiliary_derivation = browser_derivation(
-        database, analysis.auxiliary_derivation,
-        words::DictionaryKind::general, include_meaning, {}, "auxiliary");
+        database, analysis.auxiliary_derivation, words::DictionaryKind::general,
+        include_meaning, {}, "auxiliary");
     hit.derivation.steps.insert(
         hit.derivation.steps.end(),
         std::make_move_iterator(auxiliary_derivation.steps.begin()),
@@ -581,14 +586,13 @@ browser_search_result(const words::Engine &engine,
                             result.compound_analyses.size() +
                             result.artificial_analyses.size());
         for (const auto &analysis : result.analyses) {
-            output.hits.push_back(
-                browser_hit(engine.database(), result.surface, analysis,
-                            include_meanings));
+            output.hits.push_back(browser_hit(engine.database(), result.surface,
+                                              analysis, include_meanings));
         }
         for (const auto &analysis : result.compound_analyses) {
-            output.hits.push_back(
-                browser_hit(engine.database(), result.surface, analysis,
-                            include_meanings, output.query.normalized));
+            output.hits.push_back(browser_hit(engine.database(), result.surface,
+                                              analysis, include_meanings,
+                                              output.query.normalized));
         }
         for (const auto &artificial : result.artificial_analyses) {
             std::visit(
@@ -618,20 +622,21 @@ browser_search_result(const words::Engine &engine,
     }
 
     output.diagnostics.reserve(result.diagnostics.size());
-    std::ranges::transform(
-        result.diagnostics, std::back_inserter(output.diagnostics),
-        [](const words::Diagnostic &diagnostic) {
-            return BrowserDiagnostic{diagnostic.code, diagnostic.severity,
-                                     diagnostic.part_of_speech};
-        });
+    std::ranges::transform(result.diagnostics,
+                           std::back_inserter(output.diagnostics),
+                           [](const words::Diagnostic &diagnostic) {
+                               return BrowserDiagnostic{
+                                   .code = diagnostic.code,
+                                   .severity = diagnostic.severity,
+                                   .part_of_speech = diagnostic.part_of_speech};
+                           });
 
     if (result.two_word_suggestion) {
         BrowserSearchSuggestion suggestion;
         suggestion.split_at = result.two_word_suggestion->logical_split;
         suggestion.classification =
-            result.two_word_suggestion->both_contain_numeral
-                ? "number-pair"
-                : "unconstrained";
+            result.two_word_suggestion->both_contain_numeral ? "number-pair"
+                                                             : "unconstrained";
         suggestion.segments.reserve(
             result.two_word_suggestion->segments.size());
         for (const auto &segment : result.two_word_suggestion->segments) {
@@ -639,9 +644,9 @@ browser_search_result(const words::Engine &engine,
             projected.text = segment.surface.normalized_nfc;
             projected.hits.reserve(segment.analyses.size());
             for (const auto &analysis : segment.analyses) {
-                projected.hits.push_back(
-                    browser_hit(engine.database(), segment.surface, analysis,
-                                include_meanings));
+                projected.hits.push_back(browser_hit(engine.database(),
+                                                     segment.surface, analysis,
+                                                     include_meanings));
             }
             canonicalize_hits(projected.hits);
             suggestion.segments.push_back(std::move(projected));
@@ -654,33 +659,34 @@ browser_search_result(const words::Engine &engine,
 class BrowserAnalysisEngine final {
   public:
     [[nodiscard]] LoadResult load_database(emscripten::val bytes,
-                                           std::string dataset_id) {
+                                           const std::string &dataset_id) {
         try {
             const auto uint8_array = emscripten::val::global("Uint8Array");
-            if (!bytes.instanceof (uint8_array)) {
+            if (!bytes.instanceof(uint8_array)) {
                 return failure("invalid-database-buffer",
                                "database must be a Uint8Array", 0U);
             }
 
             const auto byte_length = bytes["byteLength"].as<double>();
             if (byte_length < 0.0 ||
-                byte_length >
-                    static_cast<double>(std::numeric_limits<std::uint32_t>::max())) {
+                byte_length > static_cast<double>(
+                                  std::numeric_limits<std::uint32_t>::max())) {
                 return failure("database-too-large",
-                               "database exceeds the WebAssembly API limit", 0U);
+                               "database exceeds the WebAssembly API limit",
+                               0U);
             }
             const auto size = static_cast<std::uint32_t>(byte_length);
             std::vector<std::byte> database_image(size);
             if (!database_image.empty()) {
-                auto destination = emscripten::val(emscripten::typed_memory_view(
-                    database_image.size(),
-                    reinterpret_cast<std::uint8_t *>(database_image.data())));
+                auto destination =
+                    emscripten::val(emscripten::typed_memory_view(
+                        database_image.size(), reinterpret_cast<std::uint8_t *>(
+                                                   database_image.data())));
                 destination.call<void>("set", bytes);
             }
 
             auto candidate = words::Engine::create(
-                std::move(database_image),
-                words::EngineConfig{std::move(dataset_id)});
+                std::move(database_image), words::EngineConfig{dataset_id});
             if (!candidate) {
                 return failure(candidate.error().code,
                                candidate.error().message, size);
@@ -690,7 +696,11 @@ class BrowserAnalysisEngine final {
             // so a failed reload cannot destroy a working browser session.
             engine_ = std::move(*candidate);
             database_bytes_ = size;
-            return LoadResult{true, {}, {}, size, database_kind()};
+            return LoadResult{.ok = true,
+                              .code = {},
+                              .message = {},
+                              .database_bytes = size,
+                              .database_kind = database_kind()};
         } catch (const std::bad_alloc &) {
             return failure("out-of-memory",
                            "not enough WebAssembly memory for the database",
@@ -713,10 +723,10 @@ class BrowserAnalysisEngine final {
 
     [[nodiscard]] std::string database_kind() const {
         require_ready();
-        return std::string{
-            engine_->database().content() == words::DatabaseContent::full
-                ? full_database_kind
-                : search_database_kind};
+        return std::string{engine_->database().content() ==
+                                   words::DatabaseContent::full
+                               ? full_database_kind
+                               : search_database_kind};
     }
 
     [[nodiscard]] BrowserSearchResult analyze(const std::string &utf8,
@@ -745,11 +755,13 @@ class BrowserAnalysisEngine final {
     }
 
   private:
-    [[nodiscard]] static LoadResult failure(std::string code,
-                                            std::string message,
-                                            const std::uint32_t size) {
-        return LoadResult{false, std::move(code), std::move(message), size,
-                          {}};
+    [[nodiscard]] static LoadResult
+    failure(std::string code, std::string message, const std::uint32_t size) {
+        return LoadResult{.ok = false,
+                          .code = std::move(code),
+                          .message = std::move(message),
+                          .database_bytes = size,
+                          .database_kind = {}};
     }
 
     [[nodiscard]] static words::AnalysisOptions
@@ -767,7 +779,7 @@ class BrowserAnalysisEngine final {
         }
     }
 
-    std::unique_ptr<const words::Engine> engine_;
+    std::unique_ptr<const words::Engine> engine_{};
     std::uint32_t database_bytes_{};
 };
 
@@ -822,6 +834,8 @@ EMSCRIPTEN_BINDINGS(words_analysis_engine) {
         .field("gender", &BrowserLexicalFlags::gender)
         .field("nounKind", &BrowserLexicalFlags::noun_kind)
         .field("pronounKind", &BrowserLexicalFlags::pronoun_kind)
+        .field("hasRequiredPackon", &BrowserLexicalFlags::has_required_packon)
+        .field("requiredPackonId", &BrowserLexicalFlags::required_packon_id)
         .field("degree", &BrowserLexicalFlags::degree)
         .field("numeralType", &BrowserLexicalFlags::numeral_type)
         .field("numeralValue", &BrowserLexicalFlags::numeral_value)
@@ -851,6 +865,7 @@ EMSCRIPTEN_BINDINGS(words_analysis_engine) {
         .field("id", &BrowserDerivationStep::id)
         .field("type", &BrowserDerivationStep::type)
         .field("text", &BrowserDerivationStep::text)
+        .field("enclitic", &BrowserDerivationStep::enclitic)
         .field("rule", &BrowserDerivationStep::rule)
         .field("before", &BrowserDerivationStep::before)
         .field("after", &BrowserDerivationStep::after)
@@ -880,13 +895,10 @@ EMSCRIPTEN_BINDINGS(words_analysis_engine) {
         .field("rule", &BrowserSearchHit::rule)
         .field("derivation", &BrowserSearchHit::derivation)
         .field("compound", &BrowserSearchHit::compound)
-        .field("compoundConstruction",
-               &BrowserSearchHit::compound_construction)
+        .field("compoundConstruction", &BrowserSearchHit::compound_construction)
         .field("compoundAuxiliary", &BrowserSearchHit::compound_auxiliary)
-        .field("compoundSourceTense",
-               &BrowserSearchHit::compound_source_tense)
-        .field("compoundSourceVoice",
-               &BrowserSearchHit::compound_source_voice)
+        .field("compoundSourceTense", &BrowserSearchHit::compound_source_tense)
+        .field("compoundSourceVoice", &BrowserSearchHit::compound_source_voice)
         .field("artificial", &BrowserSearchHit::artificial)
         .field("artificialMethod", &BrowserSearchHit::artificial_method)
         .field("artificialValue", &BrowserSearchHit::artificial_value)

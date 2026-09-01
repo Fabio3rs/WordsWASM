@@ -362,7 +362,7 @@ morphology_key(const Morphology &morphology) noexcept {
                 std::to_underlying(verb->tense),
                 std::to_underlying(verb->voice),
                 std::to_underlying(verb->mood),
-                verb->person,
+                std::to_underlying(verb->person),
                 std::to_underlying(verb->number)};
     }
     if (const auto *participle =
@@ -1532,16 +1532,7 @@ void append_packon_analyses(const Database &database,
                     !packon_paradigm_accepts(packon, rule, lexeme)) {
                     continue;
                 }
-                const auto typed_match = lexeme.required_packon == id;
-                const auto legacy_match = [&] {
-                    if (lexeme.required_packon || !database.has_meanings()) {
-                        return false;
-                    }
-                    const auto meaning = database.meaning(lexeme.meaning);
-                    const auto marker = std::string{"(w/-"} + std::string{fix};
-                    return meaning.starts_with(marker);
-                }();
-                if (!typed_match && !legacy_match) {
+                if (lexeme.required_packon != id) {
                     continue;
                 }
                 output.push_back(AnalysisIR{
@@ -2423,7 +2414,7 @@ void analyze_compound(const Database &database, QueryResult &result,
                                        .tense = Tense::future,
                                        .voice = Voice::passive,
                                        .mood = Mood::infinitive,
-                                       .person = 0U,
+                                       .person = Person::unknown,
                                        .number = GrammaticalNumber::unknown},
                         result.compound_analyses);
         sources.push_back(std::move(analysis));

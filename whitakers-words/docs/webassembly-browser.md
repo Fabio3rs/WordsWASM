@@ -89,7 +89,9 @@ const compactOnly = searchEngine.search("cuique");
 `artificial`. Cada leitura contém a forma resolvida (`stem`, `ending`,
 `recognized`) e passos semânticos ordenados de addon e reescrita. Um passo
 indica seu `target` (`form`, `source` ou `auxiliary`) e resolve IDs para tipo e
-texto; por exemplo, `studiisque` expõe `studiis` e o tackon `que`.
+texto; addons também expõem `enclitic`. Por exemplo, `studiisque` expõe
+`studiis`, o `AddonId`, o tackon `que` e `enclitic: true`. Lexemas `PACK`
+expõem `requiredPackonId`, inclusive no perfil search, sem consultar meanings.
 `analyze` acrescenta `meaning` e exige o banco full; `search` nunca acessa nem
 devolve definições e funciona com os dois perfis. O segundo argumento
 `{twoWords: true}` habilita somente a sugestão legada opt-in. Consultas de dois

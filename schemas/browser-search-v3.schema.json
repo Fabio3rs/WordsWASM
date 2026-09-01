@@ -17,6 +17,15 @@
   "$defs": {
     "nullableString": {"type": ["string", "null"]},
     "nullableNumber": {"type": ["integer", "null"], "minimum": 1},
+    "nullableAge": {"enum": [null, "archaic", "early", "classical", "late", "later", "medieval", "scholarly", "modern"]},
+    "nullableSubjectArea": {"enum": [null, "agriculture", "biological-medical", "drama-arts", "ecclesiastic", "grammar-literature", "legal-government", "poetic", "science-philosophy", "technical", "military", "mythology"]},
+    "nullableGeography": {"enum": [null, "africa", "britain", "china", "scandinavia", "egypt", "france-gaul", "germany", "greece", "italy-rome", "india", "balkans", "netherlands", "persia", "near-east", "russia", "spain-iberia", "eastern-europe"]},
+    "nullableLexicalFrequency": {"enum": [null, "very-frequent", "frequent", "common", "lesser", "uncommon", "very-rare", "inscription", "graffiti", "pliny"]},
+    "nullableRuleFrequency": {"enum": [null, "most-frequent", "sometimes", "uncommon", "infrequent", "rare", "very-rare", "inscription", "reserved-m", "reserved-n"]},
+    "nullableSource": {"enum": [null, "source-a", "beeson", "cassells", "adams-latin-sexual-vocabulary", "stelten-ecclesiastical-latin", "deferrari-aquinas", "gildersleeve-lodge", "collatinus", "leverett", "bracton", "calepinus-novus", "lewis-elementary-latin-dictionary", "latham-medieval-word-list", "lynn-nelson", "oxford-latin-dictionary", "souter", "other-dictionaries", "plater-white", "lewis-short", "found-in-translation", "source-u", "saxonis-vademecum", "whitaker", "temporary", "user-submitted"]},
+    "nullableNounKind": {"enum": [null, "singular-only", "plural-only", "abstract", "group", "proper-name", "person", "thing", "locale", "place"]},
+    "nullablePronounKind": {"enum": [null, "personal", "relative", "reflexive", "demonstrative", "interrogative", "indefinite", "adjectival"]},
+    "nullableVerbKind": {"enum": [null, "to-be", "compound-of-to-be", "governs-genitive", "governs-dative", "governs-ablative", "transitive", "intransitive", "impersonal", "deponent", "semideponent", "perfect-definite"]},
     "query": {
       "type": "object", "additionalProperties": false,
       "required": ["text", "normalized", "mode"],
@@ -58,25 +67,25 @@
       "properties": {
         "dictionary": {"enum": ["general", "unique"]}, "entryId": {"type": "integer", "minimum": 1},
         "partOfSpeech": {"enum": ["noun", "pronoun", "adjective", "numeral", "adverb", "verb", "preposition", "conjunction", "interjection"]},
-        "age": {"$ref": "#/$defs/nullableString"}, "subject": {"$ref": "#/$defs/nullableString"},
-        "geography": {"$ref": "#/$defs/nullableString"}, "frequency": {"$ref": "#/$defs/nullableString"},
-        "source": {"$ref": "#/$defs/nullableString"}, "declension": {"$ref": "#/$defs/nullableNumber"},
+        "age": {"$ref": "#/$defs/nullableAge"}, "subject": {"$ref": "#/$defs/nullableSubjectArea"},
+        "geography": {"$ref": "#/$defs/nullableGeography"}, "frequency": {"$ref": "#/$defs/nullableLexicalFrequency"},
+        "source": {"$ref": "#/$defs/nullableSource"}, "declension": {"$ref": "#/$defs/nullableNumber"},
         "conjugation": {"$ref": "#/$defs/nullableNumber"}, "variant": {"$ref": "#/$defs/nullableNumber"},
-        "gender": {"$ref": "#/$defs/nullableString"}, "nounKind": {"$ref": "#/$defs/nullableString"},
-        "pronounKind": {"$ref": "#/$defs/nullableString"}, "degree": {"$ref": "#/$defs/nullableString"},
+        "gender": {"$ref": "#/$defs/nullableString"}, "nounKind": {"$ref": "#/$defs/nullableNounKind"},
+        "pronounKind": {"$ref": "#/$defs/nullablePronounKind"}, "requiredPackonId": {"type": ["integer", "null"], "minimum": 0}, "degree": {"$ref": "#/$defs/nullableString"},
         "numeralType": {"$ref": "#/$defs/nullableString"}, "numeralValue": {"$ref": "#/$defs/nullableNumber"},
-        "verbKind": {"$ref": "#/$defs/nullableString"}, "governs": {"$ref": "#/$defs/nullableString"}
+        "verbKind": {"$ref": "#/$defs/nullableVerbKind"}, "governs": {"$ref": "#/$defs/nullableString"}
       }
     },
     "rule": {
       "type": ["object", "null"],
       "required": ["id", "age", "frequency"], "additionalProperties": false,
-      "properties": {"id": {"type": "integer", "minimum": 0}, "age": {"$ref": "#/$defs/nullableString"}, "frequency": {"$ref": "#/$defs/nullableString"}}
+      "properties": {"id": {"type": "integer", "minimum": 0}, "age": {"$ref": "#/$defs/nullableAge"}, "frequency": {"$ref": "#/$defs/nullableRuleFrequency"}}
     },
     "addonStep": {
       "type": "object", "additionalProperties": false,
-      "required": ["kind", "target", "id", "type", "text"],
-      "properties": {"kind": {"const": "addon"}, "target": {"enum": ["form", "source", "auxiliary"]}, "id": {"type": "integer", "minimum": 0}, "type": {"enum": ["prefix", "tickon", "suffix", "tackon", "packon"]}, "text": {"type": "string"}}
+      "required": ["kind", "target", "id", "type", "text", "enclitic"],
+      "properties": {"kind": {"const": "addon"}, "target": {"enum": ["form", "source", "auxiliary"]}, "id": {"type": "integer", "minimum": 0}, "type": {"enum": ["prefix", "tickon", "suffix", "tackon", "packon"]}, "text": {"type": "string"}, "enclitic": {"type": "boolean"}}
     },
     "rewriteStep": {
       "type": "object", "additionalProperties": false,

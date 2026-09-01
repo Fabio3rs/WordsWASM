@@ -82,6 +82,12 @@ if(NOT EMSCRIPTEN)
                 --packer "$<TARGET_FILE:wwdb_poc_pack>"
                 --cli "$<TARGET_FILE:words_cli>"
         )
+        add_test(
+            NAME words_packon_requirements
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/packon_requirements_test.py"
+                --root "${CMAKE_SOURCE_DIR}"
+        )
         add_dependencies(words_tests wwdb_poc_pack)
     endif()
 endif()

@@ -1,6 +1,7 @@
 #include "test_support.hpp"
 
 #include "words/database.hpp"
+#include "words/semantics.hpp"
 
 #include <gtest/gtest.h>
 
@@ -8,6 +9,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <ranges>
+#include <type_traits>
+#include <utility>
 
 namespace words {
 namespace {
@@ -134,7 +137,6 @@ TEST(DatabaseTest, DenseAndSearchProfilesAgreeOnWireSemantics) {
     EXPECT_EQ(search_suffix.target_key, dense_suffix.target_key);
     EXPECT_EQ(search_suffix.target_declension, dense_suffix.target_declension);
     EXPECT_EQ(search_suffix.target_variant, dense_suffix.target_variant);
-    EXPECT_EQ(search_suffix.target_attribute, dense_suffix.target_attribute);
     EXPECT_EQ(search_suffix.target_noun_kind, dense_suffix.target_noun_kind);
     EXPECT_EQ(search_suffix.numeric_value, dense_suffix.numeric_value);
     EXPECT_EQ(search_suffix.connector, dense_suffix.connector);
@@ -200,6 +202,173 @@ TEST(DatabaseTest, DenseAndSearchProfilesAgreeOnWireSemantics) {
                   dense_morphology.grammatical_case);
         EXPECT_EQ(search_morphology.number, dense_morphology.number);
         EXPECT_EQ(search_morphology.gender, dense_morphology.gender);
+    }
+}
+
+TEST(DatabaseTest, FullAndSearchAgreeOnEveryGrammaticalRecord) {
+    auto full = Database::load_poc(test::read_database());
+    auto search = Database::load_poc(test::read_search_database());
+    ASSERT_TRUE(full) << full.error().message;
+    ASSERT_TRUE(search) << search.error().message;
+
+    const auto full_lexemes = (*full)->lexemes();
+    const auto search_lexemes = (*search)->lexemes();
+    ASSERT_EQ(search_lexemes.size(), full_lexemes.size());
+    for (std::size_t index = 0; index < full_lexemes.size(); ++index) {
+        SCOPED_TRACE(index);
+        const auto &left = full_lexemes[index];
+        const auto &right = search_lexemes[index];
+        EXPECT_EQ(right.stems, left.stems);
+        EXPECT_EQ(right.dictionary, left.dictionary);
+        EXPECT_EQ(right.dictionary_entry, left.dictionary_entry);
+        EXPECT_EQ(right.part_of_speech, left.part_of_speech);
+        EXPECT_EQ(right.declension, left.declension);
+        EXPECT_EQ(right.variant, left.variant);
+        EXPECT_EQ(right.gender, left.gender);
+        EXPECT_EQ(right.noun_kind, left.noun_kind);
+        EXPECT_EQ(right.pronoun_kind, left.pronoun_kind);
+        EXPECT_EQ(right.required_packon, left.required_packon);
+        EXPECT_EQ(right.adjective_degree, left.adjective_degree);
+        EXPECT_EQ(right.numeral_type, left.numeral_type);
+        EXPECT_EQ(right.numeral_value, left.numeral_value);
+        EXPECT_EQ(right.adverb_degree, left.adverb_degree);
+        EXPECT_EQ(right.verb_kind, left.verb_kind);
+        EXPECT_EQ(right.governs, left.governs);
+        EXPECT_EQ(right.age, left.age);
+        EXPECT_EQ(right.subject, left.subject);
+        EXPECT_EQ(right.geography, left.geography);
+        EXPECT_EQ(right.frequency, left.frequency);
+        EXPECT_EQ(right.source, left.source);
+        for (std::uint8_t slot = 0; slot < 4U; ++slot) {
+            EXPECT_EQ((*search)
+                          ->stem_quantity(
+                              LexemeId{static_cast<std::uint32_t>(index)}, slot)
+                          .known,
+                      (*full)
+                          ->stem_quantity(
+                              LexemeId{static_cast<std::uint32_t>(index)}, slot)
+                          .known);
+            EXPECT_EQ((*search)
+                          ->stem_quantity(
+                              LexemeId{static_cast<std::uint32_t>(index)}, slot)
+                          .long_vowel,
+                      (*full)
+                          ->stem_quantity(
+                              LexemeId{static_cast<std::uint32_t>(index)}, slot)
+                          .long_vowel);
+        }
+    }
+
+    const auto full_rules = (*full)->rules();
+    const auto search_rules = (*search)->rules();
+    ASSERT_EQ(search_rules.size(), full_rules.size());
+    for (std::size_t index = 0; index < full_rules.size(); ++index) {
+        SCOPED_TRACE(index);
+        const auto &left = full_rules[index];
+        const auto &right = search_rules[index];
+        EXPECT_EQ(right.id, left.id);
+        EXPECT_EQ(right.part_of_speech, left.part_of_speech);
+        EXPECT_EQ(right.declension, left.declension);
+        EXPECT_EQ(right.variant, left.variant);
+        EXPECT_EQ(right.grammatical_case, left.grammatical_case);
+        EXPECT_EQ(right.number, left.number);
+        EXPECT_EQ(right.gender, left.gender);
+        EXPECT_EQ(right.adjective_degree, left.adjective_degree);
+        EXPECT_EQ(right.numeral_type, left.numeral_type);
+        EXPECT_EQ(right.tense, left.tense);
+        EXPECT_EQ(right.voice, left.voice);
+        EXPECT_EQ(right.mood, left.mood);
+        EXPECT_EQ(right.person, left.person);
+        EXPECT_EQ(right.ending, left.ending);
+        EXPECT_EQ(right.stem_key, left.stem_key);
+        EXPECT_EQ(right.age, left.age);
+        EXPECT_EQ(right.frequency, left.frequency);
+        EXPECT_EQ((*search)->inflection_quantity(right.id).known,
+                  (*full)->inflection_quantity(left.id).known);
+        EXPECT_EQ((*search)->inflection_quantity(right.id).long_vowel,
+                  (*full)->inflection_quantity(left.id).long_vowel);
+    }
+
+    const auto full_suffixes = (*full)->suffixes();
+    const auto search_suffixes = (*search)->suffixes();
+    ASSERT_EQ(search_suffixes.size(), full_suffixes.size());
+    for (std::size_t index = 0; index < full_suffixes.size(); ++index) {
+        const auto &left = full_suffixes[index];
+        const auto &right = search_suffixes[index];
+        EXPECT_EQ(right.id, left.id);
+        EXPECT_EQ(right.fix, left.fix);
+        EXPECT_EQ(right.root, left.root);
+        EXPECT_EQ(right.root_key, left.root_key);
+        EXPECT_EQ(right.target, left.target);
+        EXPECT_EQ(right.target_key, left.target_key);
+        EXPECT_EQ(right.target_declension, left.target_declension);
+        EXPECT_EQ(right.target_variant, left.target_variant);
+        EXPECT_EQ(right.target_gender, left.target_gender);
+        EXPECT_EQ(right.target_noun_kind, left.target_noun_kind);
+        EXPECT_EQ(right.target_degree, left.target_degree);
+        EXPECT_EQ(right.target_numeral_type, left.target_numeral_type);
+        EXPECT_EQ(right.numeric_value, left.numeric_value);
+        EXPECT_EQ(right.connector, left.connector);
+    }
+
+    const auto full_prefixes = (*full)->prefixes();
+    const auto search_prefixes = (*search)->prefixes();
+    ASSERT_EQ(search_prefixes.size(), full_prefixes.size());
+    for (std::size_t index = 0; index < full_prefixes.size(); ++index) {
+        const auto &left = full_prefixes[index];
+        const auto &right = search_prefixes[index];
+        EXPECT_EQ(right.id, left.id);
+        EXPECT_EQ(right.fix, left.fix);
+        EXPECT_EQ(right.root, left.root);
+        EXPECT_EQ(right.target, left.target);
+        EXPECT_EQ(right.connector, left.connector);
+        EXPECT_EQ((*search)->addon_kind(right.id),
+                  (*full)->addon_kind(left.id));
+    }
+
+    const auto full_tackons = (*full)->tackons();
+    const auto search_tackons = (*search)->tackons();
+    ASSERT_EQ(search_tackons.size(), full_tackons.size());
+    for (std::size_t index = 0; index < full_tackons.size(); ++index) {
+        const auto &left = full_tackons[index];
+        const auto &right = search_tackons[index];
+        EXPECT_EQ(right.id, left.id);
+        EXPECT_EQ(right.fix, left.fix);
+        EXPECT_EQ(right.base, left.base);
+        EXPECT_EQ(right.declension, left.declension);
+        EXPECT_EQ(right.variant, left.variant);
+        EXPECT_EQ(right.gender, left.gender);
+        EXPECT_EQ(right.noun_kind, left.noun_kind);
+        EXPECT_EQ(right.pronoun_kind, left.pronoun_kind);
+        EXPECT_EQ(right.adjective_degree, left.adjective_degree);
+        EXPECT_EQ(right.packon, left.packon);
+        EXPECT_EQ(right.enclitic, left.enclitic);
+        EXPECT_EQ((*search)->addon_kind(right.id),
+                  (*full)->addon_kind(left.id));
+    }
+
+    const auto full_rewrites = (*full)->rewrites();
+    const auto search_rewrites = (*search)->rewrites();
+    ASSERT_EQ(search_rewrites.size(), full_rewrites.size());
+    for (std::size_t index = 0; index < full_rewrites.size(); ++index) {
+        const auto &left = full_rewrites[index];
+        const auto &right = search_rewrites[index];
+        EXPECT_EQ(right.id, left.id);
+        EXPECT_EQ(right.before, left.before);
+        EXPECT_EQ(right.after, left.after);
+        EXPECT_EQ(right.name, left.name);
+        EXPECT_EQ(right.kind, left.kind);
+        EXPECT_EQ(right.scope, left.scope);
+        EXPECT_EQ(right.priority, left.priority);
+        EXPECT_EQ(right.scan_reverse, left.scan_reverse);
+        EXPECT_EQ(right.required_part, left.required_part);
+        EXPECT_EQ(right.required_stem_key, left.required_stem_key);
+        EXPECT_EQ(right.minimum_before, left.minimum_before);
+        EXPECT_EQ(right.minimum_after, left.minimum_after);
+        EXPECT_EQ(right.medieval, left.medieval);
+        EXPECT_EQ(right.operation, left.operation);
+        EXPECT_EQ(right.stage, left.stage);
+        EXPECT_EQ(right.constraint, left.constraint);
     }
 }
 
@@ -325,8 +494,147 @@ TEST(DatabaseTest, DecodesRemainingSemanticPayloads) {
             return rule.part_of_speech == PartOfSpeech::verb &&
                    rule.tense == Tense::present &&
                    rule.voice == Voice::active &&
-                   rule.mood == Mood::indicative && rule.person == 1U;
+                   rule.mood == Mood::indicative &&
+                   rule.person == Person::first;
         }));
+}
+
+TEST(DatabaseTest, ClosedSemanticDomainsHaveTypedCanonicalNames) {
+    static_assert(std::is_enum_v<NounKind>);
+    static_assert(std::is_enum_v<Age>);
+    static_assert(std::is_enum_v<SubjectArea>);
+    static_assert(std::is_enum_v<Geography>);
+    static_assert(std::is_enum_v<LexicalFrequency>);
+    static_assert(std::is_enum_v<RuleFrequency>);
+    static_assert(std::is_enum_v<Source>);
+    static_assert(std::is_enum_v<Person>);
+
+    const auto expect_closed_domain = []<class Enum>(const Enum last,
+                                                     const auto name) {
+        EXPECT_TRUE(name(static_cast<Enum>(0U)).empty());
+        for (std::uint8_t ordinal = 1U; ordinal <= std::to_underlying(last);
+             ++ordinal) {
+            EXPECT_FALSE(name(static_cast<Enum>(ordinal)).empty())
+                << static_cast<unsigned>(ordinal);
+        }
+        // Intentionally probes the presentation boundary with an invalid wire
+        // code; fixed-underlying enums can represent the full uint8_t range.
+        // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
+        const auto invalid = static_cast<Enum>(std::to_underlying(last) + 1U);
+        EXPECT_TRUE(name(invalid).empty());
+    };
+
+    expect_closed_domain(NounKind::place, noun_kind_name);
+    expect_closed_domain(Age::modern, age_name);
+    expect_closed_domain(SubjectArea::mythology, subject_name);
+    expect_closed_domain(Geography::eastern_europe, geography_name);
+    expect_closed_domain(LexicalFrequency::pliny, lexical_frequency_name);
+    expect_closed_domain(RuleFrequency::reserved_n, rule_frequency_name);
+    expect_closed_domain(Source::user_submitted, source_name);
+    expect_closed_domain(GrammaticalCase::accusative, case_name);
+    expect_closed_domain(Gender::common, gender_name);
+    expect_closed_domain(GrammaticalNumber::plural, number_name);
+    expect_closed_domain(Degree::superlative, degree_name);
+    expect_closed_domain(PronounKind::adjectival, pronoun_kind_name);
+    expect_closed_domain(NumeralType::adverbial, numeral_type_name);
+    expect_closed_domain(Tense::future_perfect, tense_name);
+    expect_closed_domain(Voice::passive, voice_name);
+    expect_closed_domain(Mood::participle, mood_name);
+    expect_closed_domain(VerbKind::perfect_definite, verb_kind_name);
+
+    EXPECT_EQ(governed_case(VerbKind::governs_genitive),
+              GrammaticalCase::genitive);
+    EXPECT_EQ(governed_case(VerbKind::governs_dative), GrammaticalCase::dative);
+    EXPECT_EQ(governed_case(VerbKind::governs_ablative),
+              GrammaticalCase::ablative);
+    EXPECT_FALSE(governed_case(VerbKind::transitive).has_value());
+}
+
+TEST(DatabaseTest, AuditsEveryCategoricalCodeInTheDataset) {
+    const auto &database = test::engine().database();
+    std::array<bool, std::to_underlying(VerbKind::perfect_definite) + 1U>
+        verb_kinds{};
+    std::array<bool, std::to_underlying(GrammaticalCase::accusative) + 1U>
+        governed_cases{};
+
+    for (const auto &lexeme : database.lexemes()) {
+        EXPECT_LE(std::to_underlying(lexeme.part_of_speech),
+                  std::to_underlying(PartOfSpeech::interjection));
+        EXPECT_LE(std::to_underlying(lexeme.age),
+                  std::to_underlying(Age::modern));
+        EXPECT_LE(std::to_underlying(lexeme.subject),
+                  std::to_underlying(SubjectArea::mythology));
+        EXPECT_LE(std::to_underlying(lexeme.geography),
+                  std::to_underlying(Geography::eastern_europe));
+        EXPECT_LE(std::to_underlying(lexeme.frequency),
+                  std::to_underlying(LexicalFrequency::pliny));
+        EXPECT_LE(std::to_underlying(lexeme.source),
+                  std::to_underlying(Source::user_submitted));
+        if (lexeme.part_of_speech == PartOfSpeech::verb) {
+            verb_kinds.at(std::to_underlying(lexeme.verb_kind)) = true;
+        }
+        if (lexeme.part_of_speech == PartOfSpeech::preposition) {
+            governed_cases.at(std::to_underlying(lexeme.governs)) = true;
+        }
+    }
+
+    // This snapshot contains every legacy Verb_Kind except GEN.  The absence
+    // of a real GEN entry is a dataset fact, not a reason to synthesize one.
+    EXPECT_TRUE(verb_kinds.at(std::to_underlying(VerbKind::unknown)));
+    EXPECT_TRUE(verb_kinds.at(std::to_underlying(VerbKind::to_be)));
+    EXPECT_TRUE(verb_kinds.at(std::to_underlying(VerbKind::compound_of_to_be)));
+    EXPECT_FALSE(verb_kinds.at(std::to_underlying(VerbKind::governs_genitive)));
+    for (const auto kind :
+         {VerbKind::governs_dative, VerbKind::governs_ablative,
+          VerbKind::transitive, VerbKind::intransitive, VerbKind::impersonal,
+          VerbKind::deponent, VerbKind::semideponent,
+          VerbKind::perfect_definite}) {
+        EXPECT_TRUE(verb_kinds.at(std::to_underlying(kind)))
+            << verb_kind_name(kind);
+    }
+
+    EXPECT_TRUE(
+        governed_cases.at(std::to_underlying(GrammaticalCase::genitive)));
+    EXPECT_TRUE(
+        governed_cases.at(std::to_underlying(GrammaticalCase::ablative)));
+    EXPECT_TRUE(
+        governed_cases.at(std::to_underlying(GrammaticalCase::accusative)));
+
+    for (const auto &rule : database.rules()) {
+        EXPECT_LE(std::to_underlying(rule.part_of_speech),
+                  std::to_underlying(PartOfSpeech::interjection));
+        EXPECT_LE(std::to_underlying(rule.grammatical_case),
+                  std::to_underlying(GrammaticalCase::accusative));
+        EXPECT_LE(std::to_underlying(rule.number),
+                  std::to_underlying(GrammaticalNumber::plural));
+        EXPECT_LE(std::to_underlying(rule.gender),
+                  std::to_underlying(Gender::common));
+        EXPECT_LE(std::to_underlying(rule.tense),
+                  std::to_underlying(Tense::future_perfect));
+        EXPECT_LE(std::to_underlying(rule.voice),
+                  std::to_underlying(Voice::passive));
+        EXPECT_LE(std::to_underlying(rule.mood),
+                  std::to_underlying(Mood::participle));
+        EXPECT_LE(std::to_underlying(rule.person),
+                  std::to_underlying(Person::third));
+        EXPECT_LE(std::to_underlying(rule.age),
+                  std::to_underlying(Age::modern));
+        EXPECT_LE(std::to_underlying(rule.frequency),
+                  std::to_underlying(RuleFrequency::reserved_n));
+    }
+
+    for (const auto &suffix : database.suffixes()) {
+        EXPECT_EQ(database.addon_kind(suffix.id), AddonKind::suffix);
+    }
+    for (const auto &prefix : database.prefixes()) {
+        const auto kind = database.addon_kind(prefix.id);
+        EXPECT_TRUE(kind == AddonKind::prefix || kind == AddonKind::tickon);
+    }
+    for (const auto &tackon : database.tackons()) {
+        const auto kind = database.addon_kind(tackon.id);
+        EXPECT_EQ(kind == AddonKind::packon, tackon.packon);
+        EXPECT_FALSE(tackon.packon && tackon.enclitic);
+    }
 }
 
 TEST(DatabaseTest, LoadsAndIndexesUniqueAnalyses) {

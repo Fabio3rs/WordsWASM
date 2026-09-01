@@ -41,31 +41,31 @@ dictionary_name(const DictionaryKind dictionary) noexcept {
     return value.empty() ? Json(nullptr) : Json(value);
 }
 
-[[nodiscard]] Json age_json(const std::uint8_t value) {
+[[nodiscard]] Json age_json(const Age value) {
     return nullable_semantic(age_name(value));
 }
 
-[[nodiscard]] Json lexical_frequency_json(const std::uint8_t value) {
+[[nodiscard]] Json lexical_frequency_json(const LexicalFrequency value) {
     return nullable_semantic(lexical_frequency_name(value));
 }
 
-[[nodiscard]] Json rule_frequency_json(const std::uint8_t value) {
+[[nodiscard]] Json rule_frequency_json(const RuleFrequency value) {
     return nullable_semantic(rule_frequency_name(value));
 }
 
-[[nodiscard]] Json subject_json(const std::uint8_t value) {
+[[nodiscard]] Json subject_json(const SubjectArea value) {
     return nullable_semantic(subject_name(value));
 }
 
-[[nodiscard]] Json geography_json(const std::uint8_t value) {
+[[nodiscard]] Json geography_json(const Geography value) {
     return nullable_semantic(geography_name(value));
 }
 
-[[nodiscard]] Json source_json(const std::uint8_t value) {
+[[nodiscard]] Json source_json(const Source value) {
     return nullable_semantic(source_name(value));
 }
 
-[[nodiscard]] Json noun_kind_json(const std::uint8_t value) {
+[[nodiscard]] Json noun_kind_json(const NounKind value) {
     return nullable_semantic(noun_kind_name(value));
 }
 
@@ -718,7 +718,7 @@ simple_dictionary_form(const Database &database, const LexemeRecord &lexeme,
         {"tense", tense_json(morphology.tense)},
         {"voice", voice_json(morphology.voice)},
         {"mood", mood_json(morphology.mood)},
-        {"person", paradigm_json(morphology.person)},
+        {"person", paradigm_json(std::to_underlying(morphology.person))},
         {"number", number_json(morphology.number)},
     };
 }

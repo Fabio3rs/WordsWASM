@@ -110,6 +110,128 @@ enum class Gender : std::uint8_t {
     common = 4,
 };
 
+// Closed lexical domains copied from the Ada WORDS types.  Their ordinals
+// intentionally match the WWDB wire codes, but consumers must use the
+// semantic types rather than depending on that representation detail.
+enum class NounKind : std::uint8_t {
+    unknown = 0,
+    singular_only = 1,
+    plural_only = 2,
+    abstract = 3,
+    group = 4,
+    proper_name = 5,
+    person = 6,
+    thing = 7,
+    locale = 8,
+    place = 9,
+};
+
+enum class Age : std::uint8_t {
+    unknown = 0,
+    archaic = 1,
+    early = 2,
+    classical = 3,
+    late = 4,
+    later = 5,
+    medieval = 6,
+    scholarly = 7,
+    modern = 8,
+};
+
+enum class SubjectArea : std::uint8_t {
+    unknown = 0,
+    agriculture = 1,
+    biological_medical = 2,
+    drama_arts = 3,
+    ecclesiastic = 4,
+    grammar_literature = 5,
+    legal_government = 6,
+    poetic = 7,
+    science_philosophy = 8,
+    technical = 9,
+    military = 10,
+    mythology = 11,
+};
+
+enum class Geography : std::uint8_t {
+    unknown = 0,
+    africa = 1,
+    britain = 2,
+    china = 3,
+    scandinavia = 4,
+    egypt = 5,
+    france_gaul = 6,
+    germany = 7,
+    greece = 8,
+    italy_rome = 9,
+    india = 10,
+    balkans = 11,
+    netherlands = 12,
+    persia = 13,
+    near_east = 14,
+    russia = 15,
+    spain_iberia = 16,
+    eastern_europe = 17,
+};
+
+enum class LexicalFrequency : std::uint8_t {
+    unknown = 0,
+    very_frequent = 1,
+    frequent = 2,
+    common = 3,
+    lesser = 4,
+    uncommon = 5,
+    very_rare = 6,
+    inscription = 7,
+    graffiti = 8,
+    pliny = 9,
+};
+
+// WORDS reuses the same legacy storage codes for a different inflection-rule
+// vocabulary.  Keeping a separate type prevents lexical and rule frequency
+// from being mixed accidentally.
+enum class RuleFrequency : std::uint8_t {
+    unknown = 0,
+    most_frequent = 1,
+    sometimes = 2,
+    uncommon = 3,
+    infrequent = 4,
+    rare = 5,
+    very_rare = 6,
+    inscription = 7,
+    reserved_m = 8,
+    reserved_n = 9,
+};
+
+enum class Source : std::uint8_t {
+    unknown = 0,
+    source_a = 1,
+    beeson = 2,
+    cassells = 3,
+    adams_latin_sexual_vocabulary = 4,
+    stelten_ecclesiastical_latin = 5,
+    deferrari_aquinas = 6,
+    gildersleeve_lodge = 7,
+    collatinus = 8,
+    leverett = 9,
+    bracton = 10,
+    calepinus_novus = 11,
+    lewis_elementary_latin_dictionary = 12,
+    latham_medieval_word_list = 13,
+    lynn_nelson = 14,
+    oxford_latin_dictionary = 15,
+    souter = 16,
+    other_dictionaries = 17,
+    plater_white = 18,
+    lewis_short = 19,
+    found_in_translation = 20,
+    source_u = 21,
+    saxonis_vademecum = 22,
+    whitaker = 23,
+    temporary = 24,
+    user_submitted = 25,
+};
+
 enum class GrammaticalCase : std::uint8_t {
     unknown = 0,
     nominative = 1,
@@ -125,6 +247,13 @@ enum class GrammaticalNumber : std::uint8_t {
     unknown = 0,
     singular = 1,
     plural = 2,
+};
+
+enum class Person : std::uint8_t {
+    unknown = 0,
+    first = 1,
+    second = 2,
+    third = 3,
 };
 
 enum class Degree : std::uint8_t {
@@ -298,7 +427,7 @@ struct VerbMorphology final {
     Tense tense{Tense::unknown};
     Voice voice{Voice::unknown};
     Mood mood{Mood::unknown};
-    std::uint8_t person{};
+    Person person{Person::unknown};
     GrammaticalNumber number{GrammaticalNumber::unknown};
 };
 

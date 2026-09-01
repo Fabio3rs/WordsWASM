@@ -14,6 +14,38 @@ export type PartOfSpeech = "noun" | "pronoun" | "adjective" | "numeral" |
   "adverb" | "verb" | "participle" | "supine" | "preposition" |
   "conjunction" | "interjection";
 export type QuantityMatch = "unspecified" | "exact" | "unknown";
+export type NounKind = "singular-only" | "plural-only" | "abstract" |
+  "group" | "proper-name" | "person" | "thing" | "locale" | "place";
+export type PronounKind = "personal" | "relative" | "reflexive" |
+  "demonstrative" | "interrogative" | "indefinite" | "adjectival";
+export type VerbKind = "to-be" | "compound-of-to-be" |
+  "governs-genitive" | "governs-dative" | "governs-ablative" |
+  "transitive" | "intransitive" | "impersonal" | "deponent" |
+  "semideponent" | "perfect-definite";
+export type Age = "archaic" | "early" | "classical" | "late" | "later" |
+  "medieval" | "scholarly" | "modern";
+export type SubjectArea = "agriculture" | "biological-medical" |
+  "drama-arts" | "ecclesiastic" | "grammar-literature" |
+  "legal-government" | "poetic" | "science-philosophy" | "technical" |
+  "military" | "mythology";
+export type Geography = "africa" | "britain" | "china" | "scandinavia" |
+  "egypt" | "france-gaul" | "germany" | "greece" | "italy-rome" |
+  "india" | "balkans" | "netherlands" | "persia" | "near-east" |
+  "russia" | "spain-iberia" | "eastern-europe";
+export type LexicalFrequency = "very-frequent" | "frequent" | "common" |
+  "lesser" | "uncommon" | "very-rare" | "inscription" | "graffiti" |
+  "pliny";
+export type RuleFrequency = "most-frequent" | "sometimes" | "uncommon" |
+  "infrequent" | "rare" | "very-rare" | "inscription" | "reserved-m" |
+  "reserved-n";
+export type Source = "source-a" | "beeson" | "cassells" |
+  "adams-latin-sexual-vocabulary" | "stelten-ecclesiastical-latin" |
+  "deferrari-aquinas" | "gildersleeve-lodge" | "collatinus" | "leverett" |
+  "bracton" | "calepinus-novus" | "lewis-elementary-latin-dictionary" |
+  "latham-medieval-word-list" | "lynn-nelson" |
+  "oxford-latin-dictionary" | "souter" | "other-dictionaries" |
+  "plater-white" | "lewis-short" | "found-in-translation" | "source-u" |
+  "saxonis-vademecum" | "whitaker" | "temporary" | "user-submitted";
 
 export interface QueryIdentity {
   text: string;
@@ -74,11 +106,11 @@ export type Morphology =
 export interface LexicalMetadata {
   dictionary: "general" | "unique";
   entryId: number;
-  age: string | null;
-  subject: string | null;
-  geography: string | null;
-  frequency: string | null;
-  source: string | null;
+  age: Age | null;
+  subject: SubjectArea | null;
+  geography: Geography | null;
+  frequency: LexicalFrequency | null;
+  source: Source | null;
 }
 
 export type LexicalFlags = LexicalMetadata & (
@@ -87,13 +119,14 @@ export type LexicalFlags = LexicalMetadata & (
       declension: number | null;
       variant: number | null;
       gender: Gender | null;
-      nounKind: string | null;
+      nounKind: NounKind | null;
     }
   | {
       partOfSpeech: "pronoun";
       declension: number | null;
       variant: number | null;
-      pronounKind: string | null;
+      pronounKind: PronounKind | null;
+      requiredPackonId: number | null;
     }
   | {
       partOfSpeech: "adjective";
@@ -113,7 +146,7 @@ export type LexicalFlags = LexicalMetadata & (
       partOfSpeech: "verb";
       conjugation: number | null;
       variant: number | null;
-      verbKind: string | null;
+      verbKind: VerbKind | null;
     }
   | {partOfSpeech: "preposition"; governs: GrammaticalCase | null}
   | {partOfSpeech: "conjunction" | "interjection"}
@@ -121,8 +154,8 @@ export type LexicalFlags = LexicalMetadata & (
 
 export interface RuleFlags {
   id: number;
-  age: string | null;
-  frequency: string | null;
+  age: Age | null;
+  frequency: RuleFrequency | null;
 }
 
 export interface ResolvedForm {
@@ -138,6 +171,7 @@ export interface AddonStepBase {
   id: number;
   type: "prefix" | "tickon" | "suffix" | "tackon" | "packon";
   text: string;
+  enclitic: boolean;
 }
 
 export interface RewriteStepBase {

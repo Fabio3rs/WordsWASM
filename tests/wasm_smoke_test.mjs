@@ -115,11 +115,24 @@ try {
   );
   assert.equal(study.derivation.steps[0].meaning, undefined);
   assert.equal(study.derivation.steps[0].target, "form");
+  assert.equal(study.derivation.steps[0].enclitic, true);
   assert.equal("addonIds" in study, false);
   const analyzedStudy = engine.analyze("studiisque").hits.find((hit) =>
     hit.kind === "lexical" && hit.lemma === "studium"
   );
   assert.equal(typeof analyzedStudy.derivation.steps[0].meaning, "string");
+  assert.equal(analyzedStudy.derivation.steps[0].enclitic, true);
+
+  const requiredPackon = engine.search("quidam").hits.find((hit) =>
+    hit.kind === "lexical" &&
+    hit.lexical.partOfSpeech === "pronoun" &&
+    hit.lexical.requiredPackonId !== null
+  );
+  assert.ok(requiredPackon);
+  assert.ok(requiredPackon.derivation.steps.some((step) =>
+    step.kind === "addon" && step.type === "packon" &&
+    step.id === requiredPackon.lexical.requiredPackonId
+  ));
 
   const praetorDocument = engine.search("pretoribusque");
   expectedSearches.set("pretoribusque", praetorDocument);

@@ -18,8 +18,8 @@ using Json = nlohmann::ordered_json;
 
 TEST(EngineTest, SearchDatabasePreservesTheFullDatabaseHitContract) {
     constexpr std::array<std::string_view, 10> fixtures{
-        "puella", "anaticulus", "mālum", "eadem", "mavisque",
-        "pretor", "amasti", "iv", "amata est", "anaticuliculiculus",
+        "puella", "anaticulus", "mālum", "eadem",     "mavisque",
+        "pretor", "amasti",     "iv",    "amata est", "anaticuliculiculus",
     };
     ASSERT_TRUE(test::engine().supports_full_analysis());
     ASSERT_FALSE(test::search_engine().supports_full_analysis());
@@ -27,14 +27,16 @@ TEST(EngineTest, SearchDatabasePreservesTheFullDatabaseHitContract) {
     for (const auto fixture : fixtures) {
         const auto full_result = test::engine().analyze_text(fixture);
         const auto search_result = test::search_engine().analyze_text(fixture);
-        EXPECT_EQ(Json::parse(search_json(test::engine(), full_result)),
-                  Json::parse(search_json(test::search_engine(), search_result)))
+        EXPECT_EQ(
+            Json::parse(search_json(test::engine(), full_result)),
+            Json::parse(search_json(test::search_engine(), search_result)))
             << fixture;
     }
 
     const auto result = test::search_engine().analyze("puella");
-    EXPECT_THROW(static_cast<void>(analysis_json(test::search_engine(), result)),
-                 std::logic_error);
+    EXPECT_THROW(
+        static_cast<void>(analysis_json(test::search_engine(), result)),
+        std::logic_error);
 }
 
 TEST(EngineTest, SearchDatabaseResolvesCanonicalLemmaWithoutMeanings) {
@@ -60,12 +62,11 @@ TEST(EngineTest, SearchDatabaseResolvesCanonicalLemmaWithoutMeanings) {
         }};
     for (const auto &[surface, expected] : fixtures) {
         const auto result = test::search_engine().analyze(surface);
-        EXPECT_TRUE(std::ranges::any_of(
-            result.analyses, [&](const AnalysisIR &analysis) {
-                const auto &lexeme = search_database.lexeme(analysis.lexeme);
-                return citation_lemma(search_database, lexeme, surface) ==
-                       expected;
-            })) << surface;
+        EXPECT_TRUE(std::ranges::any_of(result.analyses, [&](const AnalysisIR
+                                                                 &analysis) {
+            const auto &lexeme = search_database.lexeme(analysis.lexeme);
+            return citation_lemma(search_database, lexeme, surface) == expected;
+        })) << surface;
     }
 }
 
@@ -143,10 +144,66 @@ TEST(EngineTest, AnalyzesEveryRegularSemanticClass) {
     }
 }
 
+TEST(EngineTest, PreservesRealMorphologicalAmbiguity) {
+    const auto result = test::engine().analyze("puellae");
+    ASSERT_EQ(result.status, QueryStatus::analyzed);
+
+    const auto has_noun_form = [&](const GrammaticalCase grammatical_case,
+                                   const GrammaticalNumber number) {
+        return std::ranges::any_of(
+            result.analyses, [&](const AnalysisIR &analysis) {
+                const auto *noun =
+                    std::get_if<NounMorphology>(&analysis.morphology);
+                return noun != nullptr &&
+                       noun->grammatical_case == grammatical_case &&
+                       noun->number == number &&
+                       noun->gender == Gender::feminine;
+            });
+    };
+    EXPECT_TRUE(
+        has_noun_form(GrammaticalCase::genitive, GrammaticalNumber::singular));
+    EXPECT_TRUE(
+        has_noun_form(GrammaticalCase::dative, GrammaticalNumber::singular));
+    EXPECT_TRUE(
+        has_noun_form(GrammaticalCase::nominative, GrammaticalNumber::plural));
+}
+
+TEST(EngineTest, PreservesEveryVerbKindRepresentedByARealLexeme) {
+    struct Fixture final {
+        std::string_view surface;
+        VerbKind kind;
+    };
+    constexpr std::array fixtures{
+        Fixture{.surface = "sum", .kind = VerbKind::to_be},
+        Fixture{.surface = "absum", .kind = VerbKind::compound_of_to_be},
+        Fixture{.surface = "accredo", .kind = VerbKind::governs_dative},
+        Fixture{.surface = "supersido", .kind = VerbKind::governs_ablative},
+        Fixture{.surface = "abalieno", .kind = VerbKind::transitive},
+        Fixture{.surface = "curro", .kind = VerbKind::intransitive},
+        Fixture{.surface = "licet", .kind = VerbKind::impersonal},
+        Fixture{.surface = "loquor", .kind = VerbKind::deponent},
+        Fixture{.surface = "audeo", .kind = VerbKind::semideponent},
+        Fixture{.surface = "odi", .kind = VerbKind::perfect_definite},
+    };
+
+    for (const auto &fixture : fixtures) {
+        SCOPED_TRACE(fixture.surface);
+        for (const auto *engine : {&test::engine(), &test::search_engine()}) {
+            const auto result = engine->analyze(fixture.surface);
+            EXPECT_TRUE(std::ranges::any_of(
+                result.analyses, [&](const AnalysisIR &analysis) {
+                    const auto &lexeme =
+                        engine->database().lexeme(analysis.lexeme);
+                    return lexeme.part_of_speech == PartOfSpeech::verb &&
+                           lexeme.verb_kind == fixture.kind;
+                }));
+        }
+    }
+}
+
 TEST(EngineTest, RequiresPassiveMorphologyForDeponentVerbs) {
     constexpr std::uint32_t reor_entry = 32909U;
-    const auto is_reor = [](const Engine &engine,
-                            const AnalysisIR &analysis) {
+    const auto is_reor = [](const Engine &engine, const AnalysisIR &analysis) {
         const auto &lexeme = engine.database().lexeme(analysis.lexeme);
         return lexeme.dictionary == DictionaryKind::general &&
                lexeme.dictionary_entry + 1U == reor_entry &&
@@ -155,7 +212,7 @@ TEST(EngineTest, RequiresPassiveMorphologyForDeponentVerbs) {
 
     const auto expects_person = [&](const Engine &engine,
                                     const std::string_view surface,
-                                    const std::uint8_t person) {
+                                    const Person person) {
         const auto result = engine.analyze(surface);
         return std::ranges::any_of(
             result.analyses, [&](const AnalysisIR &analysis) {
@@ -174,12 +231,12 @@ TEST(EngineTest, RequiresPassiveMorphologyForDeponentVerbs) {
     for (const auto *engine : engines) {
         const auto res = engine->analyze("res");
         ASSERT_EQ(res.status, QueryStatus::analyzed);
-        EXPECT_TRUE(std::ranges::none_of(
-            res.analyses, [&](const AnalysisIR &analysis) {
+        EXPECT_TRUE(
+            std::ranges::none_of(res.analyses, [&](const AnalysisIR &analysis) {
                 return is_reor(*engine, analysis);
             }));
-        EXPECT_TRUE(expects_person(*engine, "reor", 1U));
-        EXPECT_TRUE(expects_person(*engine, "reris", 2U));
+        EXPECT_TRUE(expects_person(*engine, "reor", Person::first));
+        EXPECT_TRUE(expects_person(*engine, "reris", Person::second));
     }
 }
 
@@ -595,7 +652,7 @@ TEST(EngineTest, AnalyzesBoundedCompoundsWithSum) {
         Tense tense;
         Voice voice;
         Mood mood;
-        std::uint8_t person;
+        Person person;
         GrammaticalNumber number;
     };
     constexpr std::array fixtures{
@@ -604,49 +661,49 @@ TEST(EngineTest, AnalyzesBoundedCompoundsWithSum) {
                 .tense = Tense::perfect,
                 .voice = Voice::passive,
                 .mood = Mood::indicative,
-                .person = 3U,
+                .person = Person::third,
                 .number = GrammaticalNumber::singular},
         Fixture{.text = "amati sunt",
                 .kind = CompoundKind::finite_sum,
                 .tense = Tense::perfect,
                 .voice = Voice::passive,
                 .mood = Mood::indicative,
-                .person = 3U,
+                .person = Person::third,
                 .number = GrammaticalNumber::plural},
         Fixture{.text = "amata fuerit",
                 .kind = CompoundKind::finite_sum,
                 .tense = Tense::unknown,
                 .voice = Voice::passive,
                 .mood = Mood::indicative,
-                .person = 3U,
+                .person = Person::third,
                 .number = GrammaticalNumber::singular},
         Fixture{.text = "amaturus est",
                 .kind = CompoundKind::finite_sum,
                 .tense = Tense::present,
                 .voice = Voice::passive,
                 .mood = Mood::indicative,
-                .person = 3U,
+                .person = Person::third,
                 .number = GrammaticalNumber::singular},
         Fixture{.text = "amatus esse",
                 .kind = CompoundKind::esse,
                 .tense = Tense::perfect,
                 .voice = Voice::passive,
                 .mood = Mood::infinitive,
-                .person = 0U,
+                .person = Person::unknown,
                 .number = GrammaticalNumber::unknown},
         Fixture{.text = "amaturus fuisse",
                 .kind = CompoundKind::fuisse,
                 .tense = Tense::perfect,
                 .voice = Voice::active,
                 .mood = Mood::infinitive,
-                .person = 0U,
+                .person = Person::unknown,
                 .number = GrammaticalNumber::unknown},
         Fixture{.text = "amatum iri",
                 .kind = CompoundKind::iri,
                 .tense = Tense::future,
                 .voice = Voice::passive,
                 .mood = Mood::infinitive,
-                .person = 0U,
+                .person = Person::unknown,
                 .number = GrammaticalNumber::unknown},
     };
 
@@ -801,12 +858,13 @@ TEST(EngineTest, LexicalQuantityPartitionsMalumHomographs) {
 TEST(EngineTest, ReviewedLexicalQuantitiesSelectTheirExactLexemes) {
     const auto contains_entry = [](const QueryResult &result,
                                    const std::uint32_t dictionary_entry) {
-        return std::ranges::any_of(result.analyses, [&](const AnalysisIR &analysis) {
-            const auto &lexeme =
-                test::engine().database().lexeme(analysis.lexeme);
-            return lexeme.dictionary_entry + 1U == dictionary_entry &&
-                   analysis.quantity_match == QuantityMatch::exact;
-        });
+        return std::ranges::any_of(
+            result.analyses, [&](const AnalysisIR &analysis) {
+                const auto &lexeme =
+                    test::engine().database().lexeme(analysis.lexeme);
+                return lexeme.dictionary_entry + 1U == dictionary_entry &&
+                       analysis.quantity_match == QuantityMatch::exact;
+            });
     };
 
     EXPECT_TRUE(contains_entry(test::engine().analyze("pŭella"), 32'257U));

@@ -165,6 +165,9 @@ function copyLexical(raw) {
         declension: nullableNumber(raw.declension),
         variant: nullableNumber(raw.variant),
         pronounKind: nullableString(raw.pronounKind),
+        requiredPackonId: raw.hasRequiredPackon
+          ? raw.requiredPackonId
+          : null,
       });
     case "adjective":
       return Object.assign(output, {
@@ -215,6 +218,7 @@ function copyDerivation(raw) {
       };
       if (step.kind === "addon") {
         output.text = step.text;
+        output.enclitic = step.enclitic;
       } else {
         output.rule = step.rule;
         if (step.before !== "") output.before = step.before;

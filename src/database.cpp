@@ -354,8 +354,9 @@ parse_inflection_quantities(const std::span<const std::byte> image,
         const auto packed =
             read_u16_le(bytes, static_cast<std::size_t>(ordinal) *
                                    wwdb::inflection_quantity_stride);
-        if ((packed & wwdb::inflection_quantity_reserved_mask) !=
-            wwdb::reserved_value) {
+        if (std::cmp_not_equal(
+                (packed & wwdb::inflection_quantity_reserved_mask),
+                wwdb::reserved_value)) {
             fail("reserved-bits",
                  "inflection quantity has nonzero reserved bits");
         }
@@ -771,8 +772,8 @@ Database::load_poc(std::vector<std::byte> image) try {
             wwdb::reserved_value) {
             fail("reserved-bits", "rewrite record has nonzero reserved bits");
         }
-        if ((behavior >> wwdb::rewrite_behavior_used_bits) !=
-            wwdb::reserved_value) {
+        if (std::cmp_not_equal((behavior >> wwdb::rewrite_behavior_used_bits),
+                               wwdb::reserved_value)) {
             fail("reserved-bits", "rewrite behavior has nonzero reserved bits");
         }
 
@@ -884,33 +885,37 @@ Database::load_poc(std::vector<std::byte> image) try {
             "declension");
         record.variant = checked_nibble(
             static_cast<std::uint8_t>(paradigm & wwdb::nibble_mask), "variant");
-        record.age = static_cast<std::uint8_t>(
-            (translation >> wwdb::age_shift) & wwdb::age_mask);
-        record.subject = static_cast<std::uint8_t>(
+        record.age =
+            static_cast<Age>((translation >> wwdb::age_shift) & wwdb::age_mask);
+        record.subject = static_cast<SubjectArea>(
             (translation >> wwdb::subject_shift) & wwdb::subject_mask);
-        record.geography = static_cast<std::uint8_t>(
+        record.geography = static_cast<Geography>(
             (translation >> wwdb::geography_shift) & wwdb::geography_mask);
-        record.frequency = static_cast<std::uint8_t>(
+        record.frequency = static_cast<LexicalFrequency>(
             (translation >> wwdb::frequency_shift) & wwdb::frequency_mask);
-        record.source = static_cast<std::uint8_t>(
+        record.source = static_cast<Source>(
             (translation >> wwdb::source_shift) & wwdb::source_mask);
-        if (record.age > wwdb::maximum_age_code ||
-            record.subject > wwdb::maximum_subject_code ||
-            record.geography > wwdb::maximum_geography_code ||
-            record.frequency > wwdb::maximum_frequency_code ||
-            record.source > wwdb::maximum_source_code) {
+        if (std::to_underlying(record.age) > wwdb::maximum_age_code ||
+            std::to_underlying(record.subject) > wwdb::maximum_subject_code ||
+            std::to_underlying(record.geography) >
+                wwdb::maximum_geography_code ||
+            std::to_underlying(record.frequency) >
+                wwdb::maximum_frequency_code ||
+            std::to_underlying(record.source) > wwdb::maximum_source_code) {
             fail("invalid-enum", "lexical metadata contains an invalid enum");
         }
         if (pofs == std::to_underlying(PartOfSpeech::noun)) {
             record.gender =
                 static_cast<Gender>(class_payload & wwdb::three_bit_mask);
-            record.noun_kind = static_cast<std::uint8_t>(
+            record.noun_kind = static_cast<NounKind>(
                 (class_payload >> wwdb::noun_kind_shift) & wwdb::nibble_mask);
-            if ((class_payload >> wwdb::noun_class_used_bits) !=
-                    wwdb::reserved_value ||
+            if (std::cmp_not_equal(
+                    (class_payload >> wwdb::noun_class_used_bits),
+                    wwdb::reserved_value) ||
                 std::to_underlying(record.gender) >
                     std::to_underlying(Gender::common) ||
-                record.noun_kind > wwdb::maximum_noun_kind_code) {
+                std::to_underlying(record.noun_kind) >
+                    wwdb::maximum_noun_kind_code) {
                 fail("invalid-enum",
                      "noun lexical payload contains an invalid enum");
             }
@@ -938,8 +943,9 @@ Database::load_poc(std::vector<std::byte> image) try {
         } else if (pofs == std::to_underlying(PartOfSpeech::adjective)) {
             record.adjective_degree =
                 static_cast<Degree>(class_payload & wwdb::nibble_mask);
-            if ((class_payload >> wwdb::simple_class_used_bits) !=
-                    wwdb::reserved_value ||
+            if (std::cmp_not_equal(
+                    (class_payload >> wwdb::simple_class_used_bits),
+                    wwdb::reserved_value) ||
                 std::to_underlying(record.adjective_degree) >
                     std::to_underlying(Degree::superlative)) {
                 fail("invalid-enum",
@@ -960,8 +966,9 @@ Database::load_poc(std::vector<std::byte> image) try {
         } else if (pofs == std::to_underlying(PartOfSpeech::adverb)) {
             record.adverb_degree =
                 static_cast<Degree>(class_payload & wwdb::nibble_mask);
-            if ((class_payload >> wwdb::simple_class_used_bits) !=
-                    wwdb::reserved_value ||
+            if (std::cmp_not_equal(
+                    (class_payload >> wwdb::simple_class_used_bits),
+                    wwdb::reserved_value) ||
                 std::to_underlying(record.adverb_degree) >
                     std::to_underlying(Degree::superlative)) {
                 fail("invalid-enum",
@@ -970,8 +977,9 @@ Database::load_poc(std::vector<std::byte> image) try {
         } else if (pofs == std::to_underlying(PartOfSpeech::verb)) {
             record.verb_kind =
                 static_cast<VerbKind>(class_payload & wwdb::nibble_mask);
-            if ((class_payload >> wwdb::simple_class_used_bits) !=
-                    wwdb::reserved_value ||
+            if (std::cmp_not_equal(
+                    (class_payload >> wwdb::simple_class_used_bits),
+                    wwdb::reserved_value) ||
                 std::to_underlying(record.verb_kind) >
                     std::to_underlying(VerbKind::perfect_definite)) {
                 fail("invalid-enum",
@@ -980,8 +988,9 @@ Database::load_poc(std::vector<std::byte> image) try {
         } else if (pofs == std::to_underlying(PartOfSpeech::preposition)) {
             record.governs =
                 static_cast<GrammaticalCase>(class_payload & wwdb::nibble_mask);
-            if ((class_payload >> wwdb::simple_class_used_bits) !=
-                    wwdb::reserved_value ||
+            if (std::cmp_not_equal(
+                    (class_payload >> wwdb::simple_class_used_bits),
+                    wwdb::reserved_value) ||
                 std::to_underlying(record.governs) >
                     std::to_underlying(GrammaticalCase::accusative)) {
                 fail("invalid-enum",
@@ -1119,7 +1128,7 @@ Database::load_poc(std::vector<std::byte> image) try {
             rule.mood =
                 static_cast<Mood>((morphology >> wwdb::nominal_gender_shift) &
                                   wwdb::three_bit_mask);
-            rule.person = static_cast<std::uint8_t>(
+            rule.person = static_cast<Person>(
                 (morphology >> wwdb::morphology_byte_shift) &
                 wwdb::two_bit_mask);
             rule.number = static_cast<GrammaticalNumber>(
@@ -1137,13 +1146,13 @@ Database::load_poc(std::vector<std::byte> image) try {
         }
         rule.ending = StringId{ending_id};
         rule.stem_key = stem_key;
-        rule.age = static_cast<std::uint8_t>(
-            (packed >> wwdb::inflection_age_shift) & wwdb::age_mask);
-        rule.frequency = static_cast<std::uint8_t>(
+        rule.age = static_cast<Age>((packed >> wwdb::inflection_age_shift) &
+                                    wwdb::age_mask);
+        rule.frequency = static_cast<RuleFrequency>(
             (packed >> wwdb::inflection_frequency_shift) &
             wwdb::frequency_mask);
-        if (rule.age > wwdb::maximum_age_code ||
-            rule.frequency > wwdb::maximum_frequency_code) {
+        if (std::to_underlying(rule.age) > wwdb::maximum_age_code ||
+            std::to_underlying(rule.frequency) > wwdb::maximum_frequency_code) {
             fail("invalid-enum",
                  "inflection metadata contains an invalid enum");
         }
@@ -1167,8 +1176,9 @@ Database::load_poc(std::vector<std::byte> image) try {
                  std::to_underlying(Gender::common) ||
              std::to_underlying(rule.adjective_degree) >
                  std::to_underlying(Degree::superlative) ||
-             (morphology >> wwdb::adjective_morphology_used_bits) !=
-                 wwdb::reserved_value)) {
+             std::cmp_not_equal(
+                 (morphology >> wwdb::adjective_morphology_used_bits),
+                 wwdb::reserved_value))) {
             fail("invalid-enum",
                  "adjective inflection contains an invalid enum");
         }
@@ -1181,15 +1191,17 @@ Database::load_poc(std::vector<std::byte> image) try {
                  std::to_underlying(Gender::common) ||
              std::to_underlying(rule.numeral_type) >
                  std::to_underlying(NumeralType::adverbial) ||
-             (morphology >> wwdb::numeral_morphology_used_bits) !=
-                 wwdb::reserved_value)) {
+             std::cmp_not_equal(
+                 (morphology >> wwdb::numeral_morphology_used_bits),
+                 wwdb::reserved_value))) {
             fail("invalid-enum", "numeral inflection contains an invalid enum");
         }
         if (pofs == std::to_underlying(PartOfSpeech::adverb) &&
             (std::to_underlying(rule.adjective_degree) >
                  std::to_underlying(Degree::superlative) ||
-             (morphology >> wwdb::adverb_morphology_used_bits) !=
-                 wwdb::reserved_value)) {
+             std::cmp_not_equal(
+                 (morphology >> wwdb::adverb_morphology_used_bits),
+                 wwdb::reserved_value))) {
             fail("invalid-enum", "adverb inflection contains an invalid enum");
         }
         if (pofs == std::to_underlying(PartOfSpeech::verb) &&
@@ -1199,11 +1211,11 @@ Database::load_poc(std::vector<std::byte> image) try {
                  std::to_underlying(Voice::passive) ||
              std::to_underlying(rule.mood) >
                  std::to_underlying(Mood::participle) ||
-             rule.person > wwdb::maximum_person_code ||
+             std::to_underlying(rule.person) > wwdb::maximum_person_code ||
              std::to_underlying(rule.number) >
                  std::to_underlying(GrammaticalNumber::plural) ||
-             (morphology >> wwdb::verb_morphology_used_bits) !=
-                 wwdb::reserved_value)) {
+             std::cmp_not_equal((morphology >> wwdb::verb_morphology_used_bits),
+                                wwdb::reserved_value))) {
             fail("invalid-enum", "verb inflection contains an invalid enum");
         }
         if (pofs == std::to_underlying(PartOfSpeech::participle) &&
@@ -1229,15 +1241,17 @@ Database::load_poc(std::vector<std::byte> image) try {
                  std::to_underlying(GrammaticalNumber::plural) ||
              std::to_underlying(rule.gender) >
                  std::to_underlying(Gender::common) ||
-             (morphology >> wwdb::supine_morphology_used_bits) !=
-                 wwdb::reserved_value)) {
+             std::cmp_not_equal(
+                 (morphology >> wwdb::supine_morphology_used_bits),
+                 wwdb::reserved_value))) {
             fail("invalid-enum", "supine inflection contains an invalid enum");
         }
         if (pofs == std::to_underlying(PartOfSpeech::preposition) &&
             (std::to_underlying(rule.grammatical_case) >
                  std::to_underlying(GrammaticalCase::accusative) ||
-             (morphology >> wwdb::preposition_morphology_used_bits) !=
-                 wwdb::reserved_value)) {
+             std::cmp_not_equal(
+                 (morphology >> wwdb::preposition_morphology_used_bits),
+                 wwdb::reserved_value))) {
             fail("invalid-enum",
                  "preposition inflection contains an invalid case");
         }
@@ -1352,21 +1366,23 @@ Database::load_poc(std::vector<std::byte> image) try {
         lexeme.variant = checked_nibble(
             static_cast<std::uint8_t>(paradigm & wwdb::nibble_mask),
             "unique variant");
-        lexeme.age = static_cast<std::uint8_t>(
-            (translation >> wwdb::age_shift) & wwdb::age_mask);
-        lexeme.subject = static_cast<std::uint8_t>(
+        lexeme.age =
+            static_cast<Age>((translation >> wwdb::age_shift) & wwdb::age_mask);
+        lexeme.subject = static_cast<SubjectArea>(
             (translation >> wwdb::subject_shift) & wwdb::subject_mask);
-        lexeme.geography = static_cast<std::uint8_t>(
+        lexeme.geography = static_cast<Geography>(
             (translation >> wwdb::geography_shift) & wwdb::geography_mask);
-        lexeme.frequency = static_cast<std::uint8_t>(
+        lexeme.frequency = static_cast<LexicalFrequency>(
             (translation >> wwdb::frequency_shift) & wwdb::frequency_mask);
-        lexeme.source = static_cast<std::uint8_t>(
+        lexeme.source = static_cast<Source>(
             (translation >> wwdb::source_shift) & wwdb::source_mask);
-        if (lexeme.age > wwdb::maximum_age_code ||
-            lexeme.subject > wwdb::maximum_subject_code ||
-            lexeme.geography > wwdb::maximum_geography_code ||
-            lexeme.frequency > wwdb::maximum_frequency_code ||
-            lexeme.source > wwdb::maximum_source_code) {
+        if (std::to_underlying(lexeme.age) > wwdb::maximum_age_code ||
+            std::to_underlying(lexeme.subject) > wwdb::maximum_subject_code ||
+            std::to_underlying(lexeme.geography) >
+                wwdb::maximum_geography_code ||
+            std::to_underlying(lexeme.frequency) >
+                wwdb::maximum_frequency_code ||
+            std::to_underlying(lexeme.source) > wwdb::maximum_source_code) {
             fail("invalid-enum",
                  "unique lexical metadata contains an invalid enum");
         }
@@ -1385,8 +1401,9 @@ Database::load_poc(std::vector<std::byte> image) try {
                     std::to_underlying(GrammaticalNumber::plural) ||
                 std::to_underlying(gender) >
                     std::to_underlying(Gender::common) ||
-                (morphology >> wwdb::nominal_morphology_used_bits) !=
-                    wwdb::reserved_value) {
+                std::cmp_not_equal(
+                    (morphology >> wwdb::nominal_morphology_used_bits),
+                    wwdb::reserved_value)) {
                 fail("invalid-enum",
                      "unique nominal morphology contains an invalid enum");
             }
@@ -1416,8 +1433,9 @@ Database::load_poc(std::vector<std::byte> image) try {
                     std::to_underlying(Gender::common) ||
                 std::to_underlying(degree) >
                     std::to_underlying(Degree::superlative) ||
-                (morphology >> wwdb::adjective_morphology_used_bits) !=
-                    wwdb::reserved_value) {
+                std::cmp_not_equal(
+                    (morphology >> wwdb::adjective_morphology_used_bits),
+                    wwdb::reserved_value)) {
                 fail("invalid-enum",
                      "unique adjective morphology contains an invalid enum");
             }
@@ -1436,7 +1454,7 @@ Database::load_poc(std::vector<std::byte> image) try {
             const auto mood =
                 static_cast<Mood>((morphology >> wwdb::nominal_gender_shift) &
                                   wwdb::three_bit_mask);
-            const auto person = static_cast<std::uint8_t>(
+            const auto person = static_cast<Person>(
                 (morphology >> wwdb::morphology_byte_shift) &
                 wwdb::two_bit_mask);
             const auto verb_number = static_cast<GrammaticalNumber>(
@@ -1447,11 +1465,12 @@ Database::load_poc(std::vector<std::byte> image) try {
                     std::to_underlying(Voice::passive) ||
                 std::to_underlying(mood) >
                     std::to_underlying(Mood::participle) ||
-                person > wwdb::maximum_person_code ||
+                std::to_underlying(person) > wwdb::maximum_person_code ||
                 std::to_underlying(verb_number) >
                     std::to_underlying(GrammaticalNumber::plural) ||
-                (morphology >> wwdb::verb_morphology_used_bits) !=
-                    wwdb::reserved_value) {
+                std::cmp_not_equal(
+                    (morphology >> wwdb::verb_morphology_used_bits),
+                    wwdb::reserved_value)) {
                 fail("invalid-enum",
                      "unique verb morphology contains an invalid enum");
             }
@@ -1548,8 +1567,7 @@ Database::load_poc(std::vector<std::byte> image) try {
             "suffix target variant");
         const auto attribute_0 = static_cast<std::uint8_t>(
             (metadata >> wwdb::suffix_attribute_shift) & wwdb::nibble_mask);
-        suffix.target_attribute = attribute_0;
-        suffix.target_noun_kind = static_cast<std::uint8_t>(
+        suffix.target_noun_kind = static_cast<NounKind>(
             (metadata >> wwdb::suffix_noun_kind_shift) & wwdb::nibble_mask);
         suffix.numeric_value = static_cast<std::uint8_t>(
             (metadata >> wwdb::suffix_numeric_value_shift) & wwdb::byte_mask);
@@ -1569,32 +1587,33 @@ Database::load_poc(std::vector<std::byte> image) try {
         if (suffix.target == PartOfSpeech::noun) {
             suffix.target_gender = static_cast<Gender>(attribute_0);
             if (attribute_0 > std::to_underlying(Gender::common) ||
-                suffix.target_noun_kind > wwdb::maximum_noun_kind_code) {
+                std::to_underlying(suffix.target_noun_kind) >
+                    wwdb::maximum_noun_kind_code) {
                 fail("invalid-enum", "noun suffix target is invalid");
             }
         } else if (suffix.target == PartOfSpeech::adjective) {
             suffix.target_degree = static_cast<Degree>(attribute_0);
             if (attribute_0 > std::to_underlying(Degree::superlative) ||
-                suffix.target_noun_kind != wwdb::unused_field_value ||
+                suffix.target_noun_kind != NounKind::unknown ||
                 suffix.numeric_value != wwdb::unused_field_value) {
                 fail("invalid-enum", "adjective suffix target is invalid");
             }
         } else if (suffix.target == PartOfSpeech::numeral) {
             suffix.target_numeral_type = static_cast<NumeralType>(attribute_0);
             if (attribute_0 > std::to_underlying(NumeralType::adverbial) ||
-                suffix.target_noun_kind != wwdb::unused_field_value) {
+                suffix.target_noun_kind != NounKind::unknown) {
                 fail("invalid-enum", "numeral suffix target is invalid");
             }
         } else if (suffix.target == PartOfSpeech::adverb) {
             suffix.target_degree = static_cast<Degree>(attribute_0);
             if (attribute_0 > std::to_underlying(Degree::superlative) ||
-                suffix.target_noun_kind != wwdb::unused_field_value ||
+                suffix.target_noun_kind != NounKind::unknown ||
                 suffix.numeric_value != wwdb::unused_field_value) {
                 fail("invalid-enum", "adverb suffix target is invalid");
             }
         } else if (suffix.target == PartOfSpeech::verb) {
             if (attribute_0 != wwdb::unused_field_value ||
-                suffix.target_noun_kind != wwdb::unused_field_value ||
+                suffix.target_noun_kind != NounKind::unknown ||
                 suffix.numeric_value != wwdb::unused_field_value) {
                 fail("invalid-enum", "verb suffix target is invalid");
             }
@@ -1726,7 +1745,7 @@ Database::load_poc(std::vector<std::byte> image) try {
             "tackon variant");
         const auto attribute_0 = static_cast<std::uint8_t>(
             (metadata >> wwdb::tackon_attribute_shift) & wwdb::nibble_mask);
-        tackon.noun_kind = static_cast<std::uint8_t>(
+        tackon.noun_kind = static_cast<NounKind>(
             (metadata >> wwdb::tackon_noun_kind_shift) & wwdb::nibble_mask);
         tackon.packon = ((metadata >> wwdb::tackon_packon_shift) &
                          wwdb::single_bit_mask) != 0U;
@@ -1739,24 +1758,25 @@ Database::load_poc(std::vector<std::byte> image) try {
         if (tackon.base == PartOfSpeech::noun) {
             tackon.gender = static_cast<Gender>(attribute_0);
             if (attribute_0 > std::to_underlying(Gender::common) ||
-                tackon.noun_kind > wwdb::maximum_noun_kind_code) {
+                std::to_underlying(tackon.noun_kind) >
+                    wwdb::maximum_noun_kind_code) {
                 fail("invalid-enum", "noun tackon target is invalid");
             }
         } else if (tackon.base == PartOfSpeech::pronoun ||
                    tackon.base == PartOfSpeech::pack) {
             tackon.pronoun_kind = static_cast<PronounKind>(attribute_0);
             if (attribute_0 > std::to_underlying(PronounKind::adjectival) ||
-                tackon.noun_kind != wwdb::unused_field_value) {
+                tackon.noun_kind != NounKind::unknown) {
                 fail("invalid-enum", "pronoun tackon target is invalid");
             }
         } else if (tackon.base == PartOfSpeech::adjective) {
             tackon.adjective_degree = static_cast<Degree>(attribute_0);
             if (attribute_0 > std::to_underlying(Degree::superlative) ||
-                tackon.noun_kind != wwdb::unused_field_value) {
+                tackon.noun_kind != NounKind::unknown) {
                 fail("invalid-enum", "adjective tackon target is invalid");
             }
         } else if (attribute_0 != wwdb::unused_field_value ||
-                   tackon.noun_kind != wwdb::unused_field_value ||
+                   tackon.noun_kind != NounKind::unknown ||
                    tackon.declension != wwdb::unused_field_value ||
                    tackon.variant != wwdb::unused_field_value) {
             fail("invalid-enum", "generic tackon target is not empty");

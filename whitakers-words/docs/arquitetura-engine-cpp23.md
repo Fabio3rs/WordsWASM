@@ -273,7 +273,9 @@ Tickons reutilizam o registro de prefixo, mas têm índice e caminho semântico
 separados porque só precedem pronomes `qu-/cu-`. Tackons e packons compartilham
 um registro compacto, porém permanecem em índices diferentes: o primeiro
 reanálisa a palavra sem o fragmento pós-flexional; o segundo só admite lexemas
-artificiais `PACK` cujo meaning declara `(w/-fragmento)`.
+`PACK` cujo `required_packon` tipado referencia o mesmo `AddonId`. O ledger
+`PACKON_REQUIREMENTS.LAT` materializa a antiga convenção editorial uma única
+vez no pipeline; a engine não consulta nem interpreta meanings.
 
 Com 48 mil grupos de radical, 460 terminações e 1.785 flexões, vetores ordenados
 são um baseline adequado. Trie, hash aberto e MPHF só serão introduzidos se um

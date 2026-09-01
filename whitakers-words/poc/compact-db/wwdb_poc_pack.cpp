@@ -40,10 +40,13 @@ using PackingProfile = wwdb::Profile;
 using SectionType = wwdb::SectionType;
 
 constexpr std::size_t dictionary_record_size = 180;
+constexpr std::size_t dictionary_part_of_speech_offset = 72U;
 constexpr std::size_t stem_record_size = 56;
 constexpr std::size_t inflection_record_size = 40;
 constexpr std::size_t inflections_per_section = 570;
 constexpr std::size_t inflection_section_count = wwdb::inflection_section_count;
+constexpr std::uint8_t legacy_pack_part_of_speech = 3U;
+constexpr std::uint16_t maximum_encoded_packon_plus_one = 511U;
 
 struct Section {
     SectionType type;
@@ -708,8 +711,54 @@ TackonSource parse_tackon(const std::uint16_t addon_id,
         fail("unsupported tackon target in ADDONS.LAT");
     }
     const auto which = static_cast<std::uint8_t>(result.paradigm >> 4U);
-    result.packon = result.base == 3U && (which == 1U || which == 2U) &&
-                    result.meaning.starts_with("PACKON w/");
+    // PACK is a distinct Target_Entry variant in the Ada source.  Do not use
+    // the English gloss as a classifier: the base class and its observed
+    // paradigm are the structural legacy predicate.
+    result.packon = result.base == 3U && (which == 1U || which == 2U);
+    return result;
+}
+
+std::unordered_map<std::uint32_t, std::string>
+read_packon_requirements(const std::filesystem::path &path) {
+    std::ifstream input(path);
+    if (!input) {
+        fail("cannot open input: " + path.string());
+    }
+
+    std::unordered_map<std::uint32_t, std::string> result;
+    std::string line;
+    std::size_t line_number = 0U;
+    while (std::getline(input, line)) {
+        ++line_number;
+        const auto clean = trim(line);
+        if (clean.empty() || clean.starts_with("--")) {
+            continue;
+        }
+        const auto separator = clean.find_first_of(" \t");
+        if (separator == std::string_view::npos) {
+            fail("invalid PACKON_REQUIREMENTS.LAT line " +
+                 std::to_string(line_number));
+        }
+        std::uint32_t entry{};
+        const auto number = clean.substr(0U, separator);
+        const auto [end, error] = std::from_chars(
+            number.data(), number.data() + number.size(), entry);
+        const auto fix = trim(clean.substr(separator));
+        if (error != std::errc{} || end != number.data() + number.size() ||
+            entry == 0U || fix.empty() ||
+            !std::ranges::all_of(fix,
+                                 [](const char character) {
+                                     return character >= 'a' &&
+                                            character <= 'z';
+                                 }) ||
+            !result.emplace(entry, fix).second) {
+            fail("invalid PACKON_REQUIREMENTS.LAT entry at line " +
+                 std::to_string(line_number));
+        }
+    }
+    if (!input.eof()) {
+        fail("cannot read input: " + path.string());
+    }
     return result;
 }
 
@@ -1331,6 +1380,8 @@ int main(int argc, char **argv) try {
     const auto stems = read_file(root / "STEMFILE.GEN");
     const auto inflections = read_file(root / "INFLECTS.SEC");
     const auto addons = read_addons(root / "ADDONS.LAT");
+    const auto packon_requirements =
+        read_packon_requirements(root / "PACKON_REQUIREMENTS.LAT");
     const auto uniques = read_uniques(root / "UNIQUES.LAT");
     const auto rewrites = read_rewrites(root / "REWRITES.LAT");
     const auto quantities = read_quantities(root / "QUANTITIES.LAT");
@@ -1344,6 +1395,20 @@ int main(int argc, char **argv) try {
     }
 
     const auto legacy_lexeme_count = dictionary.size() / dictionary_record_size;
+    if (packon_requirements.size() > legacy_lexeme_count) {
+        fail("too many typed packon requirements");
+    }
+    for (const auto &[entry, fix] : packon_requirements) {
+        static_cast<void>(fix);
+        if (entry == 0U || entry > legacy_lexeme_count ||
+            byte_at(std::span{dictionary}.subspan((entry - 1U) *
+                                                      dictionary_record_size,
+                                                  dictionary_record_size),
+                    dictionary_part_of_speech_offset) !=
+                legacy_pack_part_of_speech) {
+            fail("typed packon requirement does not identify a PACK lexeme");
+        }
+    }
     const auto imported_stem_reference_count = std::ranges::fold_left(
         compiled_lexemes, std::size_t{0},
         [](const std::size_t count, const CompiledLexeme &lexeme) {
@@ -1506,22 +1571,28 @@ int main(int argc, char **argv) try {
                 if (attribute_0 > 15) {
                     fail("pack attribute outside dense profile");
                 }
+                const auto requirement = packon_requirements.find(
+                    static_cast<std::uint32_t>(index + 1U));
+                if (requirement == packon_requirements.end()) {
+                    fail("PACK lexeme has no typed packon requirement");
+                }
                 std::uint16_t packon_plus_one = 0;
                 for (const auto &tackon : addons.tackons) {
                     if (!tackon.packon) {
                         continue;
                     }
-                    // The closing delimiter is semantically significant: a
-                    // prefix comparison would mistake -cum for -cumque.
-                    const auto marker = std::string{"(w/-"} + tackon.fix + ')';
-                    if (!meaning.starts_with(marker)) {
+                    if (tackon.fix != requirement->second) {
                         continue;
                     }
-                    if (packon_plus_one != 0U || tackon.addon_id >= 511U) {
+                    if (packon_plus_one != 0U ||
+                        tackon.addon_id >= maximum_encoded_packon_plus_one) {
                         fail("pack lexeme has ambiguous/out-of-range packon");
                     }
                     packon_plus_one =
                         static_cast<std::uint16_t>(tackon.addon_id + 1U);
+                }
+                if (packon_plus_one == 0U) {
+                    fail("typed packon requirement has no matching addon");
                 }
                 class_payload = static_cast<std::uint64_t>(attribute_0) |
                                 (static_cast<std::uint64_t>(packon_plus_one)

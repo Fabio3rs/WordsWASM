@@ -201,6 +201,7 @@ async function main() {
     "whitakers-words/DICTLINE.GEN",
     "whitakers-words/INFLECTS.LAT",
     "whitakers-words/ADDONS.LAT",
+    "whitakers-words/PACKON_REQUIREMENTS.LAT",
     "whitakers-words/UNIQUES.LAT",
     "whitakers-words/REWRITES.LAT",
     "whitakers-words/QUANTITIES.LAT",
