@@ -216,6 +216,8 @@ if(EMSCRIPTEN)
 else()
     add_executable(words_cli src/main.cpp)
     target_link_libraries(words_cli PRIVATE words_json)
+
+    add_subdirectory(parsers_investigation)
 endif()
 
 if(ENABLE_TESTS AND GTest_FOUND)
