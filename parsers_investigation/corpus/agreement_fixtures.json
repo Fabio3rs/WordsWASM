@@ -1,0 +1,386 @@
+{
+  "schema": "words-parser-fixtures",
+  "schemaVersion": 2,
+  "description": "Gate D0/Track A and dependency-tree oracle: agreement, observable pruning, and one controlled nonprojective gold.",
+  "fixtures": [
+    {
+      "id": "agreement-masculine-singular",
+      "text": "Petrus est bonus.",
+      "phenomenon": "subject-predicate-agreement",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["Petrus", "sum", "bonus"],
+      "annotation": {
+        "status": "verified-didactic",
+        "source": {"catalogId": "grammar-petrus-bonus", "title": "Gramática Latina", "repository": "gramatica-latina-ocr", "commit": "f40f24f5d511d58c7f2fc736a519233933bdf280", "unitId": "s0029-l", "blockId": "s0029-l-b007", "printedPage": "54", "sourceText": "Petrus est bonus"},
+        "evidence": {"claimBlockId": "s0029-l-b006", "claim": "O adjetivo predicativo concorda com o sujeito em gênero, número e caso.", "sourceAsserts": ["subject-case-number-gender", "predicate-case-number-gender"], "editorialAdds": ["finite-verb-analysis", "dependency-heads-and-labels"], "reviewedOn": "2026-09-02"}
+      },
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "Petrus", "part": "noun", "case": "nominative", "number": "singular", "gender": "masculine"}]},
+          {"token": 1, "alternatives": [{"lemma": "sum", "part": "verb", "tense": "present", "voice": "active", "mood": "indicative", "person": 3, "number": "singular"}]},
+          {"token": 2, "alternatives": [{"lemma": "bonus", "part": "adjective", "case": "nominative", "number": "singular", "gender": "masculine"}]}
+        ],
+        "dependencies": [{"relations": [
+          {"dependent": 0, "head": 1, "label": "nsubj"},
+          {"dependent": 1, "head": null, "label": "root"},
+          {"dependent": 2, "head": 1, "label": "predicative"}
+        ]}]
+      }
+    },
+    {
+      "id": "agreement-feminine-singular",
+      "text": "Maria est bona.",
+      "phenomenon": "subject-predicate-agreement",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["Maria", "sum", "bonus"],
+      "annotation": {
+        "status": "verified-didactic",
+        "source": {"catalogId": "grammar-maria-bona", "title": "Gramática Latina", "repository": "gramatica-latina-ocr", "commit": "f40f24f5d511d58c7f2fc736a519233933bdf280", "unitId": "s0029-l", "blockId": "s0029-l-b007", "printedPage": "54", "sourceText": "Maria est bona"},
+        "evidence": {"claimBlockId": "s0029-l-b006", "claim": "O adjetivo predicativo concorda com o sujeito em gênero, número e caso.", "sourceAsserts": ["subject-case-number-gender", "predicate-case-number-gender"], "editorialAdds": ["finite-verb-analysis", "dependency-heads-and-labels"], "reviewedOn": "2026-09-02"}
+      },
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "Maria", "part": "noun", "case": "nominative", "number": "singular", "gender": "feminine"}]},
+          {"token": 1, "alternatives": [{"lemma": "sum", "part": "verb", "tense": "present", "voice": "active", "mood": "indicative", "person": 3, "number": "singular"}]},
+          {"token": 2, "alternatives": [{"lemma": "bonus", "part": "adjective", "case": "nominative", "number": "singular", "gender": "feminine"}]}
+        ],
+        "dependencies": [{"relations": [
+          {"dependent": 0, "head": 1, "label": "nsubj"},
+          {"dependent": 1, "head": null, "label": "root"},
+          {"dependent": 2, "head": 1, "label": "predicative"}
+        ]}]
+      }
+    },
+    {
+      "id": "agreement-neuter-singular",
+      "text": "Exemplum est bonum.",
+      "phenomenon": "subject-predicate-agreement",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["exemplum", "sum", "bonus"],
+      "annotation": {
+        "status": "verified-didactic",
+        "source": {"catalogId": "grammar-exemplum-bonum", "title": "Gramática Latina", "repository": "gramatica-latina-ocr", "commit": "f40f24f5d511d58c7f2fc736a519233933bdf280", "unitId": "s0029-l", "blockId": "s0029-l-b007", "printedPage": "54", "sourceText": "Exemplum est bonum"},
+        "evidence": {"claimBlockId": "s0029-l-b006", "claim": "O adjetivo predicativo concorda com o sujeito em gênero, número e caso.", "sourceAsserts": ["subject-case-number-gender", "predicate-case-number-gender"], "editorialAdds": ["finite-verb-analysis", "dependency-heads-and-labels"], "reviewedOn": "2026-09-02"}
+      },
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "exemplum", "part": "noun", "case": "nominative", "number": "singular", "gender": "neuter"}]},
+          {"token": 1, "alternatives": [{"lemma": "sum", "part": "verb", "tense": "present", "voice": "active", "mood": "indicative", "person": 3, "number": "singular"}]},
+          {"token": 2, "alternatives": [{"lemma": "bonus", "part": "adjective", "case": "nominative", "number": "singular", "gender": "neuter"}]}
+        ],
+        "dependencies": [{"relations": [
+          {"dependent": 0, "head": 1, "label": "nsubj"},
+          {"dependent": 1, "head": null, "label": "root"},
+          {"dependent": 2, "head": 1, "label": "predicative"}
+        ]}]
+      }
+    },
+    {
+      "id": "agreement-masculine-plural",
+      "text": "Alumni sunt parvi.",
+      "phenomenon": "subject-predicate-agreement",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["alumnus", "sum", "parvus"],
+      "annotation": {
+        "status": "verified-didactic",
+        "source": {"catalogId": "grammar-alumni-parvi", "title": "Gramática Latina", "repository": "gramatica-latina-ocr", "commit": "f40f24f5d511d58c7f2fc736a519233933bdf280", "unitId": "s0029-l", "blockId": "s0029-l-b007", "printedPage": "54", "sourceText": "Alumni sunt parvi"},
+        "evidence": {"claimBlockId": "s0029-l-b006", "claim": "O adjetivo predicativo concorda com o sujeito em gênero, número e caso.", "sourceAsserts": ["subject-case-number-gender", "predicate-case-number-gender"], "editorialAdds": ["finite-verb-analysis", "dependency-heads-and-labels"], "reviewedOn": "2026-09-02"}
+      },
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "alumnus", "part": "noun", "case": "nominative", "number": "plural", "gender": "masculine"}]},
+          {"token": 1, "alternatives": [{"lemma": "sum", "part": "verb", "tense": "present", "voice": "active", "mood": "indicative", "person": 3, "number": "plural"}]},
+          {"token": 2, "alternatives": [{"lemma": "parvus", "part": "adjective", "case": "nominative", "number": "plural", "gender": "masculine"}]}
+        ],
+        "dependencies": [{"relations": [
+          {"dependent": 0, "head": 1, "label": "nsubj"},
+          {"dependent": 1, "head": null, "label": "root"},
+          {"dependent": 2, "head": 1, "label": "predicative"}
+        ]}]
+      }
+    },
+    {
+      "id": "agreement-feminine-plural",
+      "text": "Alumnae sunt altae.",
+      "phenomenon": "subject-predicate-agreement",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["alumna", "sum", "altus"],
+      "annotation": {
+        "status": "verified-didactic",
+        "source": {"catalogId": "grammar-alumnae-altae", "title": "Gramática Latina", "repository": "gramatica-latina-ocr", "commit": "f40f24f5d511d58c7f2fc736a519233933bdf280", "unitId": "s0029-l", "blockId": "s0029-l-b007", "printedPage": "54", "sourceText": "Alumnae sunt altae"},
+        "evidence": {"claimBlockId": "s0029-l-b006", "claim": "O adjetivo predicativo concorda com o sujeito em gênero, número e caso.", "sourceAsserts": ["subject-case-number-gender", "predicate-case-number-gender"], "editorialAdds": ["finite-verb-analysis", "dependency-heads-and-labels"], "reviewedOn": "2026-09-02"}
+      },
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "alumna", "part": "noun", "case": "nominative", "number": "plural", "gender": "feminine"}]},
+          {"token": 1, "alternatives": [{"lemma": "sum", "part": "verb", "tense": "present", "voice": "active", "mood": "indicative", "person": 3, "number": "plural"}]},
+          {"token": 2, "alternatives": [{"lemma": "altus", "part": "adjective", "case": "nominative", "number": "plural", "gender": "feminine"}]}
+        ],
+        "dependencies": [{"relations": [
+          {"dependent": 0, "head": 1, "label": "nsubj"},
+          {"dependent": 1, "head": null, "label": "root"},
+          {"dependent": 2, "head": 1, "label": "predicative"}
+        ]}]
+      }
+    },
+    {
+      "id": "agreement-neuter-plural",
+      "text": "Bella sunt aspera.",
+      "phenomenon": "subject-predicate-agreement",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["bellum", "sum", "asper"],
+      "annotation": {
+        "status": "verified-didactic",
+        "source": {"catalogId": "grammar-bella-aspera", "title": "Gramática Latina", "repository": "gramatica-latina-ocr", "commit": "f40f24f5d511d58c7f2fc736a519233933bdf280", "unitId": "s0029-l", "blockId": "s0029-l-b007", "printedPage": "54", "sourceText": "Bella sunt aspera"},
+        "evidence": {"claimBlockId": "s0029-l-b006", "claim": "O adjetivo predicativo concorda com o sujeito em gênero, número e caso.", "sourceAsserts": ["subject-case-number-gender", "predicate-case-number-gender"], "editorialAdds": ["finite-verb-analysis", "dependency-heads-and-labels"], "reviewedOn": "2026-09-02"}
+      },
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "bellum", "part": "noun", "case": "nominative", "number": "plural", "gender": "neuter"}]},
+          {"token": 1, "alternatives": [{"lemma": "sum", "part": "verb", "tense": "present", "voice": "active", "mood": "indicative", "person": 3, "number": "plural"}]},
+          {"token": 2, "alternatives": [{"lemma": "asper", "part": "adjective", "case": "nominative", "number": "plural", "gender": "neuter"}]}
+        ],
+        "dependencies": [{"relations": [
+          {"dependent": 0, "head": 1, "label": "nsubj"},
+          {"dependent": 1, "head": null, "label": "root"},
+          {"dependent": 2, "head": 1, "label": "predicative"}
+        ]}]
+      }
+    },
+    {
+      "id": "comparison-ablative-intelligentior",
+      "text": "Filius est intelligentior patre.",
+      "phenomenon": "H011-comparison-standard-ablative",
+      "mode": "complete-clause",
+      "lookupOverrides": [{"token": 2, "lookup": "intellegentior", "reason": "source-spelling-intelligentior-resolved-to-wwdb-intellegentior"}],
+      "preferredLemmaSequence": ["filius", "sum", "intellegens", "pater"],
+      "annotation": {
+        "status": "verified-didactic",
+        "source": {"catalogId": "grammar-filius-intelligentior-patre", "title": "Gramática Latina", "repository": "gramatica-latina-ocr", "commit": "f40f24f5d511d58c7f2fc736a519233933bdf280", "unitId": "s0059-l", "blockId": "s0059-l-b009", "printedPage": "114", "sourceText": "Filius est intelligentior patre"},
+        "evidence": {"claimBlockId": "s0059-l-b008", "claim": "O segundo termo da comparação pode ir ao ablativo sem quam.", "sourceAsserts": ["comparative-predicate", "comparison-standard-ablative"], "editorialAdds": ["lookup-override-intelligentior-to-intellegentior", "finite-verb-analysis", "dependency-heads-and-labels"], "reviewedOn": "2026-09-02"}
+      },
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "filius", "part": "noun", "case": "nominative", "number": "singular", "gender": "masculine"}]},
+          {"token": 1, "alternatives": [{"lemma": "sum", "part": "verb", "tense": "present", "voice": "active", "mood": "indicative", "person": 3, "number": "singular"}]},
+          {"token": 2, "alternatives": [{"lemma": "intellegens", "part": "adjective", "case": "nominative", "number": "singular", "gender": "common", "degree": "comparative"}]},
+          {"token": 3, "alternatives": [{"lemma": "pater", "part": "noun", "case": "ablative", "number": "singular", "gender": "masculine"}]}
+        ],
+        "dependencies": [{"relations": [
+          {"dependent": 0, "head": 1, "label": "nsubj"},
+          {"dependent": 1, "head": null, "label": "root"},
+          {"dependent": 2, "head": 1, "label": "predicative"},
+          {"dependent": 3, "head": 2, "label": "obl:cmp"}
+        ]}]
+      }
+    },
+    {
+      "id": "comparison-quam-intelligentior",
+      "text": "Filius est intelligentior quam pater.",
+      "phenomenon": "H011-comparison-standard-quam",
+      "mode": "complete-clause",
+      "lookupOverrides": [{"token": 2, "lookup": "intellegentior", "reason": "source-spelling-intelligentior-resolved-to-wwdb-intellegentior"}],
+      "preferredLemmaSequence": ["filius", "sum", "intellegens", "quam", "pater"],
+      "annotation": {
+        "status": "verified-didactic",
+        "source": {"catalogId": "grammar-filius-intelligentior-quam", "title": "Gramática Latina", "repository": "gramatica-latina-ocr", "commit": "f40f24f5d511d58c7f2fc736a519233933bdf280", "unitId": "s0059-l", "blockId": "s0059-l-b009", "printedPage": "114", "sourceText": "Filius est intelligentior quam pater"},
+        "evidence": {"claimBlockId": "s0059-l-b008", "claim": "Com quam, o segundo termo fica no mesmo caso do primeiro.", "sourceAsserts": ["comparative-predicate", "quam-comparison-marker", "comparison-terms-case-parallelism"], "editorialAdds": ["lookup-override-intelligentior-to-intellegentior", "quam-pos-adverb-or-conjunction-unresolved", "finite-verb-analysis", "dependency-heads-and-labels"], "reviewedOn": "2026-09-02"}
+      },
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "filius", "part": "noun", "case": "nominative", "number": "singular", "gender": "masculine"}]},
+          {"token": 1, "alternatives": [{"lemma": "sum", "part": "verb", "tense": "present", "voice": "active", "mood": "indicative", "person": 3, "number": "singular"}]},
+          {"token": 2, "alternatives": [{"lemma": "intellegens", "part": "adjective", "case": "nominative", "number": "singular", "gender": "common", "degree": "comparative"}]},
+          {"token": 3, "alternatives": [{"lemma": "quam", "part": "adverb", "degree": "positive"}, {"lemma": "quam", "part": "conjunction"}]},
+          {"token": 4, "alternatives": [{"lemma": "pater", "part": "noun", "case": "nominative", "number": "singular", "gender": "masculine"}]}
+        ],
+        "dependencies": [{"relations": [
+          {"dependent": 0, "head": 1, "label": "nsubj"},
+          {"dependent": 1, "head": null, "label": "root"},
+          {"dependent": 2, "head": 1, "label": "predicative"},
+          {"dependent": 3, "head": 4, "label": "mark"},
+          {"dependent": 4, "head": 2, "label": "obl:cmp"}
+        ]}]
+      }
+    },
+    {
+      "id": "comparison-ablative-prudentior",
+      "text": "Asinus est prudentior equo.",
+      "phenomenon": "H011-comparison-standard-ablative",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["asinus", "sum", "prudens", "equus"],
+      "annotation": {
+        "status": "verified-didactic",
+        "source": {"catalogId": "grammar-asinus-prudentior-equo", "title": "Gramática Latina", "repository": "gramatica-latina-ocr", "commit": "f40f24f5d511d58c7f2fc736a519233933bdf280", "unitId": "s0059-l", "blockId": "s0059-l-b010", "printedPage": "114", "sourceText": "Asinus est prudentior equo"},
+        "evidence": {"claimBlockId": "s0059-l-b008", "claim": "O segundo termo da comparação pode ir ao ablativo sem quam.", "sourceAsserts": ["comparative-predicate", "comparison-standard-ablative"], "editorialAdds": ["finite-verb-analysis", "dependency-heads-and-labels"], "reviewedOn": "2026-09-02"}
+      },
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "asinus", "part": "noun", "case": "nominative", "number": "singular", "gender": "masculine"}]},
+          {"token": 1, "alternatives": [{"lemma": "sum", "part": "verb", "tense": "present", "voice": "active", "mood": "indicative", "person": 3, "number": "singular"}]},
+          {"token": 2, "alternatives": [{"lemma": "prudens", "part": "adjective", "case": "nominative", "number": "singular", "gender": "common", "degree": "comparative"}]},
+          {"token": 3, "alternatives": [{"lemma": "equus", "part": "noun", "case": "ablative", "number": "singular", "gender": "masculine"}]}
+        ],
+        "dependencies": [{"relations": [
+          {"dependent": 0, "head": 1, "label": "nsubj"},
+          {"dependent": 1, "head": null, "label": "root"},
+          {"dependent": 2, "head": 1, "label": "predicative"},
+          {"dependent": 3, "head": 2, "label": "obl:cmp"}
+        ]}]
+      }
+    },
+    {
+      "id": "comparison-quam-prudentior",
+      "text": "Asinus est prudentior quam equus.",
+      "phenomenon": "H011-comparison-standard-quam",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["asinus", "sum", "prudens", "quam", "equus"],
+      "annotation": {
+        "status": "verified-didactic",
+        "source": {"catalogId": "grammar-asinus-prudentior-quam", "title": "Gramática Latina", "repository": "gramatica-latina-ocr", "commit": "f40f24f5d511d58c7f2fc736a519233933bdf280", "unitId": "s0059-l", "blockId": "s0059-l-b010", "printedPage": "114", "sourceText": "Asinus est prudentior quam equus"},
+        "evidence": {"claimBlockId": "s0059-l-b008", "claim": "Com quam, o segundo termo fica no mesmo caso do primeiro.", "sourceAsserts": ["comparative-predicate", "quam-comparison-marker", "comparison-terms-case-parallelism"], "editorialAdds": ["quam-pos-adverb-or-conjunction-unresolved", "finite-verb-analysis", "dependency-heads-and-labels"], "reviewedOn": "2026-09-02"}
+      },
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "asinus", "part": "noun", "case": "nominative", "number": "singular", "gender": "masculine"}]},
+          {"token": 1, "alternatives": [{"lemma": "sum", "part": "verb", "tense": "present", "voice": "active", "mood": "indicative", "person": 3, "number": "singular"}]},
+          {"token": 2, "alternatives": [{"lemma": "prudens", "part": "adjective", "case": "nominative", "number": "singular", "gender": "common", "degree": "comparative"}]},
+          {"token": 3, "alternatives": [{"lemma": "quam", "part": "adverb", "degree": "positive"}, {"lemma": "quam", "part": "conjunction"}]},
+          {"token": 4, "alternatives": [{"lemma": "equus", "part": "noun", "case": "nominative", "number": "singular", "gender": "masculine"}]}
+        ],
+        "dependencies": [{"relations": [
+          {"dependent": 0, "head": 1, "label": "nsubj"},
+          {"dependent": 1, "head": null, "label": "root"},
+          {"dependent": 2, "head": 1, "label": "predicative"},
+          {"dependent": 3, "head": 4, "label": "mark"},
+          {"dependent": 4, "head": 2, "label": "obl:cmp"}
+        ]}]
+      }
+    },
+    {
+      "id": "finite-imperative-anchor",
+      "text": "Veni.",
+      "phenomenon": "H002-finite-anchor",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["venio"],
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "venio", "part": "verb", "tense": "present", "voice": "active", "mood": "imperative", "person": 2, "number": "singular"}]}
+        ],
+        "dependencies": [{"relations": [
+          {"dependent": 0, "head": null, "label": "root"}
+        ]}]
+      }
+    },
+    {
+      "id": "preposition-in-ablative",
+      "text": "In urbe manet.",
+      "phenomenon": "H005-ablative-government",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["in", "urbs", "maneo"],
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "in", "part": "preposition", "governs": "ablative"}]},
+          {"token": 1, "alternatives": [{"lemma": "urbs", "part": "noun", "case": "ablative", "number": "singular", "gender": "feminine"}]},
+          {"token": 2, "alternatives": [{"lemma": "maneo", "part": "verb", "tense": "present", "voice": "active", "mood": "indicative", "person": 3, "number": "singular"}]}
+        ],
+        "dependencies": [{"relations": [
+          {"dependent": 0, "head": 1, "label": "case"},
+          {"dependent": 1, "head": 2, "label": "obl"},
+          {"dependent": 2, "head": null, "label": "root"}
+        ]}]
+      }
+    },
+    {
+      "id": "preposition-in-accusative",
+      "text": "In urbem venit.",
+      "phenomenon": "H005-accusative-government",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["in", "urbs", "venio"],
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "in", "part": "preposition", "governs": "accusative"}]},
+          {"token": 1, "alternatives": [{"lemma": "urbs", "part": "noun", "case": "accusative", "number": "singular", "gender": "feminine"}]},
+          {"token": 2, "alternatives": [{"lemma": "venio", "part": "verb", "tense": "present", "voice": "active", "mood": "indicative", "person": 3, "number": "singular"}]}
+        ],
+        "dependencies": [{"relations": [
+          {"dependent": 0, "head": 1, "label": "case"},
+          {"dependent": 1, "head": 2, "label": "obl"},
+          {"dependent": 2, "head": null, "label": "root"}
+        ]}]
+      }
+    },
+    {
+      "id": "enclitic-coordinated-subject",
+      "text": "Puer puellaque veniunt.",
+      "phenomenon": "H007-enclitic-coordination",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["puer", "puella", "venio"],
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "puer", "part": "noun", "case": "nominative", "number": "singular", "gender": "masculine"}]},
+          {"token": 1, "alternatives": [{"lemma": "puella", "part": "noun", "case": "nominative", "number": "singular", "gender": "feminine"}]},
+          {"token": 2, "alternatives": [{"lemma": "venio", "part": "verb", "tense": "present", "voice": "active", "mood": "indicative", "person": 3, "number": "plural"}]}
+        ],
+        "dependencies": [{"relations": [
+          {"dependent": 0, "head": 2, "label": "nsubj"},
+          {"dependent": 1, "head": 0, "label": "conj"},
+          {"dependent": 2, "head": null, "label": "root"}
+        ]}]
+      }
+    },
+    {
+      "id": "governed-dative-argument",
+      "text": "Accredo amico.",
+      "phenomenon": "H006-candidate-government",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["accredo", "amicus"],
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "accredo", "part": "verb", "tense": "present", "voice": "active", "mood": "indicative", "person": 1, "number": "singular"}]},
+          {"token": 1, "alternatives": [{"lemma": "amicus", "part": "noun", "case": "dative", "number": "singular", "gender": "masculine"}]}
+        ],
+        "dependencies": [{"relations": [
+          {"dependent": 0, "head": null, "label": "root"},
+          {"dependent": 1, "head": 0, "label": "iobj"}
+        ]}]
+      }
+    },
+    {
+      "id": "nonprojective-hyperbaton",
+      "text": "Bona rosam puella amat.",
+      "phenomenon": "nonprojective-hyperbaton",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["bonus", "rosa", "puella", "amo"],
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "bonus", "part": "adjective", "case": "nominative", "number": "singular", "gender": "feminine"}]},
+          {"token": 1, "alternatives": [{"lemma": "rosa", "part": "noun", "case": "accusative", "number": "singular", "gender": "feminine"}]},
+          {"token": 2, "alternatives": [{"lemma": "puella", "part": "noun", "case": "nominative", "number": "singular", "gender": "feminine"}]},
+          {"token": 3, "alternatives": [{"lemma": "amo", "part": "verb", "tense": "present", "voice": "active", "mood": "indicative", "person": 3, "number": "singular"}]}
+        ],
+        "dependencies": [{"relations": [
+          {"dependent": 0, "head": 2, "label": "amod"},
+          {"dependent": 1, "head": 3, "label": "obj"},
+          {"dependent": 2, "head": 3, "label": "nsubj"},
+          {"dependent": 3, "head": null, "label": "root"}
+        ]}]
+      }
+    },
+    {
+      "id": "governed-complement-not-mandatory",
+      "text": "Placet.",
+      "phenomenon": "H006-optional-complement-regression",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["placeo"],
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "placeo", "part": "verb", "tense": "present", "voice": "active", "mood": "indicative", "person": 3, "number": "singular"}]}
+        ],
+        "dependencies": [{"relations": [
+          {"dependent": 0, "head": null, "label": "root"}
+        ]}]
+      }
+    }
+  ]
+}

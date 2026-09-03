@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wordswasm.local/schemas/parser-result-v2.json",
+  "title": "WordsWASM parser experiment result v2",
+  "type": "object",
+  "required": [
+    "schema", "schemaVersion", "fixtureId", "fixtureAnnotation", "strategy", "status",
+    "grammarMode", "morphology", "propagation", "enumeration",
+    "relationCandidates", "attachmentSearch", "treeSearch", "decoder", "parser", "forest", "acceptance", "gold"
+  ],
+  "properties": {
+    "schema": {"const": "words-parser-investigation"},
+    "schemaVersion": {"const": 2},
+    "fixtureId": {"type": "string"},
+    "fixtureAnnotation": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["status", "source", "evidence"],
+          "properties": {
+            "status": {"const": "verified-didactic"},
+            "source": {
+              "type": "object",
+              "required": ["catalogId", "title", "repository", "commit", "unitId", "blockId", "printedPage", "sourceText"],
+              "properties": {
+                "catalogId": {"type": "string", "minLength": 1},
+                "title": {"type": "string", "minLength": 1},
+                "repository": {"type": "string", "minLength": 1},
+                "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                "unitId": {"type": "string", "minLength": 1},
+                "blockId": {"type": "string", "minLength": 1},
+                "printedPage": {"type": "string", "minLength": 1},
+                "sourceText": {"type": "string", "minLength": 1}
+              },
+              "additionalProperties": false
+            },
+            "evidence": {
+              "type": "object",
+              "required": ["claimBlockId", "claim", "sourceAsserts", "editorialAdds", "reviewedOn"],
+              "properties": {
+                "claimBlockId": {"type": "string", "minLength": 1},
+                "claim": {"type": "string", "minLength": 1},
+                "sourceAsserts": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+                "editorialAdds": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+                "reviewedOn": {"type": "string", "format": "date"}
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "strategy": {
+      "enum": [
+        "morphology",
+        "cartesian-leaf-check",
+        "incremental-dfs",
+        "dfs-mrv-forward-checking",
+        "worklist-prefilter",
+        "gac-propagation",
+        "gac-residue-cache",
+        "dependency-projection",
+        "dependency-attachment-search",
+        "dependency-tree-oracle",
+        "dependency-eisner",
+        "dependency-mst",
+        "earley-fixed-point-recognizer",
+        "gslr-stackset-recognizer"
+      ]
+    },
+    "status": {"enum": ["ok", "no-analysis", "no-parse", "experiment-budget-exceeded"]},
+    "grammarMode": {"enum": ["complete-clause", "fragment"]},
+    "morphology": {
+      "type": "object",
+      "required": ["tokenCount", "surfaceTokens", "lookupTokens", "lookupOverrides", "candidateCounts", "rawProduct"],
+      "properties": {
+        "tokenCount": {"type": "integer", "minimum": 0},
+        "surfaceTokens": {"type": "array", "items": {"type": "string"}},
+        "lookupTokens": {"type": "array", "items": {"type": "string"}},
+        "lookupOverrides": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["token", "lookup", "reason"],
+            "properties": {
+              "token": {"type": "integer", "minimum": 0},
+              "lookup": {"type": "string", "minLength": 1},
+              "reason": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "candidateCounts": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+        "rawProduct": {"type": "string", "pattern": "^[0-9]+$"}
+      }
+    },
+    "propagation": {
+      "type": "object",
+      "required": ["performed", "algorithm", "iterations", "queuePops", "revisions", "supportChecks", "residueHits", "residueMisses", "residueInvalidations", "residueCandidateChecks", "domainsAfter", "prunedProduct"]
+    },
+    "enumeration": {
+      "type": "object",
+      "required": ["performed", "partialStates", "constraintChecks", "backtracks", "completeAssignments"]
+    },
+    "relationCandidates": {
+      "type": "object",
+      "required": ["generationPerformed", "generated", "byKind", "byCompatibility", "selected", "best"]
+    },
+    "attachmentSearch": {
+      "type": "object",
+      "required": ["performed", "slotsCreated", "partialStates", "completeAnalyses", "conflicts", "analysisIds", "analysisSetDigest", "projectionChecked", "projectionInSearch"]
+    },
+    "treeSearch": {
+      "type": "object",
+      "required": ["performed", "arcCandidatesGenerated", "partialStates", "completeTrees", "projectiveTrees", "nonprojectiveTrees", "cycleRejections", "rootRejections", "analysisIds", "analysisSetDigest", "projectionChecked", "projectionInSearch", "bestArcScore", "bestProjectiveScores", "bestUnrestrictedScores"]
+    },
+    "decoder": {
+      "type": "object",
+      "required": ["performed", "algorithm", "arcCandidates", "states", "cyclesContracted", "completeTrees", "projectiveTrees", "nonprojectiveTrees", "analysisIds", "analysisSetDigest", "scoresByAssignment"]
+    },
+    "parser": {
+      "type": "object",
+      "required": ["kind", "recognizerOnly", "unitsCreated", "duplicateDeductions"]
+    },
+    "forest": {
+      "type": "object",
+      "required": ["available", "derivationCount", "sppfNodes", "packedAlternatives"]
+    },
+    "acceptance": {
+      "type": "object",
+      "required": ["morphAssignments", "assignmentIds", "survivorSetDigest"]
+    },
+    "gold": {
+      "type": "object",
+      "required": ["preferredLemmaSequence", "morphology", "dependency"],
+      "properties": {
+        "morphology": {
+          "type": "object",
+          "required": ["declared", "survives", "rank", "bestScoreTie"],
+          "properties": {
+            "declared": {"type": "boolean"},
+            "survives": {"type": "boolean"},
+            "rank": {"type": ["integer", "null"], "minimum": 1},
+            "bestScoreTie": {"type": ["boolean", "null"]}
+          }
+        },
+        "dependency": {
+          "type": "object",
+          "required": ["declared", "evaluated", "survives", "rank", "bestScoreTie"],
+          "properties": {
+            "declared": {"type": "boolean"},
+            "evaluated": {"type": "boolean"},
+            "survives": {"type": ["boolean", "null"]},
+            "rank": {"type": ["integer", "null"], "minimum": 1},
+            "bestScoreTie": {"type": ["boolean", "null"]}
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}

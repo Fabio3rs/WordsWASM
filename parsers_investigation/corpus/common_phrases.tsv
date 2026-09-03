@@ -1,0 +1,14 @@
+# id	fragment	phenomenon	preferred lemmas separated by |	text
+arma-virumque	0	coordination-enclitic	armum|vir|cano	Arma virumque cano
+veni-vidi-vici	0	asyndetic-finite-coordination	venio|video|vinco	Veni vidi vici
+carpe-diem	0	imperative-object	carpo|dies	Carpe diem
+alea-iacta-est	0	participle-copula	alea|jacio|sum	Alea iacta est
+cogito-ergo-sum	0	adverb-two-clauses	cogito|ergo|sum	Cogito ergo sum
+tempus-fugit	0	subject-verb	tempus|fugio	Tempus fugit
+amor-vincit-omnia	0	subject-object	amor|vinco|omnis	Amor vincit omnia
+in-vino-veritas	1	verbless-prepositional	in|vinum|veritas	In vino veritas
+fortuna-audaces-iuvat	0	substantive-adjective	fortuna|audax|juvo	Fortuna audaces iuvat
+si-vis-pacem	0	two-finite-clauses	si|vis|pax|paro|bellum	Si vis pacem para bellum
+homo-homini-lupus	0	copular-dative	homo|homo|lupus|sum	Homo homini lupus est
+divide-et-impera	0	coordinated-imperatives	divido|et|impero	Divide et impera
+mens-sana	0	preposition-adjective-agreement	mens|sanus|in|corpus|sanus|sum	Mens sana in corpore sano est

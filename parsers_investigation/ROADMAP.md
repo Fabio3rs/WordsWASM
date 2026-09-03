@@ -12,7 +12,25 @@ eliminado por restrições morfossintáticas e quanto trabalho pode ser
 compartilhado antes de escolher dependency parsing, chart/GLR ou um formalismo
 mais expressivo.
 
-## Estado inicial
+## Semântica central da decisão
+
+O produto do parser deve separar três noções que não podem ser fundidas:
+
+1. **impossível** — uma hard constraint encontrou conflito demonstrável e
+   registra ID, escopo e evidência;
+2. **possível** — a análise sobreviveu a todas as hard constraints aplicáveis,
+   inclusive quando há informação insuficiente;
+3. **mais ou menos plausível** — entre as análises possíveis, features brandas
+   produzem um score decomposto e uma ordenação N-best.
+
+“Possível” não significa “provável”, e ausência de informação nunca prova
+impossibilidade. Os pesos manuais atuais são scores de plausibilidade, não
+probabilidades. Um valor chamado de probabilidade só poderá aparecer depois de
+calibração em dados separados, com universo de candidatos e método de
+normalização declarados; o score bruto e suas razões devem continuar
+disponíveis para auditoria.
+
+## Estado anterior ao primeiro ciclo
 
 O executável `parsers_investigation`:
 
@@ -27,6 +45,215 @@ O core continua responsável somente por léxico e morfologia. A fronteira
 oficial está documentada em
 [`whitakers-words/docs/parser-readiness.md`](../whitakers-words/docs/parser-readiness.md).
 
+## Primeiro ciclo implementado
+
+O executável aceita `--text`, fixtures JSON v2 ou o TSV legado, tokeniza
+preservando posição, roda sem meanings inclusive sobre a WWDB search-only e
+emite NDJSON versionado. Os nomes v2 descrevem exatamente os protótipos:
+
+| Estratégia | Papel no experimento |
+|---|---|
+| `morphology` | censo do lattice, contagens e produto bruto; |
+| `cartesian-leaf-check` | DFS exaustiva com orçamento e rejeição nas folhas; |
+| `incremental-dfs` | DFS que aplica constraints quando seus escopos ficam completos; |
+| `dfs-mrv-forward-checking` | DFS em ordem MRV com checagem conservadora de suporte futuro; |
+| `worklist-prefilter` | ponto fixo sobre domínios seguido da mesma enumeração exata; |
+| `gac-propagation` | agenda de constraints n-árias que revisa suporte em todos os domínios do escopo; |
+| `gac-residue-cache` | mesma agenda GAC, guardando e revalidando um testemunho por valor; |
+| `dependency-projection` | grafo determinístico e explicável por sobrevivente; |
+| `dependency-attachment-search` | enumeração exata das escolhas H005/H006/H007/H011, com IDs canônicos e comparação contra a projeção; |
+| `dependency-tree-oracle` | enumeração exata de árvores completas, com raiz única, aciclicidade, score de arcos e classificação projetiva; |
+| `dependency-eisner` | melhor árvore projetiva por atribuição morfológica, sobre o domínio e os scores do oráculo; |
+| `dependency-mst` | melhor arborescência possivelmente não projetiva por Chu–Liu/Edmonds, sobre a mesma entrada; |
+| `earley-fixed-point-recognizer` | recognizer Earley ainda sem agenda/SPPF; |
+| `gslr-stackset-recognizer` | generalized SLR com pilhas explícitas, sem GSS/SPPF. |
+
+O corpus estrutural
+[`agreement_fixtures.json`](corpus/agreement_fixtures.json) contém 17 frases;
+o TSV legado conserva as 13 iniciais. O conjunto cobre sujeito–verbo,
+imperativo, particípio, preposição, coordenação, comparação, duas orações e
+fragmento nominal. O `--self-test` exige:
+
+- presença dos lemas gold no lattice;
+- equivalência extensional exata entre as seis buscas do Track A;
+- equivalência de reconhecimento entre Earley e GLR;
+- preservação do gold estruturado por todos os modos aplicáveis.
+
+Os resultados medidos e as limitações estão em [`REPORT.md`](REPORT.md). Eles
+constituem um primeiro ciclo pequeno de M0–M6, não encerram D1/D2 nem alegam
+cobertura geral do latim. S1 anotada, S2 e S3 continuam pendentes.
+
+Uma segunda fonte local foi triada em
+[`corpus/GRAMATICA_LATINA.md`](corpus/GRAMATICA_LATINA.md). Ela fornece 33
+frases didáticas com proveniência até bloco/página e cobre concordância,
+comparativos, ACI, infinitivos, passiva, relativas, duplo dativo e ablativo
+absoluto. Dez exemplos de concordância e comparação foram promovidos a gold
+estrutural com proveniência e entram nas métricas; os outros 23 permanecem
+`candidate-unverified`.
+
+## Gate D0 — validade da medição
+
+O contrato em [`schema/`](schema/) congela a interpretação histórica do v1 e
+define o v2. Métricas de morfologia, propagação, enumeração, parser e floresta
+ficam em namespaces distintos; `preferredLemmaSequence` deixa de ser chamado
+de gold; e o ranking usa somente as atribuições aceitas pela estratégia.
+
+As 17 fixtures em
+[`agreement_fixtures.json`](corpus/agreement_fixtures.json) declaram lema,
+POS, caso, número, gênero, morfologia verbal e dependências. O self-test compara
+IDs exatos dos sobreviventes e também exige que mutações de caso e relação
+falhem. Frases completas e fragmentos selecionam gramáticas iniciais distintas.
+Contagens de derivações e SPPF permanecem nulas até existir uma floresta real.
+
+## Track A — agenda GAC e resíduos
+
+O segundo ciclo adicionou cinco microfixtures: H002 com imperativo, H005 com
+`in` + ablativo e acusativo, H007 com sujeito coordenado por `-que` e uma
+regressão de H006 em `Placet.`. A nova `gac-propagation` usa constraints com
+escopos explícitos, agenda por adjacência e revisão de cada valor do domínio.
+Ela também alimenta os baselines sintáticos posteriores.
+
+O terceiro ciclo acrescentou `gac-residue-cache`. Cada par
+constraint–valor guarda a tupla mínima de candidatos que testemunhou suporte;
+numa revisão posterior, o suporte é reutilizado enquanto todos esses candidatos
+continuarem ativos. A GAC sem cache permanece como baseline.
+
+O quarto ciclo introduziu uma `RelationLattice` entre análises morfológicas
+específicas. Ela materializa `preposition-complement` (H005), `verb-argument`
+(H006) e `coordination` (H007), conservando compatibilidade ternária. O oracle
+cartesiano e a GAC consultam as mesmas arestas para H005/H007; H006 só valida
+uma aresta quando a projeção decide tratá-la como argumento, sem inferir que o
+verbo exige complemento.
+
+O quinto ciclo tornou essa lattice enumerável em
+`dependency-attachment-search`. Para cada atribuição morfológica, preposições e
+`-que` abrem slots obrigatórios; argumentos de verbos com regência conhecida
+abrem escolhas opcionais. Duas relações não podem ocupar o mesmo dependent. O
+resultado conserva IDs canônicos de análise, digest do conjunto e a resposta
+explícita à pergunta “a projeção determinística pertence ao domínio exato?”.
+O orçamento de enumeração também limita esse segundo produto e impede publicar
+um conjunto parcial como se fosse completo.
+Ainda não é uma busca de árvores completas: tokens fora de
+H005/H006/H007/H011 não
+recebem heads candidatos e não há constraints de raiz única, conectividade,
+aciclicidade ou projetividade.
+
+O sexto ciclo acrescentou um domínio de arcos para todos os tokens selecionados
+e `dependency-tree-oracle`. O DFS exato escolhe um head por token, poda ciclos
+assim que se fecham e aceita somente uma raiz. Como cada token possui um head
+ou é a raiz, raiz única mais aciclicidade também garantem conectividade. Cada
+árvore recebe ID canônico, digest, score T001 inteiramente decomposto e uma
+classificação projetiva/não projetiva. O mesmo orçamento impede que um prefixo
+do conjunto seja publicado como resposta exata.
+
+Para tornar a diferença estrutural observável, S0 ganhou a fixture sintética
+`Bona rosam puella amat.`. Seu gold contém os arcos cruzados `Bona→puella` e
+`rosam→amat`; trata-se de um teste controlado de hipérbato, não de evidência de
+frequência no corpus histórico.
+
+O sétimo ciclo implementou Eisner e Chu–Liu/Edmonds. Ambos colapsam labels
+concorrentes do mesmo par head–dependent pelo maior score e testam cada raiz
+permitida, preservando raiz única. Eisner usa a raiz artificial à esquerda e
+reconstrói o melhor chart projetivo. O MST escolhe a melhor aresta de entrada,
+contrai ciclos, reajusta os scores das arestas que entram no ciclo e expande a
+solução para os arcos originais. Cada score produzido é comparado, por
+atribuição morfológica, ao ótimo correspondente do oráculo; cada ID decodificado
+também precisa pertencer ao conjunto exato.
+
+Este ciclo corrigiu ainda a classificação do oráculo: projetividade precisa
+considerar a aresta da raiz artificial. Uma aresta que atravessa a posição da
+raiz pode ser não projetiva mesmo sem cruzar outro arco token–token.
+
+O oitavo ciclo promoveu o primeiro lote da fonte didática. Cinco fixtures já
+coincidiam literalmente com a tabela da página 54; a sexta foi restaurada de
+`Alumnae sunt pulchrae` para o testemunho `Alumnae sunt altae`. Cada fixture
+registra catálogo, snapshot, unidade, bloco, página, texto-fonte, afirmações da
+fonte e adições editoriais. O auditor confere reciprocamente catálogo e corpus.
+
+Esse lote também mostrou que rank ordinal e melhor score não são equivalentes:
+`altae` admite o adjetivo de `altus` e o particípio de `alo`. A leitura
+adjetival indicada pela lição fica em rank 2 apenas pelo desempate estável, mas
+empata no melhor score. O schema passou a expor `bestScoreTie` para não contar
+essa ambiguidade preservada como erro.
+
+O nono ciclo promoveu quatro exemplos comparativos da página 114. A nova
+relação `comparison-standard` (H011) distingue o segundo termo em ablativo sem
+`quam` do segundo termo introduzido por `quam`, que deve repetir o caso do
+primeiro termo. Na segunda construção, a aresta registra como contexto tanto o
+primeiro termo quanto a análise concreta do marcador; a projeção emite
+`obl:cmp` e `mark`, e S015 recompensa uma construção comparativa licenciada.
+
+A grafia impressa `intelligentior` não existe na WWDB, que reconhece
+`intellegentior`. Em vez de corrigir a fonte silenciosamente, a fixture possui
+um `lookupOverride` justificado. O resultado conserva lado a lado os tokens de
+superfície, os tokens consultados e os overrides. A fonte chama `quam` de
+conjunção comparativa, enquanto a WWDB prefere sua análise adverbial; o gold
+aceita ambas as categorias e preserva essa divergência de tagset como
+ambiguidade explícita.
+
+Findings atuais:
+
+- as seis buscas preservam exatamente o conjunto do cartesiano nas 17
+  fixtures e nas 1.062 atribuições aceitas;
+- a GAC remove oito valores, contra seis do scan de ponto fixo;
+- em `In urbe manet`, o produto cai de 12 para 2, contra 12 para 6 no scan;
+- essa poda mais forte custa 1.160 checks semânticos de suporte, contra 264 do
+  scan; com resíduos, cai para 1.088 checks semânticos (−6,2%), acrescidos de 56
+  verificações baratas de presença no domínio;
+- foram observados 30 hits e 237 misses de resíduo. Nenhum testemunho foi
+  invalidado neste S0, portanto ainda falta uma fixture com poda em cascata e
+  não há conclusão sobre comportamento amortizado;
+- H006 como “todo verbo regente exige algum nominal no caso regido” era
+  linguisticamente incorreta: eliminava `placeo` em `Placet.`. Agora a regência
+  só rejeita uma aresta argumento–predicado incompatível, não a ausência global
+  de complemento;
+- a projeção agora classifica o acusativo regido por preposição como `obl`, não
+  como objeto verbal apenas por causa do caso;
+- nas 17 fixtures, a lattice H005/H006/H007/H011 contém 213 arestas: 157
+  argumento–verbo, 42 padrões de comparação, oito complemento–preposição e
+  seis de coordenação. Dezessete são formalmente compatíveis, 41 incompatíveis
+  e 155 indeterminadas;
+- `Accredo amico.` exerce regência dativa concreta: a projeção seleciona H006,
+  emite `iobj` e registra S008. A alternativa ablativa não é eliminada como
+  morfologia, e `Placet.` continua aceito sem complemento;
+- a projeção top-1 seleciona oito arestas explícitas no corpus, incluindo H011
+  nos quatro comparativos;
+- a busca exata de attachments preserva as mesmas 1.062 atribuições
+  morfológicas e enumera 1.091 análises relacionais;
+- as 1.062 projeções determinísticas testadas pertencem aos respectivos
+  conjuntos exatos. Isso valida a projeção como membro do domínio
+  H005/H006/H007/H011, não como árvore ótima nem como melhor análise
+  relacional;
+- o domínio completo materializa 5.275 arcos e o oráculo enumera 6.944 árvores:
+  2.525 projetivas e 4.419 não projetivas. Foram podados 1.776 fechamentos de
+  ciclo e 74 escolhas incompatíveis com raiz única;
+- todas as 1.062 projeções também pertencem ao conjunto exato de árvores. O gold
+  completo fica no rank 1 em 16/17 fixtures e empata no melhor score em 17/17;
+  os scores T001 ainda são heurísticas não treinadas;
+- a fixture controlada de quatro tokens contribui 127 árvores não projetivas.
+  As outras 4.292 surgem de análises morfológicas alternativas e de arcos que
+  atravessam a raiz artificial; não constituem exemplos linguísticos
+  independentes. S0 não estima a frequência de não projetividade no latim real;
+- Eisner e Chu–Liu/Edmonds produzem uma árvore para cada uma das 1.062
+  atribuições e igualam todos os ótimos do oráculo. Eisner visita 9.871
+  combinações de chart/split; o MST examina 3.967 arestas e contrai um ciclo —
+  unidades que não devem ser comparadas diretamente;
+- o ótimo irrestrito supera o projetivo em 70/1.062 atribuições. O MST escolhe 70
+  árvores não projetivas; Eisner escolhe zero;
+- no hipérbato controlado, Eisner não pode preservar o gold cruzado, enquanto
+  Chu–Liu/Edmonds o recupera em rank 1. Nos demais 16 casos ambos mantêm o gold
+  no melhor score; `Alumnae sunt altae` fica no rank ordinal 2 por empate;
+- as dez fixtures didáticas têm gold projetivo e sobrevivem em ambos os
+  decodificadores. Elas validam concordância e comparação, não a frequência de
+  não projetividade em latim real;
+- os quatro comparativos ficam em rank 1. As duas fixtures com `intelligentior`
+  preservam a forma de superfície e tornam explícito o lookup
+  `intellegentior`; nas duas com `quam`, o gold aceita advérbio ou conjunção;
+- no fechamento desta execução, o self-test passou nas 17 fixtures com as
+  WWDBs full e search-only; corpus e 238 registros das 14 estratégias passaram
+  nos schemas v2; a suíte geral passou em 94/94 testes; ASan/UBSan também
+  passou, com LeakSanitizer desativado devido à limitação sob `ptrace`.
+
 ## Perguntas de pesquisa
 
 | ID | Pergunta | Evidência necessária |
@@ -40,6 +267,8 @@ oficial está documentada em
 | RQ7 | Quais ambiguidades sobrevivem sem meanings? | N-best e classes de empate após morfossintaxe e metadata lexical. |
 | RQ8 | A falta de valência domina os erros? | Falhas classificadas por ausência de frame, não misturadas com falhas do algoritmo. |
 | RQ9 | Hyperbaton exige algo além de CFG/dependências? | Suíte curada de constituintes intercalados e crescimento da gramática. |
+| RQ10 | O sistema separa corretamente impossibilidade de mera baixa plausibilidade? | Recall dos sobreviventes, rejeições gold e explicações por constraint. |
+| RQ11 | Scores formais podem ser convertidos em probabilidades calibradas? | N-best completo, corpus held-out, curvas de calibração, Brier score e log loss. |
 
 ## Invariantes da investigação
 
@@ -48,7 +277,8 @@ oficial está documentada em
 2. **Ambiguidade genuína é resultado, não erro.** O gold pode aceitar um
    conjunto de análises equivalentes.
 3. **Impossibilidade elimina; preferência pontua.** Toda rejeição e todo delta
-   de score devem ter uma justificativa estável.
+   de score devem ter uma justificativa estável. Score não é probabilidade sem
+   calibração externa.
 4. **Posição é preservada; ordem não é lei geral.** Distância e ordem entram
    inicialmente como features brandas, exceto em construções com restrição
    linear explícita.
@@ -143,27 +373,89 @@ Todas as estratégias devem emitir NDJSON no mesmo schema experimental:
 ```json
 {
   "schema": "words-parser-investigation",
-  "schemaVersion": 1,
-  "text": "Arma virumque cano",
-  "strategy": "propagation",
+  "schemaVersion": 2,
+  "text": "Petrus est bonus.",
+  "strategy": "worklist-prefilter",
   "datasetId": "sha256:...",
-  "tokenCount": 3,
-  "candidateCounts": [4, 8, 10],
-  "rawProduct": "320",
-  "domainsAfterPropagation": [3, 4, 2],
-  "constraintChecks": 0,
-  "statesCreated": 0,
-  "statesReused": 0,
-  "packedNodes": 0,
-  "completeParses": 0,
-  "elapsedNs": 0,
-  "peakBytes": 0
+  "grammarMode": "complete-clause",
+  "morphology": {
+    "surfaceTokens": ["Petrus", "est", "bonus"],
+    "lookupTokens": ["Petrus", "est", "bonus"],
+    "lookupOverrides": [],
+    "candidateCounts": [1, 2, 2],
+    "rawProduct": "4"
+  },
+  "propagation": {
+    "supportChecks": 6,
+    "domainsAfter": [1, 2, 2],
+    "prunedProduct": "4"
+  },
+  "enumeration": {
+    "partialStates": 11,
+    "completeAssignments": 4
+  },
+  "relationCandidates": {
+    "generated": 12,
+    "byKind": {"preposition-complement": 6, "verb-argument": 6},
+    "byCompatibility": {"compatible": 1, "incompatible": 5, "indeterminate": 6},
+    "selected": 1
+  },
+  "attachmentSearch": {
+    "performed": true,
+    "slotsCreated": 1,
+    "partialStates": 2,
+    "completeAnalyses": 2,
+    "conflicts": 0,
+    "analysisIds": ["0:0,1:0,2:0|r:-", "0:0,1:0,2:0|r:4"],
+    "analysisSetDigest": {"algorithm": "fnv1a-64", "value": "..."},
+    "projectionChecked": 1,
+    "projectionInSearch": 1
+  },
+  "treeSearch": {
+    "performed": true,
+    "arcCandidatesGenerated": 8,
+    "partialStates": 14,
+    "completeTrees": 3,
+    "projectiveTrees": 2,
+    "nonprojectiveTrees": 1,
+    "cycleRejections": 1,
+    "rootRejections": 0,
+    "analysisIds": ["0:0,1:0,2:0|t:0>2:nsubj,1>0:amod,2>r:root"],
+    "analysisSetDigest": {"algorithm": "fnv1a-64", "value": "..."},
+    "projectionChecked": 1,
+    "projectionInSearch": 1,
+    "bestArcScore": 25.9,
+    "bestProjectiveScores": {"0:0,1:0,2:0": 25.9},
+    "bestUnrestrictedScores": {"0:0,1:0,2:0": 25.9}
+  },
+  "decoder": {
+    "performed": true,
+    "algorithm": "eisner-projective",
+    "arcCandidates": 8,
+    "states": 17,
+    "cyclesContracted": 0,
+    "completeTrees": 1,
+    "projectiveTrees": 1,
+    "nonprojectiveTrees": 0,
+    "analysisIds": ["0:0,1:0,2:0|t:0>2:nsubj,1>0:amod,2>r:root"],
+    "analysisSetDigest": {"algorithm": "fnv1a-64", "value": "..."},
+    "scoresByAssignment": {"0:0,1:0,2:0": 25.9}
+  },
+  "acceptance": {
+    "morphAssignments": 4,
+    "assignmentIds": ["0:0,1:0,2:0"]
+  },
+  "forest": {
+    "available": false,
+    "derivationCount": null
+  }
 }
 ```
 
 `rawProduct` é string para não impor um limite inteiro. Relatórios agregados
 devem apresentar no mínimo `p50`, `p95`, máximo e distribuição por tamanho da
-sentença.
+sentença. Relações, estados de busca, itens Earley e pilhas explícitas nunca
+são somados na mesma coluna.
 
 ## Catálogo inicial de constraints
 
@@ -176,11 +468,12 @@ sentença.
 | H003 | Sujeito explícito concorda com pessoa e número do verbo; sujeito nulo é permitido. |
 | H004 | Adjetivo atributivo concorda em caso, número e gênero com o núcleo. |
 | H005 | Preposição com regência conhecida aceita o caso exigido. |
-| H006 | Regência verbal conhecida deve ser respeitada. `unknown` não significa “qualquer caso”. |
+| H006 | Se uma aresta candidata liga argumento a verbo com regência conhecida, seu caso deve ser compatível. A ausência global do complemento não é rejeição dura sem frame de obrigatoriedade. |
 | H007 | `-que` participa de uma coordenação e inicia o segundo membro segundo o escopo candidato. |
 | H008 | NPs coordenados sob a mesma função externa unificam caso; número e gênero não são unificados automaticamente. |
 | H009 | Features ausentes e features `unknown` não são tratadas como fatos positivos. |
 | H010 | Um estado compartilhado conserva o ambiente completo de features e exigências ainda abertas. |
+| H011 | Se uma aresta candidata liga um comparativo ao segundo termo, este fica no ablativo sem `quam`; com um marcador `quam` selecionado, conserva o caso do primeiro termo. |
 
 ### Brandas
 
@@ -196,6 +489,10 @@ sentença.
 | S008 | Regência conhecida versus inferida. |
 | S009 | Complexidade estrutural. |
 | S010 | Construção marcada, como vocativo ou tópico pendente. |
+| S011 | Modificador possui núcleo nominal concordante ou leitura substantivada. |
+| S012 | Cobertura por predicado finito e sujeito explícito compatível. |
+| S013 | Cópula reconhecida pelo tipo lexical do verbo. |
+| S015 | Segundo termo da comparação licenciado por H011. |
 
 Os pesos iniciais são experimentais. Antes de introduzir beam search, o
 executor deve conseguir enumerar todos os sobreviventes das microfixtures.
@@ -414,8 +711,11 @@ Latin Vallex ou recurso equivalente.
 Somente depois de estabilizar a cobertura formal:
 
 - medir quantos empates genuínos restam;
+- expor o N-best completo, com score bruto e decomposição, para todas as
+  análises possíveis dentro do orçamento exato;
 - criar baseline de pesos manuais;
-- calibrar pesos em corpus sem alterar hard constraints;
+- calibrar pesos em corpus sem alterar hard constraints, medindo Brier score,
+  log loss e calibração em held-out;
 - comparar ranker estatístico pequeno;
 - considerar modelo semântico apenas para N-best formalmente válido.
 
@@ -472,17 +772,20 @@ para prosa e descobre tarde demais que escolheu uma representação inadequada.
 
 ## Próxima fila de implementação
 
-1. Fazer o executável aceitar texto arbitrário e separar tokens preservando
-   posição e forma original.
-2. Adicionar `--strategy=morphology` e saída NDJSON.
-3. Implementar o censo M1 sem nenhuma regra sintática.
-4. Definir o schema de fixtures S0 e registrar o gold ambíguo de
-   `Arma virumque cano`.
-5. Adicionar `--strategy=cartesian` com orçamento configurável.
-6. Implementar H001–H010 com provenance.
-7. Adicionar `--strategy=propagation` e verificar equivalência com o
-   cartesiano.
-8. Só então iniciar relações, score e N-best.
+1. Expor no schema o N-best completo dos sobreviventes, distinguindo
+   `possible` + score bruto de qualquer futura probabilidade calibrada.
+2. Anotar os dois exemplos de comparação de inferioridade (`minus
+   intelligens`) e decidir se exigem uma relação própria ou composição de H011.
+3. Acrescentar casos reais ou publicados de hipérbato e ordem livre para medir
+   quando o ótimo não projetivo é necessário fora da fixture sintética.
+4. Criar grafos adversariais com ciclos aninhados para testar contração e
+   expansão de Chu–Liu/Edmonds além do único ciclo observado em S0.
+5. Criar microfixtures de poda em cascata que invalidem resíduos e medir custo
+   amortizado e memória real da agenda.
+6. Anotar, em lotes revisáveis, frases do catálogo didático, mantendo texto e
+   proveniência sem correções silenciosas.
+7. Reescrever Earley com agenda; somente depois acrescentar SPPF.
+8. Substituir o stack-set por RNGLR com GSS/SPPF.
 
 ## Leituras orientadas às decisões
 

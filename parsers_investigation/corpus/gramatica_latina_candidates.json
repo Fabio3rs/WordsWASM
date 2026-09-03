@@ -1,0 +1,71 @@
+{
+  "schema": "words-parser-source-candidates",
+  "schemaVersion": 1,
+  "annotationStatus": "partially-annotated",
+  "purpose": "Curated didactic sentences under staged structural gold annotation",
+  "redistributionReviewRequired": true,
+  "sourceCorpus": {
+    "title": "Gramática Latina",
+    "author": "Napoleão Mendes de Almeida",
+    "repository": "gramatica-latina-ocr",
+    "commit": "f40f24f5d511d58c7f2fc736a519233933bdf280",
+    "sourceSha256": "52ec2482e66ac1edae85ec73c4fc35048f7d9a6dcab076956a9d237a84e3735d",
+    "canonicalResource": "data/ocr/pages.jsonl"
+  },
+  "sources": {
+    "predicative-agreement": {"unitId": "s0029-l", "blockId": "s0029-l-b007", "printedPage": "54", "recordStatus": "needs_review", "blockConfidence": "medium"},
+    "comparative-syntax-a": {"unitId": "s0059-l", "blockId": "s0059-l-b009", "printedPage": "114", "recordStatus": "complete", "blockConfidence": "high"},
+    "comparative-syntax-b": {"unitId": "s0059-l", "blockId": "s0059-l-b010", "printedPage": "114", "recordStatus": "complete", "blockConfidence": "high"},
+    "inferiority-comparative": {"unitId": "s0060-l", "blockId": "s0060-l-b002", "printedPage": "116", "recordStatus": "complete", "blockConfidence": "high"},
+    "superlative-predicative": {"unitId": "s0060-r", "blockId": "s0060-r-b007", "printedPage": "117", "recordStatus": "complete", "blockConfidence": "high"},
+    "accusative-infinitive": {"unitId": "s0130-l", "blockId": "s0130-l-b003", "printedPage": "252", "recordStatus": "needs_review", "blockConfidence": "medium"},
+    "past-infinitive": {"unitId": "s0130-l", "blockId": "s0130-l-b004", "printedPage": "252", "recordStatus": "needs_review", "blockConfidence": "high"},
+    "infinitive-subject": {"unitId": "s0130-l", "blockId": "s0130-l-b012", "printedPage": "252", "recordStatus": "needs_review", "blockConfidence": "medium"},
+    "ablative-absolute": {"unitId": "s0132-l", "blockId": "s0132-l-b008", "printedPage": "256", "recordStatus": "needs_review", "blockConfidence": "medium"},
+    "perfect-passive": {"unitId": "s0142-r", "blockId": "s0142-r-b008", "printedPage": "277", "recordStatus": "needs_review", "blockConfidence": "high"},
+    "perfect-passive-state": {"unitId": "s0142-r", "blockId": "s0142-r-b009", "printedPage": "277", "recordStatus": "needs_review", "blockConfidence": "high"},
+    "impersonal-passive": {"unitId": "s0143-l", "blockId": "s0143-l-b005", "printedPage": "278", "recordStatus": "needs_review", "blockConfidence": "high"},
+    "governed-impersonal-passive": {"unitId": "s0143-l", "blockId": "s0143-l-b011", "printedPage": "278", "recordStatus": "needs_review", "blockConfidence": "high"},
+    "relative-clause": {"unitId": "s0198-r", "blockId": "s0198-r-b009", "printedPage": "387", "recordStatus": "complete", "blockConfidence": "high"},
+    "double-dative": {"unitId": "s0216-l", "blockId": "s0216-l-b008", "printedPage": "422", "recordStatus": "needs_review", "blockConfidence": "medium"}
+  },
+  "examples": [
+    {"id": "grammar-petrus-bonus", "annotationStatus": "promoted-to-structural-gold", "fixtureId": "agreement-masculine-singular", "text": "Petrus est bonus", "sourceText": "Petrus est bonus", "source": "predicative-agreement", "suite": "S0", "mode": "complete-clause", "phenomena": ["copula", "predicative-adjective", "agreement-masculine-singular"]},
+    {"id": "grammar-maria-bona", "annotationStatus": "promoted-to-structural-gold", "fixtureId": "agreement-feminine-singular", "text": "Maria est bona", "sourceText": "Maria est bona", "source": "predicative-agreement", "suite": "S0", "mode": "complete-clause", "phenomena": ["copula", "predicative-adjective", "agreement-feminine-singular"]},
+    {"id": "grammar-exemplum-bonum", "annotationStatus": "promoted-to-structural-gold", "fixtureId": "agreement-neuter-singular", "text": "Exemplum est bonum", "sourceText": "Exemplum est bonum", "source": "predicative-agreement", "suite": "S0", "mode": "complete-clause", "phenomena": ["copula", "predicative-adjective", "agreement-neuter-singular"]},
+    {"id": "grammar-alumni-parvi", "annotationStatus": "promoted-to-structural-gold", "fixtureId": "agreement-masculine-plural", "text": "Alumni sunt parvi", "sourceText": "Alumni sunt parvi", "source": "predicative-agreement", "suite": "S0", "mode": "complete-clause", "phenomena": ["copula", "predicative-adjective", "agreement-masculine-plural"]},
+    {"id": "grammar-alumnae-altae", "annotationStatus": "promoted-to-structural-gold", "fixtureId": "agreement-feminine-plural", "text": "Alumnae sunt altae", "sourceText": "Alumnae sunt altae", "source": "predicative-agreement", "suite": "S0", "mode": "complete-clause", "phenomena": ["copula", "predicative-adjective", "agreement-feminine-plural"]},
+    {"id": "grammar-bella-aspera", "annotationStatus": "promoted-to-structural-gold", "fixtureId": "agreement-neuter-plural", "text": "Bella sunt aspera", "sourceText": "Bella sunt aspera", "source": "predicative-agreement", "suite": "S0", "mode": "complete-clause", "phenomena": ["copula", "predicative-adjective", "agreement-neuter-plural"]},
+
+    {"id": "grammar-filius-intelligentior-patre", "annotationStatus": "promoted-to-structural-gold", "fixtureId": "comparison-ablative-intelligentior", "text": "Filius est intelligentior patre", "sourceText": "Filius est intelligentior patre", "source": "comparative-syntax-a", "suite": "S0", "mode": "complete-clause", "phenomena": ["comparative", "ablative-of-comparison"]},
+    {"id": "grammar-filius-intelligentior-quam", "annotationStatus": "promoted-to-structural-gold", "fixtureId": "comparison-quam-intelligentior", "text": "Filius est intelligentior quam pater", "sourceText": "Filius est intelligentior quam pater", "source": "comparative-syntax-a", "suite": "S0", "mode": "complete-clause", "phenomena": ["comparative", "quam", "case-parallelism"]},
+    {"id": "grammar-asinus-prudentior-equo", "annotationStatus": "promoted-to-structural-gold", "fixtureId": "comparison-ablative-prudentior", "text": "Asinus est prudentior equo", "sourceText": "Asinus est prudentior equo", "source": "comparative-syntax-b", "suite": "S0", "mode": "complete-clause", "phenomena": ["comparative", "ablative-of-comparison"]},
+    {"id": "grammar-asinus-prudentior-quam", "annotationStatus": "promoted-to-structural-gold", "fixtureId": "comparison-quam-prudentior", "text": "Asinus est prudentior quam equus", "sourceText": "Asinus est prudentior quam equus", "source": "comparative-syntax-b", "suite": "S0", "mode": "complete-clause", "phenomena": ["comparative", "quam", "case-parallelism"]},
+    {"id": "grammar-filius-minus-patre", "text": "Filius minus intelligens est patre", "sourceText": "Filius minus intelligens est patre", "source": "inferiority-comparative", "suite": "S0", "mode": "complete-clause", "phenomena": ["comparative-of-inferiority", "ablative-of-comparison"]},
+    {"id": "grammar-filius-minus-quam", "text": "Filius minus intelligens est quam pater", "sourceText": "Filius minus intelligens est quam pater", "source": "inferiority-comparative", "suite": "S0", "mode": "complete-clause", "phenomena": ["comparative-of-inferiority", "quam"]},
+    {"id": "grammar-pater-amicissimus", "text": "Pater amicissimus meus est", "sourceText": "Pater amicissimus meus est", "source": "superlative-predicative", "suite": "S0", "mode": "complete-clause", "phenomena": ["superlative", "predicative-adjective", "possessive"]},
+
+    {"id": "grammar-credo-deum-esse", "text": "Credo Deum esse", "sourceText": "Credo Deum esse", "source": "accusative-infinitive", "suite": "S1", "mode": "complete-clause", "phenomena": ["aci", "accusative-subject", "infinitive"]},
+    {"id": "grammar-puto-eum-audire", "text": "Puto eum audire", "sourceText": "Puto eum audire", "source": "accusative-infinitive", "suite": "S1", "mode": "complete-clause", "phenomena": ["aci", "pronoun", "infinitive"]},
+    {"id": "grammar-scio-petrum-studere", "text": "Scio Petrum studere", "sourceText": "Scio Petrum studere", "source": "accusative-infinitive", "suite": "S1", "mode": "complete-clause", "phenomena": ["aci", "accusative-subject", "infinitive"]},
+    {"id": "grammar-credo-eum-bonum", "text": "Credo eum esse bonum", "sourceText": "Credo eum esse bonum", "source": "accusative-infinitive", "suite": "S1", "mode": "complete-clause", "phenomena": ["aci", "infinitive-copula", "predicative-agreement"]},
+    {"id": "grammar-scio-petrum-studuisse", "text": "Scio Petrum studuisse", "sourceText": "Scio Petrum studuisse", "source": "past-infinitive", "suite": "S1", "mode": "complete-clause", "phenomena": ["aci", "perfect-infinitive"]},
+    {"id": "grammar-discere-bonum", "text": "Discere est bonum", "sourceText": "Discere est bonum", "source": "infinitive-subject", "suite": "S1", "mode": "complete-clause", "phenomena": ["infinitive-subject", "neuter-predicative"]},
+    {"id": "grammar-alumnos-castigare", "text": "Alumnos injuste castigare perniciosum est", "sourceText": "Alumnos injuste castigare perniciosum est", "source": "infinitive-subject", "suite": "S1", "mode": "complete-clause", "phenomena": ["infinitive-clause-subject", "adverb", "neuter-predicative"]},
+    {"id": "grammar-facile-opprimere", "text": "Facile est opprimere innocentem", "sourceText": "Facile est opprimere innocentem", "source": "infinitive-subject", "suite": "S1", "mode": "complete-clause", "phenomena": ["infinitive-clause-subject", "predicative"]},
+
+    {"id": "grammar-hostibus-pulsis", "text": "Hostibus pulsis Caesar in fines Aeduorum pervenit", "sourceText": "Hostibus pulsis, Cæsar in fines Æduorum pervĕnit", "source": "ablative-absolute", "suite": "S2", "mode": "complete-clause", "phenomena": ["ablative-absolute", "participle", "prepositional-phrase"]},
+    {"id": "grammar-cicerone-consule", "text": "Cicerone consule Catilina conjurationem fecit", "sourceText": "Cicerone consule, Catilina conjurationem fecit", "source": "ablative-absolute", "suite": "S2", "mode": "complete-clause", "phenomena": ["nominal-ablative-absolute", "object"]},
+    {"id": "grammar-nobis-sentientibus", "text": "Nobis non sentientibus labitur aetas", "sourceText": "Nobis non sentientibus, labitur ætas", "source": "ablative-absolute", "suite": "S2", "mode": "complete-clause", "phenomena": ["ablative-absolute", "negative-adverb", "participle"]},
+
+    {"id": "grammar-porta-clauditur", "text": "Porta clauditur", "sourceText": "Porta clauditur", "source": "perfect-passive", "suite": "S0", "mode": "complete-clause", "phenomena": ["synthetic-passive", "present"]},
+    {"id": "grammar-porta-clausa-est", "text": "Porta clausa est", "sourceText": "Porta clausa est", "source": "perfect-passive", "suite": "S0", "mode": "complete-clause", "phenomena": ["compound-perfect-passive", "participle-auxiliary"]},
+    {"id": "grammar-porta-clausa-fuit", "text": "Porta clausa fuit", "sourceText": "Porta clausa fuit", "source": "perfect-passive-state", "suite": "S1", "mode": "complete-clause", "phenomena": ["compound-perfect-passive", "past-auxiliary"]},
+    {"id": "grammar-bellatum-pyrrho", "text": "Bellatum est a Pyrrho", "sourceText": "Bellatum est a Pyrrho", "source": "impersonal-passive", "suite": "S1", "mode": "complete-clause", "phenomena": ["impersonal-passive", "agent"]},
+    {"id": "grammar-mihi-nocetur", "text": "Mihi nocetur", "sourceText": "Mihi nocetur", "source": "governed-impersonal-passive", "suite": "S1", "mode": "complete-clause", "phenomena": ["impersonal-passive", "governed-dative"]},
+    {"id": "grammar-liber-relativum", "text": "Est mihi liber qui utilis est", "sourceText": "Est mihi liber qui utilis est", "source": "relative-clause", "suite": "S1", "mode": "complete-clause", "phenomena": ["relative-clause", "dative-possession", "antecedent-agreement"]},
+    {"id": "grammar-hoc-dolori", "text": "Hoc erit tibi dolori", "sourceText": "Hōc erit tibi dolōri", "source": "double-dative", "suite": "S1", "mode": "complete-clause", "phenomena": ["double-dative", "dative-of-purpose", "dative-of-interest"]},
+    {"id": "grammar-leges-utilitati", "text": "Leges omnibus civibus utilitati sunt", "sourceText": "Legēs omnibus cīvibus ūtilitātī sunt", "source": "double-dative", "suite": "S1", "mode": "complete-clause", "phenomena": ["double-dative", "plural-subject"]},
+    {"id": "grammar-mare-exitio", "text": "Exitio est avidis mare nautis", "sourceText": "Exitiō est avidīs mare nautīs", "source": "double-dative", "suite": "S1", "mode": "complete-clause", "phenomena": ["double-dative", "free-word-order"]}
+  ]
+}
