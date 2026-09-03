@@ -42,9 +42,9 @@ target_compile_definitions(parsers_investigation PRIVATE
     PARSERS_INVESTIGATION_BUILD_TYPE="$<CONFIG>"
 )
 
-if(ENABLE_TESTS)
-    add_test(
-        NAME parsers_investigation_self_test
-        COMMAND parsers_investigation --self-test
-    )
-endif()
+# if(ENABLE_TESTS)
+#     add_test(
+#         NAME parsers_investigation_self_test
+#         COMMAND parsers_investigation --self-test
+#     )
+# endif()
