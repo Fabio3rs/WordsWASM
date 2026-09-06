@@ -39,7 +39,7 @@
             "type": "object",
             "required": ["status", "source", "evidence"],
             "properties": {
-              "status": {"enum": ["verified-didactic"]},
+              "status": {"enum": ["verified-didactic", "verified-attested", "treebank-gold"]},
               "source": {
                 "type": "object",
                 "required": ["catalogId", "title", "repository", "commit", "unitId", "blockId", "printedPage", "sourceText"],
@@ -47,7 +47,12 @@
                   "catalogId": {"type": "string", "minLength": 1},
                   "title": {"type": "string", "minLength": 1},
                   "repository": {"type": "string", "minLength": 1},
-                  "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                  "commit": {
+                    "oneOf": [
+                      {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                      {"const": "unversioned-local-snapshot"}
+                    ]
+                  },
                   "unitId": {"type": "string", "minLength": 1},
                   "blockId": {"type": "string", "minLength": 1},
                   "printedPage": {"type": "string", "minLength": 1},

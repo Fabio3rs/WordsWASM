@@ -42,6 +42,7 @@ struct Options final {
     bool fragment{};
     bool self_test{};
     bool human{};
+    bool include_nbest{};
     bool help{};
 };
 
@@ -124,6 +125,8 @@ parse_options(const int argc, char *const argv[]) {
             options.self_test = true;
         } else if (argument == "--human") {
             options.human = true;
+        } else if (argument == "--include-nbest") {
+            options.include_nbest = true;
         } else if (argument == "--help" || argument == "-h") {
             options.help = true;
         } else {
@@ -157,6 +160,8 @@ void usage(std::ostream &output) {
               "  --dataset-id ID           dataset identifier for the WWDB\n"
               "  --max-product N           exact-enumeration safety budget\n"
               "  --human                   compact table instead of NDJSON\n"
+              "  --include-nbest           include every possible morphology "
+              "analysis in NDJSON\n"
               "  --self-test               verify strategy invariants on the "
               "corpus\n";
 }
@@ -280,7 +285,8 @@ int main(const int argc, char *argv[]) try {
             if (options->human) {
                 print_human(result);
             } else {
-                std::cout << parsers::to_json(result) << '\n';
+                std::cout << parsers::to_json(result, options->include_nbest)
+                          << '\n';
             }
         }
     }

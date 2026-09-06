@@ -121,6 +121,15 @@ struct AnalysisChoice final {
     std::string morphology;
 };
 
+struct RankedMorphologyAnalysis final {
+    std::string assignment_id;
+    double manual_score{};
+    std::vector<AnalysisChoice> analysis;
+    std::vector<Relation> relations;
+    bool matches_preferred_lemmas{};
+    bool matches_morphology_gold{};
+};
+
 struct ScoreReason final {
     std::string id;
     double delta{};
@@ -260,6 +269,7 @@ struct Result final {
     std::optional<double> best_score;
     std::vector<ScoreReason> score_reasons;
     std::vector<AnalysisChoice> best_analysis;
+    std::vector<RankedMorphologyAnalysis> morphology_nbest;
     std::vector<Relation> best_relations;
     std::vector<std::string> diagnostics;
 };
@@ -284,6 +294,7 @@ class Experiment final {
     std::uint64_t max_product_{};
 };
 
-[[nodiscard]] std::string to_json(const Result &result);
+[[nodiscard]] std::string to_json(const Result &result,
+                                  bool include_morphology_nbest = false);
 
 } // namespace parsers

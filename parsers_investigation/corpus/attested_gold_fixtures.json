@@ -1,0 +1,337 @@
+{
+  "schema": "words-parser-fixtures",
+  "schemaVersion": 2,
+  "description": "Small Latin morphology-gold set for Markov in-sample versus held-out experiments: five attested texts from the local The Latin Library snapshot with editorial WordsWASM morphology, plus five annotated sentences mapped from Latin Dependency Treebank 2.1. Structural order remains parser-produced.",
+  "fixtures": [
+    {
+      "id": "attested-vergil-aen1-arma-virumque",
+      "text": "Arma virumque cano",
+      "phenomenon": "attested-coordinated-objects",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["armum", "vir", "cano"],
+      "annotation": {
+        "status": "verified-attested",
+        "source": {
+          "catalogId": "tll-vergil-aen1-1",
+          "title": "P. Vergili Maronis Aeneidos Liber Primus",
+          "repository": "/mnt/projects/Projects/thelatinlibrary",
+          "commit": "unversioned-local-snapshot",
+          "unitId": "Aeneid-1",
+          "blockId": "line-1",
+          "printedPage": "1.1",
+          "sourceText": "Arma virumque cano"
+        },
+        "evidence": {
+          "claimBlockId": "line-1",
+          "claim": "The source attests the token sequence; morphology is an editorial annotation.",
+          "sourceAsserts": ["attested-token-sequence"],
+          "editorialAdds": ["morphology", "wwdb-lemma-armum"],
+          "reviewedOn": "2026-09-06"
+        }
+      },
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "armum", "part": "noun", "case": "accusative", "number": "plural", "gender": "neuter"}]},
+          {"token": 1, "alternatives": [{"lemma": "vir", "part": "noun", "case": "accusative", "number": "singular", "gender": "masculine"}]},
+          {"token": 2, "alternatives": [{"lemma": "cano", "part": "verb", "tense": "present", "voice": "active", "mood": "indicative", "person": 1, "number": "singular"}]}
+        ]
+      }
+    },
+    {
+      "id": "attested-caesar-veni-vidi-vici",
+      "text": "Veni vidi vici",
+      "phenomenon": "attested-asyndetic-finite-coordination",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["venio", "video", "vinco"],
+      "annotation": {
+        "status": "verified-attested",
+        "source": {
+          "catalogId": "tll-suetonius-caesar-37",
+          "title": "C. Suetoni Tranquilli Divus Iulius",
+          "repository": "/mnt/projects/Projects/thelatinlibrary",
+          "commit": "unversioned-local-snapshot",
+          "unitId": "Divus-Iulius-37",
+          "blockId": "title-veni-vidi-vici",
+          "printedPage": "37",
+          "sourceText": "VENI : VIDI : VICI"
+        },
+        "evidence": {
+          "claimBlockId": "title-veni-vidi-vici",
+          "claim": "The source attests the three-word triumphal title; morphology is an editorial annotation.",
+          "sourceAsserts": ["attested-token-sequence"],
+          "editorialAdds": ["perfect-active-indicative-analysis"],
+          "reviewedOn": "2026-09-06"
+        }
+      },
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "venio", "part": "verb", "tense": "perfect", "voice": "active", "mood": "indicative", "person": 1, "number": "singular"}]},
+          {"token": 1, "alternatives": [{"lemma": "video", "part": "verb", "tense": "perfect", "voice": "active", "mood": "indicative", "person": 1, "number": "singular"}]},
+          {"token": 2, "alternatives": [{"lemma": "vinco", "part": "verb", "tense": "perfect", "voice": "active", "mood": "indicative", "person": 1, "number": "singular"}]}
+        ]
+      }
+    },
+    {
+      "id": "attested-horace-odes1-carpe-diem",
+      "text": "Carpe diem",
+      "phenomenon": "attested-imperative-object",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["carpo", "dies"],
+      "annotation": {
+        "status": "verified-attested",
+        "source": {
+          "catalogId": "tll-horace-carm1-11-8",
+          "title": "Q. Horati Flacci Carminum Liber Primus",
+          "repository": "/mnt/projects/Projects/thelatinlibrary",
+          "commit": "unversioned-local-snapshot",
+          "unitId": "Odes-1.11",
+          "blockId": "line-8",
+          "printedPage": "1.11.8",
+          "sourceText": "carpe diem"
+        },
+        "evidence": {
+          "claimBlockId": "line-8",
+          "claim": "The source attests the phrase in its verse context; morphology is an editorial annotation.",
+          "sourceAsserts": ["attested-token-sequence"],
+          "editorialAdds": ["morphology"],
+          "reviewedOn": "2026-09-06"
+        }
+      },
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "carpo", "part": "verb", "tense": "present", "voice": "active", "mood": "imperative", "person": 2, "number": "singular"}]},
+          {"token": 1, "alternatives": [{"lemma": "dies", "part": "noun", "case": "accusative", "number": "singular", "gender": "common"}]}
+        ]
+      }
+    },
+    {
+      "id": "attested-vergil-aen10-audentis-fortuna",
+      "text": "Audentis Fortuna iuvat",
+      "phenomenon": "attested-substantivized-adjective-object",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["audens", "fortuna", "juvo"],
+      "annotation": {
+        "status": "verified-attested",
+        "source": {
+          "catalogId": "tll-vergil-aen10-284",
+          "title": "P. Vergili Maronis Aeneidos Liber Decimus",
+          "repository": "/mnt/projects/Projects/thelatinlibrary",
+          "commit": "unversioned-local-snapshot",
+          "unitId": "Aeneid-10",
+          "blockId": "line-284",
+          "printedPage": "10.284",
+          "sourceText": "audentis Fortuna iuvat"
+        },
+        "evidence": {
+          "claimBlockId": "line-284",
+          "claim": "The source attests the poetic accusative plural audentis; morphology is an editorial annotation.",
+          "sourceAsserts": ["attested-token-sequence", "poetic-form-audentis"],
+          "editorialAdds": ["lexicalized-adjective-analysis"],
+          "reviewedOn": "2026-09-06"
+        }
+      },
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "audens", "part": "adjective", "case": "accusative", "number": "plural", "gender": "common", "degree": "positive"}]},
+          {"token": 1, "alternatives": [{"lemma": "fortuna", "part": "noun", "case": "nominative", "number": "singular", "gender": "feminine"}]},
+          {"token": 2, "alternatives": [{"lemma": "juvo", "part": "verb", "tense": "present", "voice": "active", "mood": "indicative", "person": 3, "number": "singular"}]}
+        ]
+      }
+    },
+    {
+      "id": "attested-juvenal-sat10-mens-sana",
+      "text": "Sit mens sana in corpore sano",
+      "phenomenon": "attested-subjunctive-predication-and-ablative-phrase",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["sum", "mens", "sanus", "in", "corpus", "sanus"],
+      "annotation": {
+        "status": "verified-attested",
+        "source": {
+          "catalogId": "tll-juvenal-sat10-356",
+          "title": "D. Iuni Iuvenalis Saturarum Liber IV, Satura X",
+          "repository": "/mnt/projects/Projects/thelatinlibrary",
+          "commit": "unversioned-local-snapshot",
+          "unitId": "Satire-10",
+          "blockId": "line-356",
+          "printedPage": "10.356",
+          "sourceText": "orandum est ut sit mens sana in corpore sano"
+        },
+        "evidence": {
+          "claimBlockId": "line-356",
+          "claim": "The source attests the finite clause; morphology is an editorial annotation.",
+          "sourceAsserts": ["attested-token-sequence-in-context"],
+          "editorialAdds": ["clause-extraction", "morphology"],
+          "reviewedOn": "2026-09-06"
+        }
+      },
+      "gold": {
+        "morphology": [
+          {"token": 0, "alternatives": [{"lemma": "sum", "part": "verb", "tense": "present", "voice": "active", "mood": "subjunctive", "person": 3, "number": "singular"}]},
+          {"token": 1, "alternatives": [{"lemma": "mens", "part": "noun", "case": "nominative", "number": "singular", "gender": "feminine"}]},
+          {"token": 2, "alternatives": [{"lemma": "sanus", "part": "adjective", "case": "nominative", "number": "singular", "gender": "feminine", "degree": "positive"}]},
+          {"token": 3, "alternatives": [{"lemma": "in", "part": "preposition", "governs": "ablative"}]},
+          {"token": 4, "alternatives": [{"lemma": "corpus", "part": "noun", "case": "ablative", "number": "singular", "gender": "neuter"}]},
+          {"token": 5, "alternatives": [{"lemma": "sanus", "part": "adjective", "case": "ablative", "number": "singular", "gender": "neuter", "degree": "positive"}]}
+        ]
+      }
+    },
+    {
+      "id": "treebank-cicero-catilinam-1.2-s22",
+      "text": "Nox nulla intercessit",
+      "phenomenon": "treebank-subject-modifier-perfect-verb",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["nox", "nullus", "intercedo"],
+      "annotation": {
+        "status": "treebank-gold",
+        "source": {
+          "catalogId": "ldt2.1-phi0474.phi013-s22",
+          "title": "Latin Dependency Treebank 2.1: Cicero, In Catilinam",
+          "repository": "/mnt/projects/Projects/WordsWASM/treebank_data-master",
+          "commit": "unversioned-local-snapshot",
+          "unitId": "phi0474.phi013.perseus-lat1",
+          "blockId": "sentence-22",
+          "printedPage": "1.2",
+          "sourceText": "nox nulla intercessit"
+        },
+        "evidence": {
+          "claimBlockId": "sentence-22",
+          "claim": "LDT 2.1 supplies the token sequence, lemmas, fine-grained morphology and dependency annotation.",
+          "sourceAsserts": ["treebank-token-sequence", "treebank-morphology", "treebank-dependencies"],
+          "editorialAdds": ["punctuation-removal", "ldt-to-words-tag-mapping", "lemma-sense-suffix-removal"],
+          "reviewedOn": "2026-09-06"
+        }
+      },
+      "gold": {"morphology": [
+        {"token": 0, "alternatives": [{"lemma": "nox", "part": "noun", "case": "nominative", "number": "singular", "gender": "feminine"}]},
+        {"token": 1, "alternatives": [{"lemma": "nullus", "part": "adjective", "case": "nominative", "number": "singular", "gender": "feminine", "degree": "positive"}]},
+        {"token": 2, "alternatives": [{"lemma": "intercedo", "part": "verb", "tense": "perfect", "voice": "active", "mood": "indicative", "person": 3, "number": "singular"}]}
+      ]}
+    },
+    {
+      "id": "treebank-cicero-catilinam-1.5-s68",
+      "text": "Patent portae",
+      "phenomenon": "treebank-verb-subject",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["pateo", "porta"],
+      "annotation": {
+        "status": "treebank-gold",
+        "source": {
+          "catalogId": "ldt2.1-phi0474.phi013-s68",
+          "title": "Latin Dependency Treebank 2.1: Cicero, In Catilinam",
+          "repository": "/mnt/projects/Projects/WordsWASM/treebank_data-master",
+          "commit": "unversioned-local-snapshot",
+          "unitId": "phi0474.phi013.perseus-lat1",
+          "blockId": "sentence-68",
+          "printedPage": "1.5",
+          "sourceText": "patent portae"
+        },
+        "evidence": {
+          "claimBlockId": "sentence-68",
+          "claim": "LDT 2.1 supplies the token sequence, lemmas, fine-grained morphology and dependency annotation.",
+          "sourceAsserts": ["treebank-token-sequence", "treebank-morphology", "treebank-dependencies"],
+          "editorialAdds": ["punctuation-removal", "ldt-to-words-tag-mapping", "lemma-sense-suffix-removal"],
+          "reviewedOn": "2026-09-06"
+        }
+      },
+      "gold": {"morphology": [
+        {"token": 0, "alternatives": [{"lemma": "pateo", "part": "verb", "tense": "present", "voice": "active", "mood": "indicative", "person": 3, "number": "plural"}]},
+        {"token": 1, "alternatives": [{"lemma": "porta", "part": "noun", "case": "nominative", "number": "plural", "gender": "feminine"}]}
+      ]}
+    },
+    {
+      "id": "treebank-cicero-catilinam-1.5-s72",
+      "text": "Purga urbem",
+      "phenomenon": "treebank-imperative-object",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["purgo", "urbs"],
+      "annotation": {
+        "status": "treebank-gold",
+        "source": {
+          "catalogId": "ldt2.1-phi0474.phi013-s72",
+          "title": "Latin Dependency Treebank 2.1: Cicero, In Catilinam",
+          "repository": "/mnt/projects/Projects/WordsWASM/treebank_data-master",
+          "commit": "unversioned-local-snapshot",
+          "unitId": "phi0474.phi013.perseus-lat1",
+          "blockId": "sentence-72",
+          "printedPage": "1.5",
+          "sourceText": "purga urbem"
+        },
+        "evidence": {
+          "claimBlockId": "sentence-72",
+          "claim": "LDT 2.1 supplies the token sequence, lemmas, fine-grained morphology and dependency annotation.",
+          "sourceAsserts": ["treebank-token-sequence", "treebank-morphology", "treebank-dependencies"],
+          "editorialAdds": ["punctuation-removal", "ldt-to-words-tag-mapping", "lemma-sense-suffix-removal"],
+          "reviewedOn": "2026-09-06"
+        }
+      },
+      "gold": {"morphology": [
+        {"token": 0, "alternatives": [{"lemma": "purgo", "part": "verb", "tense": "present", "voice": "active", "mood": "imperative", "person": 2, "number": "singular"}]},
+        {"token": 1, "alternatives": [{"lemma": "urbs", "part": "noun", "case": "accusative", "number": "singular", "gender": "feminine"}]}
+      ]}
+    },
+    {
+      "id": "treebank-cicero-catilinam-2.1-s201",
+      "text": "Abiit excessit evasit erupit",
+      "phenomenon": "treebank-asyndetic-finite-coordination",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["abeo", "excedo", "evado", "erumpo"],
+      "annotation": {
+        "status": "treebank-gold",
+        "source": {
+          "catalogId": "ldt2.1-phi0474.phi013-s201",
+          "title": "Latin Dependency Treebank 2.1: Cicero, In Catilinam",
+          "repository": "/mnt/projects/Projects/WordsWASM/treebank_data-master",
+          "commit": "unversioned-local-snapshot",
+          "unitId": "phi0474.phi013.perseus-lat1",
+          "blockId": "sentence-201",
+          "printedPage": "2.1",
+          "sourceText": "abiit, excessit, evasit, erupit"
+        },
+        "evidence": {
+          "claimBlockId": "sentence-201",
+          "claim": "LDT 2.1 supplies the token sequence, lemmas, fine-grained morphology and dependency annotation.",
+          "sourceAsserts": ["treebank-token-sequence", "treebank-morphology", "treebank-dependencies"],
+          "editorialAdds": ["punctuation-removal", "ldt-to-words-tag-mapping", "lemma-sense-suffix-removal"],
+          "reviewedOn": "2026-09-06"
+        }
+      },
+      "gold": {"morphology": [
+        {"token": 0, "alternatives": [{"lemma": "abeo", "part": "verb", "tense": "perfect", "voice": "active", "mood": "indicative", "person": 3, "number": "singular"}]},
+        {"token": 1, "alternatives": [{"lemma": "excedo", "part": "verb", "tense": "perfect", "voice": "active", "mood": "indicative", "person": 3, "number": "singular"}]},
+        {"token": 2, "alternatives": [{"lemma": "evado", "part": "verb", "tense": "perfect", "voice": "active", "mood": "indicative", "person": 3, "number": "singular"}]},
+        {"token": 3, "alternatives": [{"lemma": "erumpo", "part": "verb", "tense": "perfect", "voice": "active", "mood": "indicative", "person": 3, "number": "singular"}]}
+      ]}
+    },
+    {
+      "id": "treebank-cicero-catilinam-2.4-s237",
+      "text": "Demonstrabo iter",
+      "phenomenon": "treebank-future-verb-object",
+      "mode": "complete-clause",
+      "preferredLemmaSequence": ["demonstro", "iter"],
+      "annotation": {
+        "status": "treebank-gold",
+        "source": {
+          "catalogId": "ldt2.1-phi0474.phi013-s237",
+          "title": "Latin Dependency Treebank 2.1: Cicero, In Catilinam",
+          "repository": "/mnt/projects/Projects/WordsWASM/treebank_data-master",
+          "commit": "unversioned-local-snapshot",
+          "unitId": "phi0474.phi013.perseus-lat1",
+          "blockId": "sentence-237",
+          "printedPage": "2.4",
+          "sourceText": "demonstrabo iter"
+        },
+        "evidence": {
+          "claimBlockId": "sentence-237",
+          "claim": "LDT 2.1 supplies the token sequence, lemmas, fine-grained morphology and dependency annotation.",
+          "sourceAsserts": ["treebank-token-sequence", "treebank-morphology", "treebank-dependencies"],
+          "editorialAdds": ["punctuation-removal", "ldt-to-words-tag-mapping", "lemma-sense-suffix-removal"],
+          "reviewedOn": "2026-09-06"
+        }
+      },
+      "gold": {"morphology": [
+        {"token": 0, "alternatives": [{"lemma": "demonstro", "part": "verb", "tense": "future", "voice": "active", "mood": "indicative", "person": 1, "number": "singular"}]},
+        {"token": 1, "alternatives": [{"lemma": "iter", "part": "noun", "case": "accusative", "number": "singular", "gender": "neuter"}]}
+      ]}
+    }
+  ]
+}

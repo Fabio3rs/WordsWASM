@@ -16,6 +16,18 @@ set(PARSERS_INVESTIGATION_CORPUS_PATH
     "Structured corpus used by the parser investigation"
 )
 
+set(PARSERS_INVESTIGATION_MARKOV_SUPPLEMENT_PATH
+    "${CMAKE_CURRENT_SOURCE_DIR}/corpus/common_phrases.tsv"
+    CACHE FILEPATH
+    "Preferred-lemma silver corpus used by the Markov investigation"
+)
+
+set(PARSERS_INVESTIGATION_MARKOV_ATTESTED_PATH
+    "${CMAKE_CURRENT_SOURCE_DIR}/corpus/attested_gold_fixtures.json"
+    CACHE FILEPATH
+    "Attested editorial and treebank morphology-gold corpus used by Markov"
+)
+
 execute_process(
     COMMAND git rev-parse HEAD
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
@@ -27,20 +39,68 @@ if(NOT PARSERS_INVESTIGATION_GIT_COMMIT)
     set(PARSERS_INVESTIGATION_GIT_COMMIT "unknown")
 endif()
 
-add_executable(parsers_investigation main.cpp parser.cpp)
-target_link_libraries(parsers_investigation PRIVATE
+add_library(parsers_investigation_lib STATIC parser.cpp)
+target_link_libraries(parsers_investigation_lib PUBLIC
     words_core
     nlohmann_json::nlohmann_json
 )
-target_compile_definitions(parsers_investigation PRIVATE
+target_compile_definitions(parsers_investigation_lib PUBLIC
     PARSERS_INVESTIGATION_WWDB_PATH="${PARSERS_INVESTIGATION_WWDB_PATH}"
     PARSERS_INVESTIGATION_DATASET_ID="${PARSERS_INVESTIGATION_DATASET_ID}"
     PARSERS_INVESTIGATION_CORPUS_PATH="${PARSERS_INVESTIGATION_CORPUS_PATH}"
+    PARSERS_INVESTIGATION_MARKOV_SUPPLEMENT_PATH="${PARSERS_INVESTIGATION_MARKOV_SUPPLEMENT_PATH}"
+    PARSERS_INVESTIGATION_MARKOV_ATTESTED_PATH="${PARSERS_INVESTIGATION_MARKOV_ATTESTED_PATH}"
     PARSERS_INVESTIGATION_GIT_COMMIT="${PARSERS_INVESTIGATION_GIT_COMMIT}"
     PARSERS_INVESTIGATION_COMPILER="${CMAKE_CXX_COMPILER_ID}"
     PARSERS_INVESTIGATION_COMPILER_VERSION="${CMAKE_CXX_COMPILER_VERSION}"
     PARSERS_INVESTIGATION_BUILD_TYPE="$<CONFIG>"
 )
+
+add_executable(parsers_investigation main.cpp)
+target_link_libraries(parsers_investigation PRIVATE parsers_investigation_lib)
+
+add_executable(markov_parser_ranker markov_ranker.cpp)
+target_link_libraries(markov_parser_ranker PRIVATE parsers_investigation_lib)
+
+add_executable(markov_model_test markov_model_test.cpp)
+target_link_libraries(markov_model_test PRIVATE parsers_investigation_lib)
+
+if(ENABLE_TESTS)
+    add_test(NAME parsers_markov_model_test COMMAND markov_model_test)
+    add_test(NAME parsers_markov_ranker_smoke COMMAND markov_parser_ranker)
+    add_test(
+        NAME parsers_markov_attested_in_sample_smoke
+        COMMAND markov_parser_ranker
+                --evaluation-tier attested
+                --evaluation-policy in-sample
+    )
+    add_test(
+        NAME parsers_markov_treebank_in_sample_smoke
+        COMMAND markov_parser_ranker
+                --evaluation-tier treebank
+                --evaluation-policy in-sample
+    )
+    add_test(
+        NAME parsers_markov_shuffled_control_smoke
+        COMMAND markov_parser_ranker
+                --evaluation-tier attested
+                --training-control shuffle-within-sequence
+                --shuffle-seed 20260906
+    )
+    add_test(
+        NAME parsers_markov_counterfactual_control_smoke
+        COMMAND markov_parser_ranker
+                --evaluation-tier attested
+                --training-control counterfactual-analysis
+    )
+    add_test(
+        NAME parsers_markov_exposure_curve_smoke
+        COMMAND markov_parser_ranker
+                --evaluation-tier attested
+                --evaluation-policy exposure-curve
+                --exposure-multipliers 0,1
+    )
+endif()
 
 # if(ENABLE_TESTS)
 #     add_test(

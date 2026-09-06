@@ -719,6 +719,45 @@ Somente depois de estabilizar a cobertura formal:
 - comparar ranker estatístico pequeno;
 - considerar modelo semântico apenas para N-best formalmente válido.
 
+O primeiro baseline está documentado em
+[`MARKOV.md`](MARKOV.md): cadeias suavizadas recebem o N-best morfológico do
+parser e são avaliadas por leave-one-fixture-out nas dez frases didáticas. A
+ordem canônica root-first produz o melhor resultado inicial com estado
+morfologicamente completo e memória 2 (top-1 9/10, MRR 0,95), contra top-1 8/10
+e MRR 0,87 na ordem superficial. Apenas 4/10 decisões são exclusivas do score
+Markoviano, portanto o resultado justifica ampliar a investigação, não adotar
+o ranker. Ausência no treino continua sem efeito sobre possibilidade formal.
+
+Uma ampliação controlada adicionou sete golds sintéticos com peso 0,5 e treze
+locuções silver com peso 0,25. Na mesma configuração canônica, top-1 caiu para
+7/10 e MRR para 0,833. A infraestrutura aceita treino em camadas, mas esta
+ablação indica transferência negativa; aumentar gold real tem prioridade sobre
+promover pseudo-rótulos.
+
+O ciclo seguinte acrescentou cinco frases verificadas na cópia local da The
+Latin Library com morfologia editorial e cinco sentenças de Cícero com
+morfologia do Latin Dependency Treebank 2.1. O protocolo agora separa
+`leave-one-fixture-out` de `in-sample` e impede vazamento por texto idêntico.
+Nos dois recortes reais, incluir o próprio alvo no treino leva a 5/5 top-1 e
+MRR 1,0, demonstrando assimilação, não generalização. Fora do treino, a ordem
+canônica alcança 4/5 no recorte TLL, mas apenas 3/5 no LDT, contra 4/5 da ordem
+superficial no LDT. A relinearização sintética de peso 0,1 não melhora top-1.
+Logo, a ordenação estrutural continua hipótese comparativa e o próximo ganho de
+dados deve vir de um importador reprodutível de treebanks, particionado por
+obra/autor.
+
+O controle positivo foi reforçado por uma curva de exposição e por ablação do
+desempate. Na configuração canônica POS+morfologia/memória 2, o Markov puro
+passa de 3/5 para 5/5 no LDT com apenas 0,01 do peso do próprio alvo; no TLL,
+passa de 3/5 para 4/5 com 0,01 e para 5/5 com 0,25. Treinar com a melhor
+análise não-gold representacionalmente distinta produz a curva oposta: com
+peso 1,0, o gold cai para 1/5 no TLL e 2/5 no LDT. Isso demonstra que o
+conteúdo das transições causa o movimento do ranking, sem depender do score
+manual. Um embaralhamento intrafrase de vinte sementes cai no TLL, mas melhora
+acidentalmente o pequeno recorte LDT; controles aleatórios precisam de corpus
+maior. A matriz de fontes, licenças, hashes e uso efetivo está congelada em
+[`PROVENANCE.md`](PROVENANCE.md).
+
 O modelo semântico nunca deve fabricar morfologia ou apagar provenance.
 
 ## Critérios de decisão quantitativos
@@ -772,8 +811,10 @@ para prosa e descobre tarde demais que escolheu uma representação inadequada.
 
 ## Próxima fila de implementação
 
-1. Expor no schema o N-best completo dos sobreviventes, distinguindo
-   `possible` + score bruto de qualquer futura probabilidade calibrada.
+1. Ampliar o `morphologyNBest` opcional, já exposto para as atribuições
+   sobreviventes, com decomposição completa do score e N-best das árvores;
+   continuar distinguindo `possible` + score bruto de qualquer futura
+   probabilidade calibrada.
 2. Anotar os dois exemplos de comparação de inferioridade (`minus
    intelligens`) e decidir se exigem uma relação própria ou composição de H011.
 3. Acrescentar casos reais ou publicados de hipérbato e ordem livre para medir
@@ -788,6 +829,10 @@ para prosa e descobre tarde demais que escolheu uma representação inadequada.
 8. Substituir o stack-set por RNGLR com GSS/SPPF.
 
 ## Leituras orientadas às decisões
+
+O [estudo Markoviano](MARKOV.md) consolida a hipótese, o baseline C++23, o
+protocolo e as leituras específicas de ranking sequencial versus estrutural.
+As referências abaixo continuam orientadas aos outros gates de arquitetura.
 
 1. [Van den Berg 2024 — *Analysing the structure of Latin sentences using formal grammar*](https://www.cs.ru.nl/bachelors-theses/2024/Thijs_van_den_Berg___1073084___Analysing_the_structure_of_Latin_sentences_using_formal_grammar.pdf)
    — baseline de combinações morfológicas e EAFWOBNF.

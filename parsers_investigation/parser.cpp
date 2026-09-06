@@ -3700,8 +3700,37 @@ void populate_best(Result &result, const Lattice &lattice,
                 relation_candidate_choice(lattice, *relation));
         }
     }
+    result.morphology_nbest.reserve(order.size());
     for (std::size_t rank = 0; rank < order.size(); ++rank) {
         const auto &assignment = assignments[order[rank]];
+        RankedMorphologyAnalysis ranked{
+            assignment_id(assignment),
+            assignment_score(lattice, assignment, &relation_lattice),
+            {},
+            {},
+            result.preferred_lemmas_declared &&
+                matches_preferred_lemmas(lattice, assignment, fixture),
+            result.morphology_gold_declared &&
+                matches_morphology_gold(lattice, assignment, fixture),
+        };
+        ranked.analysis.reserve(assignment.size());
+        for (std::size_t token = 0; token < assignment.size(); ++token) {
+            const auto &candidate =
+                lattice.candidates[token][assignment[token]];
+            ranked.analysis.push_back(AnalysisChoice{
+                token,
+                candidate.source_index,
+                candidate.lemma,
+                std::string{surface_part_name(candidate.part)},
+                morphology_name(candidate),
+            });
+        }
+        if (dependency_strategy) {
+            ranked.relations = dependency_relations(
+                lattice, relation_lattice, assignment,
+                fixture.mode == GrammarMode::fragment);
+        }
+        result.morphology_nbest.push_back(std::move(ranked));
         if (!result.preferred_lemma_rank && result.preferred_lemmas_declared &&
             matches_preferred_lemmas(lattice, assignment, fixture)) {
             result.preferred_lemma_sequence_survives = true;
@@ -5055,7 +5084,8 @@ bool Experiment::self_test(const std::vector<Fixture> &fixtures,
     return true;
 }
 
-std::string to_json(const Result &result) {
+std::string to_json(const Result &result,
+                    const bool include_morphology_nbest) {
     using Json = nlohmann::ordered_json;
     Json output{
         {"schema", result.schema},
@@ -5324,6 +5354,42 @@ std::string to_json(const Result &result) {
                                           {"lemma", choice.lemma},
                                           {"part", choice.part},
                                           {"morphology", choice.morphology}});
+    }
+    if (include_morphology_nbest) {
+        output["morphologyNBest"] = {
+            {"complete",
+             result.status != "experiment-budget-exceeded" &&
+                 result.morphology_nbest.size() ==
+                     result.accepted_assignments},
+            {"analyses", Json::array()},
+        };
+        for (const auto &ranked : result.morphology_nbest) {
+            Json analysis{
+                {"assignmentId", ranked.assignment_id},
+                {"manualScore", ranked.manual_score},
+                {"matchesPreferredLemmas", ranked.matches_preferred_lemmas},
+                {"matchesMorphologyGold", ranked.matches_morphology_gold},
+                {"tokens", Json::array()},
+                {"relations", Json::array()},
+            };
+            for (const auto &choice : ranked.analysis) {
+                analysis["tokens"].push_back(
+                    {{"token", choice.token},
+                     {"candidate", choice.candidate},
+                     {"lemma", choice.lemma},
+                     {"part", choice.part},
+                     {"morphology", choice.morphology}});
+            }
+            for (const auto &relation : ranked.relations) {
+                analysis["relations"].push_back(
+                    {{"dependent", relation.dependent},
+                     {"head", relation.head ? Json(*relation.head)
+                                             : Json(nullptr)},
+                     {"label", relation.label}});
+            }
+            output["morphologyNBest"]["analyses"].push_back(
+                std::move(analysis));
+        }
     }
     output["bestRelations"] = Json::array();
     for (const auto &relation : result.best_relations) {

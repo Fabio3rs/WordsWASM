@@ -22,6 +22,15 @@ Version 2 establishes these measurement rules:
 - product budgets apply before raw Cartesian enumeration, or after propagation
   for strategies that run the prefilter.
 
+`morphologyNBest` is an optional diagnostic payload emitted only with
+`--include-nbest`. It contains every morphology assignment accepted by the
+selected strategy, ordered by the current manual score, and marks assignments
+matching the structured morphology gold. Dependency strategies also include
+the deterministic relations projected for each assignment. `complete` is false
+if the experiment budget prevented an exact candidate set. This payload is the
+input of the Markov ranking investigation; its `manualScore` remains
+uncalibrated.
+
 The decision semantics are deliberately asymmetric. A hard-constraint conflict
 can mark an analysis impossible; every surviving analysis is only *possible*,
 and soft features may rank it as more or less plausible. Version 2 aggregates
@@ -105,3 +114,14 @@ morphology assignment. `scoresByAssignment` is checked against, respectively,
 must also belong to the exact oracle set.
 
 See `result-v1.md` for the frozen interpretation of historical fields.
+
+`markov-result-v2.schema.json` validates the separate JSON document emitted by
+`markov_parser_ranker`. It records `leave-one-fixture-out`, `in-sample` or an
+`exposure-curve`, the evaluation tier, state projection, smoothing,
+surface/parser-canonical mixture, target exposure, negative-control seed, tie
+policy and per-fixture ranks. Its ranking ablation reports manual-only,
+Markov-only and Markov-then-manual metrics separately. Training provenance separates verified
+didactic gold, attested morphology gold, controlled synthetic gold,
+Latin Dependency Treebank morphology gold, preferred-lemma silver and
+synthetic relinearizations, each with an explicit weight. It does not add a
+probability field to parser result v2.
