@@ -135,6 +135,44 @@ radicais gerados contra `INFLECTS.SEC` e as formas do banco Latim–Alemão. A
 opção `--draft-output` grava apenas estruturas corroboradas; sentidos e demais
 campos editoriais continuam pendentes e impedem importação automática.
 
+[`dump_lexical_comparison.py`](dump_lexical_comparison.py) é a extração
+exaustiva anterior à decisão editorial. Ele consulta diretamente Lewis &
+Short, Gaffiot, Faria v3 e Latim–Alemão com SQLite `immutable=1`, mantém cada
+homógrafo como entrada independente e reúne sentidos, metadados, descritores
+morfológicos, formas flexionadas e quantidade vocálica ao lado dos candidatos
+do Words. A prévia `2 de 3` só é calculada quando existe no máximo uma entrada
+de cada autoridade primária no mesmo lema/POS e nunca autoriza promoção. O
+fluxo e o contrato do ledger semântico estão descritos em
+[`docs/plano-expansao-dicionarios.md`](../../docs/plano-expansao-dicionarios.md).
+
+[`analyze_semantic_alignment.py`](analyze_semantic_alignment.py) transforma o
+dump em uma fila explicável de pares e componentes. A similaridade é calculada
+por seção/sentido somente quando há idioma comum; quantidade, gênero e alvo
+Words aparecem como sinais separados. Componentes exigem preferência mútua
+única e nunca contêm duas entradas da mesma família. O script não traduz texto
+nem aceita automaticamente suas propostas.
+
+[`build_lexical_embedding_db.py`](build_lexical_embedding_db.py),
+[`generate_lexical_embeddings.py`](generate_lexical_embeddings.py),
+[`rank_lexical_embeddings.py`](rank_lexical_embeddings.py) e
+[`calibrate_lexical_embeddings.py`](calibrate_lexical_embeddings.py) compõem a
+camada vetorial opcional. O catálogo pequeno preserva entrada, formas básicas,
+sentidos e proveniência; os vetores Qwen ficam em cache SQLite separado. O
+ranking é exato dentro de blocos de lema e só influencia componentes depois de
+um conjunto-ouro atingir o gate de precisão. O procedimento completo está em
+[`docs/comparacao-semantica-embeddings.md`](../../docs/comparacao-semantica-embeddings.md).
+
+[`validate_semantic_alignment.py`](validate_semantic_alignment.py) valida o
+ledger conforme `schemas/semantic-alignment-decision-v1.schema.json`, fixa cada
+decisão à revisão da fila e rejeita membros inexistentes, famílias duplicadas e
+grupos aceitos sobrepostos. A saída resolvida calcula o `2 de 3` somente depois
+da confirmação semântica e continua marcada com
+`automatic_promotion_allowed: false`.
+
+O encadeamento de calibração, revisão, migração de capacidade, importação e
+release está organizado em
+[`docs/roadmap-expansao-dicionarios.md`](../../docs/roadmap-expansao-dicionarios.md).
+
 [`prepare_lexeme_review.py`](prepare_lexeme_review.py) transforma esses
 rascunhos numa fila editorial determinística. O `draft_id` identifica a chave
 lexical e a revisão SHA-256 fixa exatamente estrutura e testemunhas. A fila

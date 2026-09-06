@@ -137,9 +137,10 @@
       "properties": {
         "morphology": {
           "type": "object",
-          "required": ["declared", "survives", "rank", "bestScoreTie"],
+          "required": ["declared", "inLattice", "survives", "rank", "bestScoreTie"],
           "properties": {
             "declared": {"type": "boolean"},
+            "inLattice": {"type": "boolean"},
             "survives": {"type": "boolean"},
             "rank": {"type": ["integer", "null"], "minimum": 1},
             "bestScoreTie": {"type": ["boolean", "null"]}
@@ -177,13 +178,14 @@
                 "type": "array",
                 "items": {
                   "type": "object",
-                  "required": ["token", "candidate", "lemma", "part", "morphology"],
+                  "required": ["token", "candidate", "lemma", "part", "morphology", "features"],
                   "properties": {
                     "token": {"type": "integer", "minimum": 0},
                     "candidate": {"type": "integer", "minimum": 0},
                     "lemma": {"type": "string"},
                     "part": {"type": "string", "minLength": 1},
-                    "morphology": {"type": "string", "minLength": 1}
+                    "morphology": {"type": "string", "minLength": 1},
+                    "features": {"$ref": "#/$defs/morphologyFeatures"}
                   },
                   "additionalProperties": false
                 }
@@ -205,6 +207,81 @@
             "additionalProperties": false
           }
         }
+      },
+      "additionalProperties": false
+    },
+    "treeNBest": {
+      "type": "object",
+      "required": ["complete", "analyses"],
+      "properties": {
+        "complete": {"type": "boolean"},
+        "analyses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["treeId", "assignmentId", "manualScore", "morphologyScore", "arcScore", "projective", "matchesPreferredLemmas", "matchesMorphologyGold", "matchesDependencyGold", "tokens", "relations"],
+            "properties": {
+              "treeId": {"type": "string", "minLength": 1},
+              "assignmentId": {"type": "string", "minLength": 1},
+              "manualScore": {"type": "number"},
+              "morphologyScore": {"type": "number"},
+              "arcScore": {"type": "number"},
+              "projective": {"type": "boolean"},
+              "matchesPreferredLemmas": {"type": "boolean"},
+              "matchesMorphologyGold": {"type": "boolean"},
+              "matchesDependencyGold": {"type": "boolean"},
+              "tokens": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["token", "candidate", "lemma", "part", "morphology", "features"],
+                  "properties": {
+                    "token": {"type": "integer", "minimum": 0},
+                    "candidate": {"type": "integer", "minimum": 0},
+                    "lemma": {"type": "string"},
+                    "part": {"type": "string", "minLength": 1},
+                    "morphology": {"type": "string", "minLength": 1},
+                    "features": {"$ref": "#/$defs/morphologyFeatures"}
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "relations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["dependent", "head", "label"],
+                  "properties": {
+                    "dependent": {"type": "integer", "minimum": 0},
+                    "head": {"type": ["integer", "null"], "minimum": 0},
+                    "label": {"type": "string", "minLength": 1}
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "nullableName": {"type": ["string", "null"]},
+    "morphologyFeatures": {
+      "type": "object",
+      "required": ["grammaticalCase", "governsCase", "number", "gender", "degree", "tense", "voice", "mood", "person"],
+      "properties": {
+        "grammaticalCase": {"$ref": "#/$defs/nullableName"},
+        "governsCase": {"$ref": "#/$defs/nullableName"},
+        "number": {"$ref": "#/$defs/nullableName"},
+        "gender": {"$ref": "#/$defs/nullableName"},
+        "degree": {"$ref": "#/$defs/nullableName"},
+        "tense": {"$ref": "#/$defs/nullableName"},
+        "voice": {"$ref": "#/$defs/nullableName"},
+        "mood": {"$ref": "#/$defs/nullableName"},
+        "person": {"type": ["integer", "null"], "minimum": 0}
       },
       "additionalProperties": false
     }

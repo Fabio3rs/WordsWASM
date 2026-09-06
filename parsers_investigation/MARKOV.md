@@ -21,13 +21,14 @@ N-best completo das atribuições possíveis
 cadeia de Markov (somente ordena)
 ```
 
-Uma transição não observada recebe massa por suavização aditiva. Portanto,
-ausência no corpus de treino nunca elimina uma análise aceita pelo parser.
+Uma transição não observada recebe massa por suavização aditiva ou por um
+backoff hierárquico selecionável. Portanto, ausência no corpus de treino nunca
+elimina uma análise aceita pelo parser.
 
 ## Implementação C++23
 
 - [`markov_model.hpp`](markov_model.hpp) contém o modelo genérico de contagens,
-  pesos fracionários e suavização;
+  pesos fracionários, duas suavizações e telemetria de desconhecidos;
 - [`markov_ranker.cpp`](markov_ranker.cpp) executa o parser
   `dependency-projection`, recolhe todas as atribuições possíveis e faz a
   avaliação;
@@ -36,6 +37,12 @@ ausência no corpus de treino nunca elimina uma análise aceita pelo parser.
 - `parsers_investigation --include-nbest` publica opcionalmente o mesmo domínio,
   incluindo a árvore determinística de cada candidato, em `morphologyNBest` no
   NDJSON v2.
+
+`AnalysisChoice` preserva ainda uma projeção tipada de caso, número, gênero,
+grau, tempo, voz, modo e pessoa. Uma máscara compacta de aplicabilidade permite
+serializar `null` como “não aplicável”; o valor enum `unknown` continua
+significando “aplicável, mas desconhecido”. Um `static_assert` limita essa
+projeção a 16 bytes. Nenhum estimador fatorado é escolhido por essa mudança.
 
 O código usa a configuração C++23 do projeto e seus tipos existentes. A demo
 isolada em [`../markov_demo/`](../markov_demo/) continua útil para visualizar
@@ -64,18 +71,25 @@ Cada projeção é avaliada com três linearizações:
 | `parser-canonical` | 0 | 1 | percurso estrutural determinístico. |
 
 O percurso canônico começa na raiz e visita os dependentes em profundidade.
-Irmãos são ordenados por relação, estado projetado, lema e, apenas como último
-desempate, posição do token. O estado estrutural inclui a relação de entrada:
+Irmãos são ordenados por uma assinatura recursiva que contém relação, estado,
+lema e as assinaturas dos descendentes. A posição do token desempata somente
+subárvores indistinguíveis sob essa representação. O estado estrutural usa
+eventos de entrada e saída:
 
 ```text
-root|verb
-nsubj|noun
-predicative|adjective
+enter|root|verb
+enter|nsubj|noun
+exit|nsubj
+enter|predicative|adjective
+exit|predicative
+exit|root
 ```
 
-Quando duas ordens superficiais preservam a mesma árvore e os mesmos estados,
-essa representação produz a mesma sequência canônica. O teste contém versões
-SVO e VOS da mesma árvore para congelar essa propriedade.
+As fronteiras distinguem, por exemplo, dois dependentes irmãos de uma cadeia
+núcleo–filho–neto. Os testes cobrem versões SVO/VOS, irmãos com o mesmo lema,
+relação e estado mas subárvores diferentes, permutação dos índices e colisão
+entre topologias. A representação anterior, sem fronteiras e com desempate
+posicional, falhava nesses dois últimos casos.
 
 Para peso superficial $\beta$, a combinação é:
 
@@ -131,13 +145,32 @@ log-score Markoviano. Empates são resolvidos pelo score manual já existente e,
 por fim, pelo ID canônico da atribuição. O relatório distingue esse rank
 ordinal de uma escolha exclusivamente determinada por Markov.
 
-O modelo usa suavização aditiva com $\alpha=0{,}1$:
+O baseline padrão continua usando suavização aditiva com $\alpha=0{,}1$:
 
 $$
 P(x\mid c)=
 \frac{\operatorname{count}(c,x)+\alpha}
      {\operatorname{count}(c)+\alpha|V|}.
 $$
+
+O modo opcional `--smoothing hierarchical-backoff` mantém tabelas para os
+sufixos do contexto. A distribuição de ordem zero usa suavização aditiva; cada
+nível observado interpola sua contagem com a distribuição anterior:
+
+$$
+P_k(x\mid c)=
+\frac{N_k(c,x)+\tau P_{k-1}(x\mid b(c))}
+     {N_k(c)+\tau}.
+$$
+
+`--backoff-strength` define $\tau$ (padrão 1). O relatório registra estados
+desconhecidos, acertos e faltas do contexto completo, fallbacks uniformes,
+transições com backoff e um histograma da maior profundidade observada. Assim,
+“faltou evidência” deixa de ser indistinguível de uma preferência aprendida.
+
+O documento também publica `evaluationCoverage`: fixtures gold solicitadas,
+cobertura lexical, orçamento, status do parser, N-best não vazio, gold presente
+no lattice, gold sobrevivente às constraints e casos efetivamente ranqueáveis.
 
 ### Aumento por relinearização controlada
 
@@ -163,34 +196,33 @@ aumento.
 | POS | 2 | híbrida | 10/10 | 10/10 | 1/10 | 1,000 |
 | POS | 2 | canônica | 10/10 | 10/10 | 1/10 | 1,000 |
 | POS + morfologia | 1 | superficial | 6/10 | 8/10 | 0/10 | 0,690 |
-| POS + morfologia | 1 | híbrida | 6/10 | 8/10 | 4/10 | 0,705 |
-| POS + morfologia | 1 | canônica | 7/10 | 8/10 | 4/10 | 0,757 |
+| POS + morfologia | 1 | híbrida | 5/10 | 7/10 | 5/10 | 0,592 |
+| POS + morfologia | 1 | canônica | 5/10 | 7/10 | 5/10 | 0,598 |
 | POS + morfologia | 2 | superficial | 8/10 | 9/10 | 0/10 | 0,870 |
-| POS + morfologia | 2 | híbrida | 8/10 | 9/10 | 4/10 | 0,870 |
-| POS + morfologia | 2 | canônica | 9/10 | 10/10 | 4/10 | 0,950 |
+| POS + morfologia | 2 | híbrida | 8/10 | 10/10 | 5/10 | 0,883 |
+| POS + morfologia | 2 | canônica | 8/10 | 10/10 | 5/10 | 0,883 |
 
 O baseline manual tem gold top-1 em 9/10; `Alumnae sunt altae` mantém o gold
 adjetival no rank 2, empatado no melhor score com a leitura participial.
 
 POS puro continua empatando demais: a ordem estrutural resolve exclusivamente
-apenas 1/10. A representação morfológica completa discrimina mais. Sua melhor
-configuração é memória 2 com ordem canônica: gold top-1 em 9/10 e top-3 em
-10/10, contra 8/10 e 9/10 na superfície; MRR sobe de 0,870 para 0,950. Mesmo
-assim, somente 4/10 escolhas são exclusivamente determinadas pelo melhor score
-Markoviano. O resultado é um sinal favorável à vizinhança estrutural, ainda não
-uma validação de generalização.
+apenas 1/10. A representação morfológica completa discrimina mais. Depois da
+correção das fronteiras estruturais, memória 2 híbrida ou canônica obtém 8/10
+top-1, 10/10 top-3 e MRR 0,883; a superfície obtém 8/10, 9/10 e 0,870. O ganho
+é pequeno e não sustenta escolher a vizinhança estrutural como arquitetura.
+Cinco escolhas são exclusivamente determinadas pelo melhor score Markoviano.
 
 ## Efeito da ampliação
 
-A ablação abaixo fixa a melhor arquitetura anterior — POS + morfologia,
+A ablação abaixo fixa a configuração comparada anterior — POS + morfologia,
 memória 2 e ordem canônica — e varia apenas as camadas de treino:
 
 | Treino | Frases | Gold top-1 | Gold top-3 | Top-1 exclusivamente Markov | MRR |
 |---|---:|---:|---:|---:|---:|
-| somente gold verificado | 9 | **9/10** | 10/10 | 4/10 | **0,950** |
-| verificado + sintético | 16 | 8/10 | 10/10 | 4/10 | 0,883 |
-| verificado + silver | 22 | 8/10 | 10/10 | 4/10 | 0,900 |
-| três camadas | 29 | 7/10 | 10/10 | 4/10 | 0,833 |
+| somente gold verificado | 9 | **8/10** | **10/10** | 5/10 | **0,883** |
+| verificado + sintético | 16 | 7/10 | 9/10 | 5/10 | 0,789 |
+| verificado + silver | 22 | 7/10 | 9/10 | 5/10 | 0,803 |
+| três camadas | 29 | 6/10 | 9/10 | 5/10 | 0,736 |
 
 A infraestrutura de treino foi ampliada, mas os dados auxiliares não melhoram
 esta avaliação. O resultado sugere *negative transfer*: as fixtures sintéticas
@@ -205,9 +237,9 @@ morfologia/memória 2 é:
 
 | Linearização | Gold top-1 | Gold top-3 | MRR |
 |---|---:|---:|---:|
-| superficial | 7/10 | 8/10 | 0,757 |
-| híbrida | 7/10 | 8/10 | 0,763 |
-| canônica | 7/10 | **10/10** | **0,833** |
+| superficial | 7/10 | 8/10 | **0,754** |
+| híbrida | 5/10 | 7/10 | 0,595 |
+| canônica | 5/10 | 6/10 | 0,576 |
 
 O corpus também contém pares quase paralelos. O leave-one-out evita memorizar a
 mesma fixture, mas não equivale a uma partição independente por autor, bloco ou
@@ -225,9 +257,9 @@ Fixando POS + morfologia, memória 2 e percurso canônico:
 
 | Recorte | Política | Manual top-1 | Markov top-1 | Markov top-3 | Top-1 exclusivamente Markov | MRR |
 |---|---|---:|---:|---:|---:|---:|
-| TLL + editorial | alvo fora | 3/5 | 4/5 | 4/5 | 3/5 | 0,812 |
+| TLL + editorial | alvo fora | 3/5 | 3/5 | 4/5 | 3/5 | 0,676 |
 | TLL + editorial | alvo dentro | 3/5 | **5/5** | **5/5** | **5/5** | **1,000** |
-| LDT 2.1 | alvo fora | 4/5 | 3/5 | 4/5 | 3/5 | 0,683 |
+| LDT 2.1 | alvo fora | 4/5 | 3/5 | 4/5 | 3/5 | 0,700 |
 | LDT 2.1 | alvo dentro | 4/5 | **5/5** | **5/5** | **5/5** | **1,000** |
 
 No recorte LDT em *leave-one-out*, a ordem superficial é melhor que a canônica:
@@ -256,16 +288,15 @@ alvo, a ablação é:
 | Recorte | Ranking | Top-1 | Top-3 | MRR |
 |---|---|---:|---:|---:|
 | TLL | manual apenas | 3/5 | 5/5 | 0,767 |
-| TLL | Markov puro | 3/5 | 3/5 | 0,633 |
-| TLL | Markov + manual | **4/5** | 4/5 | **0,812** |
+| TLL | Markov puro | 3/5 | 3/5 | 0,647 |
+| TLL | Markov + manual | 3/5 | 4/5 | **0,676** |
 | LDT | manual apenas | **4/5** | **5/5** | **0,867** |
-| LDT | Markov puro | 3/5 | 4/5 | 0,683 |
-| LDT | Markov + manual | 3/5 | 4/5 | 0,683 |
+| LDT | Markov puro | 3/5 | 4/5 | 0,700 |
+| LDT | Markov + manual | 3/5 | 4/5 | 0,700 |
 
-Portanto, o ganho held-out do TLL não é inteiramente atribuível ao Markov
-puro; existe interação útil com o desempate manual. No LDT canônico, o baseline
-manual ainda é superior. `markovStrictTop1` continua sendo a medida que não dá
-crédito ao desempate.
+No TLL, o desempate manual melhora top-3 e MRR, mas não top-1; no LDT canônico,
+o baseline manual continua superior. `markovStrictTop1` continua sendo a medida
+que não dá crédito ao desempate.
 
 O modo `exposure-curve` remove todos os duplicados textuais do alvo e reinsere
 somente a fixture-alvo com multiplicadores controlados. A resposta do Markov
@@ -273,9 +304,9 @@ puro foi:
 
 | Exposição do alvo | TLL top-1 / MRR | LDT top-1 / MRR |
 |---:|---:|---:|
-| 0 | 3/5 / 0,633 | 3/5 / 0,683 |
-| 0,01 | 4/5 / 0,812 | **5/5 / 1,000** |
-| 0,10 | 4/5 / 0,812 | 5/5 / 1,000 |
+| 0 | 3/5 / 0,647 | 3/5 / 0,700 |
+| 0,01 | 3/5 / 0,676 | 3/5 / 0,700 |
+| 0,10 | 4/5 / 0,822 | 4/5 / 0,867 |
 | 0,25 | **5/5 / 1,000** | 5/5 / 1,000 |
 | 1,00--8,00 | 5/5 / 1,000 | 5/5 / 1,000 |
 
@@ -284,18 +315,17 @@ alteram o ranking Markoviano sem auxílio do score manual.
 
 Há dois controles negativos. `shuffle-within-sequence` preserva o multiconjunto
 de estados de cada exemplo, mas destrói suas transições com semente registrada.
-Em vinte sementes, o TLL caiu, em média, de 3 para 1,25 top-1 no Markov puro e
-de MRR 0,633 para 0,318. No LDT, porém, o controle embaralhado ficou
-artificialmente melhor em top-1 médio (3,9/5) e MRR (0,848), embora o top-1
-estrito caísse de 3 para 2,35. O recorte é pequeno demais para usar esse
-controle aleatório isoladamente como prova.
+Nas sementes 1--20, o TLL caiu, em média, de 3 para 1,05 top-1 no Markov puro e
+de MRR 0,647 para 0,299. No LDT, porém, o controle embaralhado ficou
+artificialmente melhor em top-1 médio (3,4/5) e MRR (0,745). O recorte é
+pequeno demais para usar esse controle aleatório isoladamente como prova.
 
 O controle `counterfactual-analysis` é mais direto: para cada fixture de
 treino, seleciona o melhor candidato não-gold cuja sequência projetada difere
 das sequências gold. Com exposição 0,25, ensinar a análise correta leva ambos
-os recortes a 5/5 e MRR 1,0; ensinar a alternativa errada derruba o TLL para
-1/5 e MRR 0,346 e mantém o LDT em 3/5 e MRR 0,657. Com peso 1,0, o
-contrafactual chega a 1/5 no TLL e 2/5 no LDT. O sentido oposto das curvas
+os recortes a 5/5 e MRR 1,0; ensinar a alternativa errada deixa o TLL em 2/5 e
+MRR 0,517 e o LDT em 4/5 e MRR 0,840. Com peso 1,0, o contrafactual cai para
+1/5 e MRR 0,357 no TLL e 2/5 e MRR 0,580 no LDT. O sentido oposto das curvas
 positiva e contrafactual confirma que o conteúdo do treino causa a mudança.
 
 A relinearização sintética de peso 0,10 não altera os ranks top-1/top-3/MRR nas
@@ -309,6 +339,87 @@ vez de tratar toda a string morfológica como um estado atômico. O Latin
 Macronizer é GPLv3 e é usado aqui apenas como referência e potencial anotador
 silver externo; nenhum código dele foi incorporado.
 
+### Backoff como ablação, não como arquitetura escolhida
+
+No recorte TLL held-out, POS+morfologia, memória 2 e ordem canônica, a
+suavização aditiva e o backoff hierárquico obtiveram o mesmo top-1 3/5, top-3
+3/5 e MRR 0,647. A telemetria, porém, confirma caminhos diferentes em 3.856
+transições pontuadas: o baseline fez 1.838 fallbacks uniformes; o modo
+hierárquico fez 1.838 backoffs e nenhum fallback uniforme. Foram observados
+798 estados completos desconhecidos em ambos.
+
+Isso valida a execução da alternativa, não uma melhoria. Suavização aditiva e
+backoff permanecem configurações concorrentes. Da mesma forma, os atributos
+tipados são infraestrutura para experimentar projeções; não estabelecem uma
+fatoração probabilística preferida. O ranker continua sem consumir árvores
+alternativas do MST/Eisner.
+
+Uma única execução nativa desse recorte, medida com `/usr/bin/time`, reportou
+16.864 KiB de RSS máximo e 0,19 s para o baseline, contra 17.016 KiB e 0,21 s
+para backoff. A diferença de 152 KiB é compatível com o objetivo leve neste
+corpus, mas esses valores são apenas um smoke de recursos, não um benchmark
+estável nem projeção para um treebank completo.
+
+## Baseline estrutural por ancestrais
+
+O experimento adicional
+[`dependency_markov_ranker.cpp`](dependency_markov_ranker.cpp) preserva o
+ranker sequencial acima e muda somente a unidade estatística. Ele executa
+`dependency-tree-oracle`, recebe `treeNBest` completo e reordena essas árvores
+sem criar, remover ou recombinar arcos.
+
+[`dependency_markov.hpp`](dependency_markov.hpp) extrai exatamente um fator de
+raiz e um fator por token não raiz. A memória 1 consulta o núcleo local; a
+memória 2 acrescenta o avô e a relação de entrada do núcleo:
+
+```text
+raiz:       ROOT                       -> estado(verbo-raiz)
+ordem 1:    estado(núcleo)             -> relação + estado(dependente)
+ordem 2:    avô + relação-do-núcleo + núcleo
+                                        -> relação + estado(dependente)
+```
+
+Os heads são indexados diretamente. A ordem do vetor de relações, DFS/BFS e a
+posição superficial não determinam o contexto. Cada arco contribui uma vez,
+mesmo quando aparece no prefixo de vários caminhos raiz--folha. O marcador
+artificial `ROOT` é separado do verbo que ocupa a raiz segundo a convenção
+interna atual.
+
+Uma ablação opcional acrescenta um evento de valência por verbo. O evento é o
+multiconjunto ordenado de todos os seus dependentes diretos, incluindo relação
+e estado; multiplicidades são preservadas. Assim o modelo consegue observar
+conjuntamente, por exemplo, `nsubj+obj+obl`, em vez de reduzir toda decisão a
+pares independentes.
+
+O treino estrutural usa somente candidatos que coincidem simultaneamente com
+o gold morfológico e de dependências. Alternativas que produzem a mesma
+fatoração são deduplicadas e conservam, juntas, o peso total da frase. Os dez
+alvos verificados são avaliados por leave-one-fixture-out; as sete fixtures
+sintéticas entram no treino com peso 0,5. O corpus atestado apenas com
+morfologia e o mapeamento LDT ainda não entram, pois projetar dependências do
+parser nesses dados repetiria o erro que o experimento procura medir.
+
+Resultados da execução de 2026-09-06, com $\alpha=0{,}1$ e força de backoff 1:
+
+| Estado | Ancestrais | Perfil conjunto | Árvore top-1 | Árvore top-3 | Raiz top-1 | UAS | LAS | Estrutural + manual top-1 |
+|---|---:|---|---:|---:|---:|---:|---:|---:|
+| POS | 1 | não | 6/10 | 8/10 | 10/10 | 1,000 | 0,867 | 6/10 |
+| POS | 1 | sim | **7/10** | **9/10** | **10/10** | **1,000** | **0,933** | **10/10** |
+| POS | 2 | não | 6/10 | 8/10 | 10/10 | 1,000 | 0,867 | 6/10 |
+| POS | 2 | sim | **7/10** | **9/10** | **10/10** | **1,000** | **0,933** | **10/10** |
+| POS+morfologia | 1 | não | 2/10 | 4/10 | 10/10 | 0,827 | 0,693 | 2/10 |
+| POS+morfologia | 1 | sim | 4/10 | 4/10 | 10/10 | 0,867 | 0,767 | 4/10 |
+| POS+morfologia | 2 | não | 4/10 | 4/10 | 8/10 | 0,733 | 0,667 | 4/10 |
+| POS+morfologia | 2 | sim | 4/10 | 4/10 | 10/10 | 0,867 | 0,767 | 4/10 |
+
+O gold estrutural esteve presente no conjunto candidato em 10/10. O baseline
+manual sozinho obteve 9/10. O ganho do perfil conjunto mostra sinal adicional,
+mas o conjunto é pequeno e contém construções paralelas; 10/10 após desempate
+manual não é estimativa de confiabilidade externa. A projeção morfológica
+atômica ficou pior por esparsidade, e a memória 2 não superou a memória 1. O
+próximo teste útil é decompor atributos e avaliar em treebank estrutural com
+partição por obra/autor.
+
 ## Reprodução
 
 ```sh
@@ -316,12 +427,23 @@ cmake -S . -B build/parsers -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DENABLE_TESTS=ON \
   -DPARSERS_INVESTIGATION_CORPUS_PATH=$PWD/parsers_investigation/corpus/agreement_fixtures.json
 cmake --build build/parsers --target \
-  parsers_investigation markov_parser_ranker markov_model_test
+  parsers_investigation markov_parser_ranker dependency_markov_ranker \
+  markov_model_test
 
 build/parsers/parsers_investigation/markov_model_test
 build/parsers/parsers_investigation/parsers_investigation --self-test
 build/parsers/parsers_investigation/markov_parser_ranker
+build/parsers/parsers_investigation/dependency_markov_ranker
+
+build/parsers/parsers_investigation/markov_parser_ranker \
+  --evaluation-tier attested \
+  --smoothing hierarchical-backoff --backoff-strength 1
 ```
+
+Esses programas de investigação só são executados pelos comandos explícitos
+acima. O CMake não os registra no CTest/CI por padrão. Para uma rodada local
+deliberada via CTest, é necessário configurar também
+`-DPARSERS_INVESTIGATION_REGISTER_TESTS=ON`.
 
 O comando acima usa o perfil ampliado. Para reproduzir o baseline apenas com
 gold verificado:
@@ -370,23 +492,28 @@ Para inspecionar o domínio que alimenta o ranker:
 
 ```sh
 build/parsers/parsers_investigation/parsers_investigation \
-  --strategy dependency-projection --include-nbest
+  --strategy dependency-tree-oracle --include-nbest
 ```
 
 ## Próximos testes
 
 1. Criar um importador reprodutível de LDT/PROIEL e separar treino/teste por
    obra, autor e gênero.
-2. Acrescentar uma projeção inspirada em Schmid--Laws que preserve caso e papel
-   verbal sem
-   codificar toda a flexão.
-3. Combinar o log-score como feature de peso $\lambda$ do score decomposto, com
-   $\lambda$ escolhido em desenvolvimento e não no teste.
-4. Comparar o percurso canônico com transições diretamente fatoradas por aresta,
-   como `head-part + dependency-label + dependent-part`.
-5. Ampliar os pares de reordenação validados: a estrutura correta deve sobreviver,
-   enquanto a preferência de linearização pode mudar.
-6. Repetir os controles aleatórios em corpus maior: o comportamento invertido
+2. Comparar suavização aditiva e backoff em recortes maiores, incluindo
+   cobertura e profundidade efetiva de contexto.
+3. Experimentar tabelas condicionais por atributo sobre a projeção tipada,
+   sempre com ablação por fator.
+4. Ampliar o gold estrutural real e separar treino/teste por obra, autor e tipo
+   de construção; o N-best estrutural e os fatores por aresta já estão
+   implementados.
+5. Mapear explicitamente os tagsets de dependência LDT/PROIEL antes de usar
+   esses treebanks no treino estrutural; nunca treinar a projeção determinística
+   como se fosse gold.
+6. Comparar pesos aprendidos entre arcos, perfil de valência e score manual;
+   nenhuma dessas alternativas é agora a arquitetura oficial.
+7. Ampliar os pares de reordenação validados: a estrutura correta deve
+   sobreviver, enquanto a preferência de linearização pode mudar.
+8. Repetir os controles aleatórios em corpus maior: o comportamento invertido
    do pequeno recorte LDT impede interpretar uma única semente como baseline.
 
 Esse último passo segue a evidência mais diretamente relevante do estado da

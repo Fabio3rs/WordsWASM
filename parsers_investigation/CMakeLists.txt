@@ -62,12 +62,27 @@ target_link_libraries(parsers_investigation PRIVATE parsers_investigation_lib)
 add_executable(markov_parser_ranker markov_ranker.cpp)
 target_link_libraries(markov_parser_ranker PRIVATE parsers_investigation_lib)
 
+add_executable(dependency_markov_ranker dependency_markov_ranker.cpp)
+target_link_libraries(dependency_markov_ranker PRIVATE parsers_investigation_lib)
+
 add_executable(markov_model_test markov_model_test.cpp)
 target_link_libraries(markov_model_test PRIVATE parsers_investigation_lib)
 
-if(ENABLE_TESTS)
+option(PARSERS_INVESTIGATION_REGISTER_TESTS
+    "Register exploratory parser and Markov programs with CTest"
+    OFF
+)
+
+if(ENABLE_TESTS AND PARSERS_INVESTIGATION_REGISTER_TESTS)
     add_test(NAME parsers_markov_model_test COMMAND markov_model_test)
     add_test(NAME parsers_markov_ranker_smoke COMMAND markov_parser_ranker)
+    add_test(
+        NAME parsers_markov_hierarchical_backoff_smoke
+        COMMAND markov_parser_ranker
+                --evaluation-tier attested
+                --smoothing hierarchical-backoff
+                --backoff-strength 1.0
+    )
     add_test(
         NAME parsers_markov_attested_in_sample_smoke
         COMMAND markov_parser_ranker

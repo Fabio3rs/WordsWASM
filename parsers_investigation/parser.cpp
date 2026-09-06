@@ -361,9 +361,8 @@ template <typename T> [[nodiscard]] bool has_support(const T result) noexcept {
                 output << words::case_name(value.grammatical_case) << '-'
                        << words::number_name(value.number) << '-'
                        << words::gender_name(value.gender);
-            } else if constexpr (std::is_same_v<
-                                     Morphology,
-                                     words::AdjectiveMorphology>) {
+            } else if constexpr (std::is_same_v<Morphology,
+                                                words::AdjectiveMorphology>) {
                 output << words::case_name(value.grammatical_case) << '-'
                        << words::number_name(value.number) << '-'
                        << words::gender_name(value.gender) << '-'
@@ -402,15 +401,89 @@ template <typename T> [[nodiscard]] bool has_support(const T result) noexcept {
         candidate.morphology);
 }
 
-[[nodiscard]] Lattice build_lattice(const words::Engine &engine,
-                                    const std::string_view text,
-                                    const std::vector<LookupOverride> &overrides) {
+[[nodiscard]] MorphologyFeatures
+morphology_features(const Candidate &candidate) noexcept {
+    return std::visit(
+        []<typename T>(const T &value) {
+            using Morphology = std::remove_cvref_t<T>;
+            MorphologyFeatures result;
+            if constexpr (std::is_same_v<Morphology, words::NounMorphology> ||
+                          std::is_same_v<Morphology,
+                                         words::PronounMorphology> ||
+                          std::is_same_v<Morphology,
+                                         words::NumeralMorphology>) {
+                result.grammatical_case = value.grammatical_case;
+                result.number = value.number;
+                result.gender = value.gender;
+                result.set_applicable(MorphologyFeatureKind::grammatical_case);
+                result.set_applicable(MorphologyFeatureKind::number);
+                result.set_applicable(MorphologyFeatureKind::gender);
+            } else if constexpr (std::is_same_v<Morphology,
+                                                words::AdjectiveMorphology>) {
+                result.grammatical_case = value.grammatical_case;
+                result.number = value.number;
+                result.gender = value.gender;
+                result.degree = value.degree;
+                result.set_applicable(MorphologyFeatureKind::grammatical_case);
+                result.set_applicable(MorphologyFeatureKind::number);
+                result.set_applicable(MorphologyFeatureKind::gender);
+                result.set_applicable(MorphologyFeatureKind::degree);
+            } else if constexpr (std::is_same_v<Morphology,
+                                                words::VerbMorphology>) {
+                result.number = value.number;
+                result.tense = value.tense;
+                result.voice = value.voice;
+                result.mood = value.mood;
+                result.person = value.person;
+                result.set_applicable(MorphologyFeatureKind::number);
+                result.set_applicable(MorphologyFeatureKind::tense);
+                result.set_applicable(MorphologyFeatureKind::voice);
+                result.set_applicable(MorphologyFeatureKind::mood);
+                result.set_applicable(MorphologyFeatureKind::person);
+            } else if constexpr (std::is_same_v<Morphology,
+                                                words::ParticipleMorphology>) {
+                result.grammatical_case = value.grammatical_case;
+                result.number = value.number;
+                result.gender = value.gender;
+                result.tense = value.tense;
+                result.voice = value.voice;
+                result.set_applicable(MorphologyFeatureKind::grammatical_case);
+                result.set_applicable(MorphologyFeatureKind::number);
+                result.set_applicable(MorphologyFeatureKind::gender);
+                result.set_applicable(MorphologyFeatureKind::tense);
+                result.set_applicable(MorphologyFeatureKind::voice);
+            } else if constexpr (std::is_same_v<Morphology,
+                                                words::SupineMorphology>) {
+                result.grammatical_case = value.grammatical_case;
+                result.number = value.number;
+                result.gender = value.gender;
+                result.set_applicable(MorphologyFeatureKind::grammatical_case);
+                result.set_applicable(MorphologyFeatureKind::number);
+                result.set_applicable(MorphologyFeatureKind::gender);
+            } else if constexpr (std::is_same_v<Morphology,
+                                                words::PrepositionMorphology>) {
+                result.governs_case = value.governs;
+                result.set_applicable(MorphologyFeatureKind::governs_case);
+            } else if constexpr (std::is_same_v<Morphology,
+                                                words::AdverbMorphology>) {
+                result.degree = value.degree;
+                result.set_applicable(MorphologyFeatureKind::degree);
+            }
+            return result;
+        },
+        candidate.morphology);
+}
+
+[[nodiscard]] Lattice
+build_lattice(const words::Engine &engine, const std::string_view text,
+              const std::vector<LookupOverride> &overrides) {
     Lattice lattice;
     lattice.tokens = tokenize(text);
     std::vector<bool> overridden(lattice.tokens.size());
     for (const auto &override : overrides) {
-        if (override.token >= lattice.tokens.size() || override.lookup.empty() ||
-            override.reason.empty() || overridden[override.token]) {
+        if (override.token >= lattice.tokens.size() ||
+            override.lookup.empty() || override.reason.empty() ||
+            overridden[override.token]) {
             throw std::runtime_error{"invalid lookup override at token " +
                                      std::to_string(override.token)};
         }
@@ -497,9 +570,9 @@ void add_relation_candidate(RelationLattice &relations,
                             const std::string_view constraint_id,
                             const Compatibility compatibility,
                             std::vector<CandidateRef> contexts = {}) {
-    relations.candidates.push_back(RelationCandidate{
-        kind, governor, dependent, std::move(contexts), constraint_id,
-        compatibility});
+    relations.candidates.push_back(
+        RelationCandidate{kind, governor, dependent, std::move(contexts),
+                          constraint_id, compatibility});
     ++relations.by_kind[std::string{relation_kind_name(kind)}];
     ++relations
           .by_compatibility[std::string{compatibility_name(compatibility)}];
@@ -592,9 +665,9 @@ void add_relation_candidate(RelationLattice &relations,
                              lattice.candidates[marker_token].size();
                              ++marker_candidate) {
                             const auto part =
-                                lattice.candidates[marker_token]
-                                                  [marker_candidate]
-                                                      .part;
+                                lattice
+                                    .candidates[marker_token][marker_candidate]
+                                    .part;
                             if (part == words::PartOfSpeech::conjunction ||
                                 part == words::PartOfSpeech::adverb) {
                                 comparative_markers.push_back(CandidateRef{
@@ -610,8 +683,9 @@ void add_relation_candidate(RelationLattice &relations,
                             lattice.candidates[dependent_token]
                                               [dependent_candidate]);
                         if (!dependent_features ||
-                            !is_noun_like(lattice.candidates[dependent_token]
-                                                           [dependent_candidate])) {
+                            !is_noun_like(
+                                lattice.candidates[dependent_token]
+                                                  [dependent_candidate])) {
                             continue;
                         }
                         if (comparative_markers.empty()) {
@@ -645,15 +719,16 @@ void add_relation_candidate(RelationLattice &relations,
                                     }
                                     add_relation_candidate(
                                         relations,
-                                        RelationCandidateKind::comparison_standard,
+                                        RelationCandidateKind::
+                                            comparison_standard,
                                         governor_ref,
                                         CandidateRef{dependent_token,
                                                      dependent_candidate},
                                         "H011",
-                                        compare(context_features
-                                                    ->grammatical_case,
-                                                dependent_features
-                                                    ->grammatical_case),
+                                        compare(
+                                            context_features->grammatical_case,
+                                            dependent_features
+                                                ->grammatical_case),
                                         {CandidateRef{context_token,
                                                       context_candidate},
                                          marker});
@@ -709,9 +784,11 @@ void add_relation_candidate(RelationLattice &relations,
     return relation.governor.token < assignment.size() &&
            relation.dependent.token < assignment.size() &&
            assignment[relation.governor.token] == relation.governor.candidate &&
-           assignment[relation.dependent.token] == relation.dependent.candidate &&
+           assignment[relation.dependent.token] ==
+               relation.dependent.candidate &&
            std::ranges::all_of(
-               relation.contexts, [&](const CandidateRef context) {
+               relation.contexts,
+               [&](const CandidateRef context) {
                    return context.token < assignment.size() &&
                           assignment[context.token] == context.candidate;
                });
@@ -1750,19 +1827,16 @@ assignment_score(const Lattice &lattice, const Assignment &assignment,
                 !relation_selected(relation, assignment)) {
                 continue;
             }
-            if (relation.kind ==
-                    RelationCandidateKind::comparison_standard &&
+            if (relation.kind == RelationCandidateKind::comparison_standard &&
                 rewarded_comparisons
-                    .emplace(relation.governor.token,
-                             relation.dependent.token)
+                    .emplace(relation.governor.token, relation.dependent.token)
                     .second) {
                 score += 4.0;
-                add_score_reason(
-                    reasons, "S015", 4.0,
-                    "licensed comparison standard: token " +
-                        std::to_string(relation.governor.token) +
-                        " -> token " +
-                        std::to_string(relation.dependent.token));
+                add_score_reason(reasons, "S015", 4.0,
+                                 "licensed comparison standard: token " +
+                                     std::to_string(relation.governor.token) +
+                                     " -> token " +
+                                     std::to_string(relation.dependent.token));
                 continue;
             }
             if (relation.kind != RelationCandidateKind::verb_argument) {
@@ -1858,8 +1932,7 @@ matches_morphology_alternative(const Candidate &candidate,
                 }
             }
             if (expected.degree) {
-                if constexpr (std::is_same_v<T,
-                                             words::AdjectiveMorphology> ||
+                if constexpr (std::is_same_v<T, words::AdjectiveMorphology> ||
                               std::is_same_v<T, words::AdverbMorphology>) {
                     if (words::degree_name(value.degree) != *expected.degree) {
                         return false;
@@ -2036,8 +2109,8 @@ relation_candidate_choice(const Lattice &lattice,
         lattice.candidates[relation.governor.token][relation.governor.candidate]
             .source_index,
         relation.dependent.token,
-        lattice.candidates[relation.dependent.token]
-                          [relation.dependent.candidate]
+        lattice
+            .candidates[relation.dependent.token][relation.dependent.candidate]
             .source_index,
         {},
         std::string{relation.constraint_id},
@@ -2169,9 +2242,8 @@ relation_candidate_choice(const Lattice &lattice,
                 RelationCandidateKind::comparison_standard, std::nullopt,
                 token);
             if (comparison != nullptr) {
-                relations.push_back(Relation{token,
-                                             comparison->governor.token,
-                                             "obl:cmp"});
+                relations.push_back(
+                    Relation{token, comparison->governor.token, "obl:cmp"});
                 record_selected_relation(selected, comparison);
                 continue;
             }
@@ -2513,7 +2585,7 @@ build_dependency_arc_domains(const Lattice &lattice,
             add_dependency_arc(domain, dependent, dependent + 1U, "mark", 9.0,
                                "H011-comparison-marker");
         } else if (candidate.part == words::PartOfSpeech::conjunction ||
-            candidate.part == words::PartOfSpeech::tackon) {
+                   candidate.part == words::PartOfSpeech::tackon) {
             if (dependent + 1U < choice.size()) {
                 add_dependency_arc(domain, dependent, dependent + 1U, "cc", 6.0,
                                    "coordination-marker");
@@ -2561,8 +2633,8 @@ build_dependency_arc_domains(const Lattice &lattice,
             if (comparison != nullptr) {
                 add_dependency_arc(
                     domain, dependent, comparison->governor.token, "obl:cmp",
-                    9.0 - distance_penalty(dependent,
-                                           comparison->governor.token),
+                    9.0 -
+                        distance_penalty(dependent, comparison->governor.token),
                     "H011-comparison-standard");
             }
             for (const auto head : finite_tokens) {
@@ -3681,6 +3753,7 @@ void populate_best(Result &result, const Lattice &lattice,
             candidate.lemma,
             std::string{surface_part_name(candidate.part)},
             morphology_name(candidate),
+            morphology_features(candidate),
         });
     }
     const bool dependency_strategy =
@@ -3723,12 +3796,13 @@ void populate_best(Result &result, const Lattice &lattice,
                 candidate.lemma,
                 std::string{surface_part_name(candidate.part)},
                 morphology_name(candidate),
+                morphology_features(candidate),
             });
         }
         if (dependency_strategy) {
-            ranked.relations = dependency_relations(
-                lattice, relation_lattice, assignment,
-                fixture.mode == GrammarMode::fragment);
+            ranked.relations =
+                dependency_relations(lattice, relation_lattice, assignment,
+                                     fixture.mode == GrammarMode::fragment);
         }
         result.morphology_nbest.push_back(std::move(ranked));
         if (!result.preferred_lemma_rank && result.preferred_lemmas_declared &&
@@ -3741,9 +3815,9 @@ void populate_best(Result &result, const Lattice &lattice,
             result.morphology_gold_survives = true;
             result.morphology_gold_rank = static_cast<std::uint64_t>(rank + 1U);
             result.morphology_gold_best_score_tie =
-                std::abs(assignment_score(lattice, assignment,
-                                          &relation_lattice) -
-                         best_assignment_score) < 1.0e-9;
+                std::abs(
+                    assignment_score(lattice, assignment, &relation_lattice) -
+                    best_assignment_score) < 1.0e-9;
         }
         if (dependency_strategy && !result.dependency_gold_rank &&
             result.dependency_gold_declared &&
@@ -3755,9 +3829,9 @@ void populate_best(Result &result, const Lattice &lattice,
             result.dependency_gold_survives = true;
             result.dependency_gold_rank = static_cast<std::uint64_t>(rank + 1U);
             result.dependency_gold_best_score_tie =
-                std::abs(assignment_score(lattice, assignment,
-                                          &relation_lattice) -
-                         best_assignment_score) < 1.0e-9;
+                std::abs(
+                    assignment_score(lattice, assignment, &relation_lattice) -
+                    best_assignment_score) < 1.0e-9;
         }
     }
 }
@@ -3806,6 +3880,7 @@ void populate_tree_best(Result &result, const Lattice &lattice,
             candidate.lemma,
             std::string{surface_part_name(candidate.part)},
             morphology_name(candidate),
+            morphology_features(candidate),
         });
     }
     for (const auto &arc : best.arcs) {
@@ -3873,8 +3948,48 @@ void populate_tree_best(Result &result, const Lattice &lattice,
         result.dependency_gold_rank.reset();
         result.dependency_gold_best_score_tie.reset();
     }
+    result.tree_nbest.clear();
+    result.tree_nbest.reserve(order.size());
     for (std::size_t rank = 0; rank < order.size(); ++rank) {
         const auto &tree = trees[order[rank]];
+        const auto morphology_score =
+            assignment_score(lattice, tree.assignment, &relation_lattice);
+        RankedDependencyTreeAnalysis ranked{
+            tree.id,
+            assignment_id(tree.assignment),
+            morphology_score + tree.arc_score,
+            morphology_score,
+            tree.arc_score,
+            tree.projective,
+            {},
+            {},
+            result.preferred_lemmas_declared &&
+                matches_preferred_lemmas(lattice, tree.assignment, fixture),
+            result.morphology_gold_declared &&
+                matches_morphology_gold(lattice, tree.assignment, fixture),
+            false,
+        };
+        ranked.analysis.reserve(tree.assignment.size());
+        for (std::size_t token = 0; token < tree.assignment.size(); ++token) {
+            const auto &candidate =
+                lattice.candidates[token][tree.assignment[token]];
+            ranked.analysis.push_back(AnalysisChoice{
+                token,
+                candidate.source_index,
+                candidate.lemma,
+                std::string{surface_part_name(candidate.part)},
+                morphology_name(candidate),
+                morphology_features(candidate),
+            });
+        }
+        ranked.relations.reserve(tree.arcs.size());
+        for (const auto &arc : tree.arcs) {
+            ranked.relations.push_back(arc.relation);
+        }
+        ranked.matches_dependency_gold =
+            ranked.matches_morphology_gold && result.dependency_gold_declared &&
+            matches_dependency_gold(ranked.relations, fixture);
+        result.tree_nbest.push_back(std::move(ranked));
         if (!result.preferred_lemma_rank && result.preferred_lemmas_declared &&
             matches_preferred_lemmas(lattice, tree.assignment, fixture)) {
             result.preferred_lemma_sequence_survives = true;
@@ -4193,13 +4308,16 @@ std::vector<Fixture> load_corpus(const std::filesystem::path &path) {
             throw std::runtime_error{"invalid corpus row " +
                                      std::to_string(line_number)};
         }
-        fixtures.push_back(
-            Fixture{fields[0], fields[4], fields[2], split(fields[3], '|'),
-                    fields[1] == "1" ? GrammarMode::fragment
-                                     : GrammarMode::complete_clause,
-                    {},
-                    std::nullopt,
-                    std::nullopt});
+        fixtures.push_back(Fixture{fields[0],
+                                   fields[4],
+                                   fields[2],
+                                   split(fields[3], '|'),
+                                   fields[1] == "1"
+                                       ? GrammarMode::fragment
+                                       : GrammarMode::complete_clause,
+                                   {},
+                                   std::nullopt,
+                                   std::nullopt});
     }
     if (fixtures.empty()) {
         throw std::runtime_error{"corpus is empty: " + path.string()};
@@ -4270,6 +4388,10 @@ Result Experiment::run(const Fixture &fixture, const Strategy strategy) const {
         result.peak_bytes +=
             static_cast<std::uint64_t>(domain.size() * sizeof(Candidate));
     }
+    if (result.morphology_gold_declared) {
+        result.morphology_gold_in_lattice =
+            morphology_gold_in_lattice(lattice, fixture);
+    }
 
     if (strategy == Strategy::morphology) {
         if (contains_empty_domain) {
@@ -4291,8 +4413,7 @@ Result Experiment::run(const Fixture &fixture, const Strategy strategy) const {
             }
         }
         if (result.morphology_gold_declared) {
-            result.morphology_gold_survives =
-                morphology_gold_in_lattice(lattice, fixture);
+            result.morphology_gold_survives = result.morphology_gold_in_lattice;
         }
         result.elapsed_ns = static_cast<std::uint64_t>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() -
@@ -4631,10 +4752,14 @@ bool Experiment::self_test(const std::vector<Fixture> &fixtures,
         }
     }
     {
-        const Fixture budget_fixture{
-            "budget-after-propagation",   "Veni",
-            "finite-domain-pruning",      {},
-            GrammarMode::complete_clause, {}, std::nullopt, std::nullopt};
+        const Fixture budget_fixture{"budget-after-propagation",
+                                     "Veni",
+                                     "finite-domain-pruning",
+                                     {},
+                                     GrammarMode::complete_clause,
+                                     {},
+                                     std::nullopt,
+                                     std::nullopt};
         const Experiment tiny_budget{engine_, 4U};
         const auto cartesian =
             tiny_budget.run(budget_fixture, Strategy::cartesian_leaf_check);
@@ -4695,7 +4820,8 @@ bool Experiment::self_test(const std::vector<Fixture> &fixtures,
             return false;
         }
         if (morphology.morphology_gold_declared &&
-            !morphology.morphology_gold_survives) {
+            (!morphology.morphology_gold_in_lattice ||
+             !morphology.morphology_gold_survives)) {
             failure = fixture.id + ": structured morphology gold is absent";
             return false;
         }
@@ -4764,6 +4890,25 @@ bool Experiment::self_test(const std::vector<Fixture> &fixtures,
                 fixture.id + ": dependency result is incomplete or unexplained";
             return false;
         }
+        for (const auto &ranked : dependency.morphology_nbest) {
+            for (const auto &choice : ranked.analysis) {
+                const bool nominal =
+                    choice.part == "noun" || choice.part == "pronoun" ||
+                    choice.part == "adjective" || choice.part == "numeral" ||
+                    choice.part == "participle" || choice.part == "supine";
+                if ((nominal && !choice.features.applies(
+                                    MorphologyFeatureKind::grammatical_case)) ||
+                    (choice.part == "verb" &&
+                     !choice.features.applies(MorphologyFeatureKind::tense)) ||
+                    (choice.part == "preposition" &&
+                     !choice.features.applies(
+                         MorphologyFeatureKind::governs_case))) {
+                    failure = fixture.id +
+                              ": typed morphology projection is incomplete";
+                    return false;
+                }
+            }
+        }
         if (dependency.dependency_gold_declared &&
             (!dependency.dependency_gold_survives ||
              !*dependency.dependency_gold_survives)) {
@@ -4820,6 +4965,7 @@ bool Experiment::self_test(const std::vector<Fixture> &fixtures,
             !tree.tree_search_performed || tree.tree_analysis_ids.empty() ||
             tree.tree_set_digest.empty() ||
             tree.tree_complete_analyses < tree.accepted_assignments ||
+            tree.tree_nbest.size() != tree.tree_complete_analyses ||
             tree.tree_projective_analyses + tree.tree_nonprojective_analyses !=
                 tree.tree_complete_analyses ||
             tree.projected_trees_checked != tree.accepted_assignments ||
@@ -4830,7 +4976,10 @@ bool Experiment::self_test(const std::vector<Fixture> &fixtures,
         }
         if (tree.dependency_gold_declared &&
             (!tree.dependency_gold_survives ||
-             !*tree.dependency_gold_survives)) {
+             !*tree.dependency_gold_survives ||
+             !std::ranges::any_of(tree.tree_nbest, [](const auto &candidate) {
+                 return candidate.matches_dependency_gold;
+             }))) {
             failure = fixture.id + ": dependency gold is absent from tree set";
             return false;
         }
@@ -4880,6 +5029,8 @@ bool Experiment::self_test(const std::vector<Fixture> &fixtures,
                         tree.accepted_assignment_ids ||
                     decoder.decoder_complete_analyses !=
                         decoder.accepted_assignments ||
+                    decoder.tree_nbest.size() !=
+                        decoder.decoder_complete_analyses ||
                     decoder.decoder_scores.size() != expected.size()) {
                     return false;
                 }
@@ -4977,10 +5128,10 @@ bool Experiment::self_test(const std::vector<Fixture> &fixtures,
         }
         if (fixture.phenomenon.starts_with("H011-")) {
             const auto has_label = [&](const std::string_view label) {
-                return std::ranges::any_of(
-                    dependency.best_relations, [&](const Relation &relation) {
-                        return relation.label == label;
-                    });
+                return std::ranges::any_of(dependency.best_relations,
+                                           [&](const Relation &relation) {
+                                               return relation.label == label;
+                                           });
             };
             const auto comparison = std::ranges::find_if(
                 dependency.best_relation_candidates,
@@ -4991,8 +5142,7 @@ bool Experiment::self_test(const std::vector<Fixture> &fixtures,
             if (comparison == dependency.best_relation_candidates.end() ||
                 comparison->contexts.size() != (uses_quam ? 2U : 0U) ||
                 !has_label("obl:cmp") ||
-                (fixture.phenomenon.ends_with("-quam") &&
-                 !has_label("mark"))) {
+                (fixture.phenomenon.ends_with("-quam") && !has_label("mark"))) {
                 failure = fixture.id +
                           ": comparative relation was not projected completely";
                 return false;
@@ -5084,9 +5234,41 @@ bool Experiment::self_test(const std::vector<Fixture> &fixtures,
     return true;
 }
 
-std::string to_json(const Result &result,
-                    const bool include_morphology_nbest) {
+std::string to_json(const Result &result, const bool include_morphology_nbest) {
     using Json = nlohmann::ordered_json;
+    const auto feature_json = [](const MorphologyFeatures &features) {
+        const auto named =
+            [&features]<typename T>(const T value,
+                                    const MorphologyFeatureKind feature,
+                                    const auto name) -> Json {
+            return features.applies(feature) ? Json(name(value))
+                                             : Json(nullptr);
+        };
+        return Json{
+            {"grammaticalCase",
+             named(features.grammatical_case,
+                   MorphologyFeatureKind::grammatical_case, words::case_name)},
+            {"governsCase",
+             named(features.governs_case, MorphologyFeatureKind::governs_case,
+                   words::case_name)},
+            {"number", named(features.number, MorphologyFeatureKind::number,
+                             words::number_name)},
+            {"gender", named(features.gender, MorphologyFeatureKind::gender,
+                             words::gender_name)},
+            {"degree", named(features.degree, MorphologyFeatureKind::degree,
+                             words::degree_name)},
+            {"tense", named(features.tense, MorphologyFeatureKind::tense,
+                            words::tense_name)},
+            {"voice", named(features.voice, MorphologyFeatureKind::voice,
+                            words::voice_name)},
+            {"mood", named(features.mood, MorphologyFeatureKind::mood,
+                           words::mood_name)},
+            {"person", features.applies(MorphologyFeatureKind::person)
+                           ? Json(static_cast<unsigned>(
+                                 std::to_underlying(features.person)))
+                           : Json(nullptr)},
+        };
+    };
     Json output{
         {"schema", result.schema},
         {"schemaVersion", result.schema_version},
@@ -5216,7 +5398,8 @@ std::string to_json(const Result &result,
              {"contexts", Json::array()},
              {"constraint", relation.constraint_id},
              {"compatibility", relation.compatibility}});
-        auto &contexts = output["relationCandidates"]["best"].back()["contexts"];
+        auto &contexts =
+            output["relationCandidates"]["best"].back()["contexts"];
         for (const auto &context : relation.contexts) {
             contexts.push_back(
                 {{"token", context.token}, {"candidate", context.candidate}});
@@ -5314,6 +5497,7 @@ std::string to_json(const Result &result,
                        : Json(nullptr)}}},
         {"morphology",
          {{"declared", result.morphology_gold_declared},
+          {"inLattice", result.morphology_gold_in_lattice},
           {"survives", result.morphology_gold_survives},
           {"rank", result.morphology_gold_rank
                        ? Json(*result.morphology_gold_rank)
@@ -5349,18 +5533,19 @@ std::string to_json(const Result &result,
     }
     output["bestAnalysis"] = Json::array();
     for (const auto &choice : result.best_analysis) {
-        output["bestAnalysis"].push_back({{"token", choice.token},
-                                          {"candidate", choice.candidate},
-                                          {"lemma", choice.lemma},
-                                          {"part", choice.part},
-                                          {"morphology", choice.morphology}});
+        output["bestAnalysis"].push_back(
+            {{"token", choice.token},
+             {"candidate", choice.candidate},
+             {"lemma", choice.lemma},
+             {"part", choice.part},
+             {"morphology", choice.morphology},
+             {"features", feature_json(choice.features)}});
     }
     if (include_morphology_nbest) {
         output["morphologyNBest"] = {
             {"complete",
              result.status != "experiment-budget-exceeded" &&
-                 result.morphology_nbest.size() ==
-                     result.accepted_assignments},
+                 result.morphology_nbest.size() == result.accepted_assignments},
             {"analyses", Json::array()},
         };
         for (const auto &ranked : result.morphology_nbest) {
@@ -5378,17 +5563,59 @@ std::string to_json(const Result &result,
                      {"candidate", choice.candidate},
                      {"lemma", choice.lemma},
                      {"part", choice.part},
-                     {"morphology", choice.morphology}});
+                     {"morphology", choice.morphology},
+                     {"features", feature_json(choice.features)}});
             }
             for (const auto &relation : ranked.relations) {
                 analysis["relations"].push_back(
                     {{"dependent", relation.dependent},
-                     {"head", relation.head ? Json(*relation.head)
-                                             : Json(nullptr)},
+                     {"head",
+                      relation.head ? Json(*relation.head) : Json(nullptr)},
                      {"label", relation.label}});
             }
             output["morphologyNBest"]["analyses"].push_back(
                 std::move(analysis));
+        }
+        output["treeNBest"] = {
+            {"complete",
+             result.status != "experiment-budget-exceeded" &&
+                 result.tree_nbest.size() ==
+                     (result.decoder_performed
+                          ? result.decoder_complete_analyses
+                          : result.tree_complete_analyses)},
+            {"analyses", Json::array()},
+        };
+        for (const auto &ranked : result.tree_nbest) {
+            Json analysis{
+                {"treeId", ranked.tree_id},
+                {"assignmentId", ranked.assignment_id},
+                {"manualScore", ranked.manual_score},
+                {"morphologyScore", ranked.morphology_score},
+                {"arcScore", ranked.arc_score},
+                {"projective", ranked.projective},
+                {"matchesPreferredLemmas", ranked.matches_preferred_lemmas},
+                {"matchesMorphologyGold", ranked.matches_morphology_gold},
+                {"matchesDependencyGold", ranked.matches_dependency_gold},
+                {"tokens", Json::array()},
+                {"relations", Json::array()},
+            };
+            for (const auto &choice : ranked.analysis) {
+                analysis["tokens"].push_back(
+                    {{"token", choice.token},
+                     {"candidate", choice.candidate},
+                     {"lemma", choice.lemma},
+                     {"part", choice.part},
+                     {"morphology", choice.morphology},
+                     {"features", feature_json(choice.features)}});
+            }
+            for (const auto &relation : ranked.relations) {
+                analysis["relations"].push_back(
+                    {{"dependent", relation.dependent},
+                     {"head",
+                      relation.head ? Json(*relation.head) : Json(nullptr)},
+                     {"label", relation.label}});
+            }
+            output["treeNBest"]["analyses"].push_back(std::move(analysis));
         }
     }
     output["bestRelations"] = Json::array();

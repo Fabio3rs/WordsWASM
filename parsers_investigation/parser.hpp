@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace parsers {
@@ -113,12 +114,55 @@ struct Fixture final {
     std::optional<GoldSpec> gold;
 };
 
+enum class MorphologyFeatureKind : std::uint16_t {
+    grammatical_case = 1U << 0U,
+    governs_case = 1U << 1U,
+    number = 1U << 2U,
+    gender = 1U << 3U,
+    degree = 1U << 4U,
+    tense = 1U << 5U,
+    voice = 1U << 6U,
+    mood = 1U << 7U,
+    person = 1U << 8U,
+};
+
+// A cleared applicability bit means that an attribute does not apply. A set
+// bit whose one-byte enum is `unknown` remains distinguishable from that case.
+// This compact typed projection is intentionally estimator-neutral.
+struct MorphologyFeatures final {
+    words::GrammaticalCase grammatical_case{words::GrammaticalCase::unknown};
+    words::GrammaticalCase governs_case{words::GrammaticalCase::unknown};
+    words::GrammaticalNumber number{words::GrammaticalNumber::unknown};
+    words::Gender gender{words::Gender::unknown};
+    words::Degree degree{words::Degree::unknown};
+    words::Tense tense{words::Tense::unknown};
+    words::Voice voice{words::Voice::unknown};
+    words::Mood mood{words::Mood::unknown};
+    words::Person person{words::Person::unknown};
+    std::uint16_t applicable{};
+
+    [[nodiscard]] constexpr bool
+    applies(const MorphologyFeatureKind feature) const noexcept {
+        return (applicable & std::to_underlying(feature)) != 0U;
+    }
+
+    constexpr void
+    set_applicable(const MorphologyFeatureKind feature) noexcept {
+        applicable |= std::to_underlying(feature);
+    }
+
+    bool operator==(const MorphologyFeatures &) const = default;
+};
+
+static_assert(sizeof(MorphologyFeatures) <= 16U);
+
 struct AnalysisChoice final {
     std::size_t token{};
     std::size_t candidate{};
     std::string lemma;
     std::string part;
     std::string morphology;
+    MorphologyFeatures features;
 };
 
 struct RankedMorphologyAnalysis final {
@@ -128,6 +172,24 @@ struct RankedMorphologyAnalysis final {
     std::vector<Relation> relations;
     bool matches_preferred_lemmas{};
     bool matches_morphology_gold{};
+};
+
+// A dependency candidate is kept separate from the morphology N-best because
+// one morphology assignment can admit many different trees.  Statistical
+// rerankers consume this representation; they must not reconstruct or splice
+// arcs from different parser candidates.
+struct RankedDependencyTreeAnalysis final {
+    std::string tree_id;
+    std::string assignment_id;
+    double manual_score{};
+    double morphology_score{};
+    double arc_score{};
+    bool projective{};
+    std::vector<AnalysisChoice> analysis;
+    std::vector<Relation> relations;
+    bool matches_preferred_lemmas{};
+    bool matches_morphology_gold{};
+    bool matches_dependency_gold{};
 };
 
 struct ScoreReason final {
@@ -257,6 +319,7 @@ struct Result final {
     bool preferred_lemma_sequence_survives{};
     std::optional<std::uint64_t> preferred_lemma_rank;
     bool morphology_gold_declared{};
+    bool morphology_gold_in_lattice{};
     bool morphology_gold_survives{};
     std::optional<std::uint64_t> morphology_gold_rank;
     std::optional<bool> morphology_gold_best_score_tie;
@@ -270,6 +333,7 @@ struct Result final {
     std::vector<ScoreReason> score_reasons;
     std::vector<AnalysisChoice> best_analysis;
     std::vector<RankedMorphologyAnalysis> morphology_nbest;
+    std::vector<RankedDependencyTreeAnalysis> tree_nbest;
     std::vector<Relation> best_relations;
     std::vector<std::string> diagnostics;
 };

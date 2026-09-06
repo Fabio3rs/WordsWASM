@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wordswasm.local/schemas/dependency-markov-result-v1.json",
+  "title": "WordsWASM dependency Markov reranking result v1",
+  "type": "object",
+  "required": [
+    "schema", "schemaVersion", "datasetId", "sourceCommit", "compiler",
+    "compilerVersion", "buildType", "parserStrategy", "candidatePolicy",
+    "trainingPolicy", "evaluationPolicy", "evaluationTier", "rootConvention",
+    "factorization", "predicateProfileFactor", "orderOneContext",
+    "orderTwoContext", "trainingWeights", "alpha", "backoffStrength",
+    "maxProduct", "configurations"
+  ],
+  "properties": {
+    "schema": {"const": "words-parser-dependency-markov-investigation"},
+    "schemaVersion": {"const": 1},
+    "datasetId": {"type": "string", "minLength": 1},
+    "sourceCommit": {"type": "string", "minLength": 1},
+    "compiler": {"type": "string", "minLength": 1},
+    "compilerVersion": {"type": "string", "minLength": 1},
+    "buildType": {"type": "string"},
+    "parserStrategy": {"const": "dependency-tree-oracle"},
+    "candidatePolicy": {"type": "string", "minLength": 1},
+    "trainingPolicy": {"type": "string", "minLength": 1},
+    "evaluationPolicy": {"enum": ["leave-one-fixture-out", "in-sample"]},
+    "evaluationTier": {"const": "verified-didactic"},
+    "rootConvention": {"type": "string", "minLength": 1},
+    "factorization": {"type": "string", "minLength": 1},
+    "predicateProfileFactor": {"type": "string", "minLength": 1},
+    "orderOneContext": {"type": "string", "minLength": 1},
+    "orderTwoContext": {"type": "string", "minLength": 1},
+    "trainingWeights": {
+      "type": "object",
+      "required": ["verifiedDidactic", "syntheticGold"],
+      "properties": {
+        "verifiedDidactic": {"type": "number", "minimum": 0},
+        "syntheticGold": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "alpha": {"type": "number", "exclusiveMinimum": 0},
+    "backoffStrength": {"type": "number", "exclusiveMinimum": 0},
+    "maxProduct": {"type": "integer", "minimum": 1},
+    "configurations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "order", "projection", "predicateProfiles", "evaluatedFixtures",
+          "candidateGoldRecall", "modelOnly", "modelThenManual", "manualOnly",
+          "scoringDiagnostics", "fixtures"
+        ],
+        "properties": {
+          "order": {"enum": [1, 2]},
+          "projection": {"enum": ["part", "part+morphology"]},
+          "predicateProfiles": {"type": "boolean"},
+          "evaluatedFixtures": {"type": "integer", "minimum": 0},
+          "candidateGoldRecall": {"type": "integer", "minimum": 0},
+          "modelOnly": {"$ref": "#/$defs/modelMetrics"},
+          "modelThenManual": {"type": "object"},
+          "manualOnly": {"type": "object"},
+          "scoringDiagnostics": {"$ref": "#/$defs/diagnostics"},
+          "fixtures": {"type": "array", "items": {"type": "object"}}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {
+    "modelMetrics": {
+      "type": "object",
+      "required": ["exactTop1", "exactTop3", "rootTop1", "meanUas", "meanLas", "tieBreak"],
+      "properties": {
+        "exactTop1": {"type": "integer", "minimum": 0},
+        "exactTop3": {"type": "integer", "minimum": 0},
+        "rootTop1": {"type": "integer", "minimum": 0},
+        "meanUas": {"type": "number", "minimum": 0, "maximum": 1},
+        "meanLas": {"type": "number", "minimum": 0, "maximum": 1},
+        "tieBreak": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "diagnostics": {
+      "type": "object",
+      "required": ["factors", "unknownEvents", "fullContextHits", "fullContextMisses", "backedOffFactors", "deepestContextHits"],
+      "properties": {
+        "factors": {"type": "integer", "minimum": 0},
+        "unknownEvents": {"type": "integer", "minimum": 0},
+        "fullContextHits": {"type": "integer", "minimum": 0},
+        "fullContextMisses": {"type": "integer", "minimum": 0},
+        "backedOffFactors": {"type": "integer", "minimum": 0},
+        "deepestContextHits": {"type": "array", "items": {"type": "integer", "minimum": 0}}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

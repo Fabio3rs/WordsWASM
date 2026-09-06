@@ -721,18 +721,19 @@ Somente depois de estabilizar a cobertura formal:
 
 O primeiro baseline está documentado em
 [`MARKOV.md`](MARKOV.md): cadeias suavizadas recebem o N-best morfológico do
-parser e são avaliadas por leave-one-fixture-out nas dez frases didáticas. A
-ordem canônica root-first produz o melhor resultado inicial com estado
-morfologicamente completo e memória 2 (top-1 9/10, MRR 0,95), contra top-1 8/10
-e MRR 0,87 na ordem superficial. Apenas 4/10 decisões são exclusivas do score
-Markoviano, portanto o resultado justifica ampliar a investigação, não adotar
-o ranker. Ausência no treino continua sem efeito sobre possibilidade formal.
+parser e são avaliadas por leave-one-fixture-out nas dez frases didáticas. Um
+review encontrou dependência residual dos índices e perda de fronteiras no
+percurso canônico. Depois da correção por assinaturas recursivas e eventos de
+entrada/saída, estado morfologicamente completo e memória 2 obtêm top-1 8/10 e
+MRR 0,883 no modo canônico, contra 8/10 e 0,870 na superfície. Cinco decisões
+são exclusivas do score Markoviano. A mudança reforça que a ordenação
+estrutural é hipótese comparativa, não arquitetura escolhida.
 
 Uma ampliação controlada adicionou sete golds sintéticos com peso 0,5 e treze
-locuções silver com peso 0,25. Na mesma configuração canônica, top-1 caiu para
-7/10 e MRR para 0,833. A infraestrutura aceita treino em camadas, mas esta
-ablação indica transferência negativa; aumentar gold real tem prioridade sobre
-promover pseudo-rótulos.
+locuções silver com peso 0,25. Na mesma configuração canônica corrigida, top-1
+caiu para 6/10 e MRR para 0,736. A infraestrutura aceita treino em camadas,
+mas esta ablação indica transferência negativa; aumentar gold real tem
+prioridade sobre promover pseudo-rótulos.
 
 O ciclo seguinte acrescentou cinco frases verificadas na cópia local da The
 Latin Library com morfologia editorial e cinco sentenças de Cícero com
@@ -740,25 +741,40 @@ morfologia do Latin Dependency Treebank 2.1. O protocolo agora separa
 `leave-one-fixture-out` de `in-sample` e impede vazamento por texto idêntico.
 Nos dois recortes reais, incluir o próprio alvo no treino leva a 5/5 top-1 e
 MRR 1,0, demonstrando assimilação, não generalização. Fora do treino, a ordem
-canônica alcança 4/5 no recorte TLL, mas apenas 3/5 no LDT, contra 4/5 da ordem
-superficial no LDT. A relinearização sintética de peso 0,1 não melhora top-1.
+canônica alcança 3/5 nos recortes TLL e LDT, contra 4/5 da ordem superficial no
+LDT. A relinearização sintética de peso 0,1 não melhora top-1.
 Logo, a ordenação estrutural continua hipótese comparativa e o próximo ganho de
 dados deve vir de um importador reprodutível de treebanks, particionado por
 obra/autor.
 
 O controle positivo foi reforçado por uma curva de exposição e por ablação do
-desempate. Na configuração canônica POS+morfologia/memória 2, o Markov puro
-passa de 3/5 para 5/5 no LDT com apenas 0,01 do peso do próprio alvo; no TLL,
-passa de 3/5 para 4/5 com 0,01 e para 5/5 com 0,25. Treinar com a melhor
-análise não-gold representacionalmente distinta produz a curva oposta: com
+desempate. Na configuração canônica corrigida POS+morfologia/memória 2, o
+Markov puro passa de 3/5 para 4/5 com peso 0,10 do próprio alvo e para 5/5 com
+0,25 em ambos os recortes. Treinar com a melhor análise não-gold
+representacionalmente distinta produz a curva oposta: com
 peso 1,0, o gold cai para 1/5 no TLL e 2/5 no LDT. Isso demonstra que o
 conteúdo das transições causa o movimento do ranking, sem depender do score
 manual. Um embaralhamento intrafrase de vinte sementes cai no TLL, mas melhora
 acidentalmente o pequeno recorte LDT; controles aleatórios precisam de corpus
-maior. A matriz de fontes, licenças, hashes e uso efetivo está congelada em
+maior. O ranker agora oferece backoff hierárquico como ablação e publica
+telemetria de desconhecidos; a interface interna preserva atributos
+morfológicos tipados sem escolher uma fatoração. O relatório separa cobertura
+lexical, orçamento, presença do gold no lattice, sobrevivência às constraints
+e ranking. A matriz de fontes, licenças, hashes e uso efetivo está congelada em
 [`PROVENANCE.md`](PROVENANCE.md).
 
 O modelo semântico nunca deve fabricar morfologia ou apagar provenance.
+
+O ciclo estrutural seguinte expôs `treeNBest` completo e acrescentou um
+reranker separado, sem substituir a cadeia sequencial. Ele estima um fator de
+raiz, fatores `núcleo → relação → dependente` com um ou dois níveis de
+ancestrais e, em ablação, o perfil conjunto dos dependentes de cada verbo. No
+leave-one-out das dez frases verificadas, POS com perfil conjunto obteve 7/10
+árvores exatas, 9/10 no top-3, raiz 10/10, UAS 1,000 e LAS 0,933. O desempate
+pelo score manual levou o gold a 10/10, contra 9/10 do manual isolado. POS com
+morfologia atômica foi pior e memória 2 não superou memória 1, indicando
+esparsidade. Esses números validam o caminho de dados, não confiabilidade em
+texto externo; o algoritmo permanece apenas na investigação.
 
 ## Critérios de decisão quantitativos
 
@@ -811,10 +827,9 @@ para prosa e descobre tarde demais que escolheu uma representação inadequada.
 
 ## Próxima fila de implementação
 
-1. Ampliar o `morphologyNBest` opcional, já exposto para as atribuições
-   sobreviventes, com decomposição completa do score e N-best das árvores;
-   continuar distinguindo `possible` + score bruto de qualquer futura
-   probabilidade calibrada.
+1. Importar dependências gold de LDT/PROIEL com mapeamento explícito de tagset e
+   partição por obra/autor; medir o reranker estrutural sem projeções tratadas
+   como gold.
 2. Anotar os dois exemplos de comparação de inferioridade (`minus
    intelligens`) e decidir se exigem uma relação própria ou composição de H011.
 3. Acrescentar casos reais ou publicados de hipérbato e ordem livre para medir

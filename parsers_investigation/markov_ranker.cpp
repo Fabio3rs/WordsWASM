@@ -93,6 +93,8 @@ struct Options final {
     std::string dataset_id{PARSERS_INVESTIGATION_DATASET_ID};
     std::uint64_t max_product{1'000'000U};
     double alpha{0.1};
+    parsers::MarkovSmoothing smoothing{parsers::MarkovSmoothing::additive};
+    double backoff_strength{1.0};
     double synthetic_weight{0.5};
     double silver_weight{0.25};
     double attested_weight{1.0};
@@ -116,6 +118,8 @@ struct ScoredCandidate final {
     double surface_score{};
     double canonical_score{};
     double markov_score{};
+    parsers::MarkovScoreDiagnostics surface_diagnostics;
+    parsers::MarkovScoreDiagnostics canonical_diagnostics;
 };
 
 [[nodiscard]] std::expected<std::uint64_t, std::string>
@@ -249,6 +253,30 @@ parse_options(const int argc, char *const argv[]) {
                 return std::unexpected{std::move(parsed.error())};
             }
             options.alpha = *parsed;
+        } else if (argument == "--smoothing") {
+            auto value = require_value();
+            if (!value) {
+                return std::unexpected{std::move(value.error())};
+            }
+            if (*value == "additive") {
+                options.smoothing = parsers::MarkovSmoothing::additive;
+            } else if (*value == "hierarchical-backoff") {
+                options.smoothing =
+                    parsers::MarkovSmoothing::hierarchical_backoff;
+            } else {
+                return std::unexpected{
+                    "smoothing must be additive or hierarchical-backoff"};
+            }
+        } else if (argument == "--backoff-strength") {
+            auto value = require_value();
+            if (!value) {
+                return std::unexpected{std::move(value.error())};
+            }
+            auto parsed = parse_positive_double(*value);
+            if (!parsed) {
+                return std::unexpected{std::move(parsed.error())};
+            }
+            options.backoff_strength = *parsed;
         } else if (argument == "--synthetic-weight" ||
                    argument == "--silver-weight" ||
                    argument == "--attested-weight" ||
@@ -356,6 +384,8 @@ parse_options(const int argc, char *const argv[]) {
                    "  --dataset-id ID     identifier for the WWDB\n"
                    "  --max-product N     parser enumeration budget\n"
                    "  --alpha X           additive smoothing (default 0.1)\n"
+                   "  --smoothing additive|hierarchical-backoff\n"
+                   "  --backoff-strength X hierarchical prior weight (1.0)\n"
                    "  --synthetic-weight X  structured synthetic weight (0.5)\n"
                    "  --silver-weight X     preferred-lemma silver weight "
                    "(0.25)\n"
@@ -407,11 +437,10 @@ read_database(const std::filesystem::path &path) {
     return bytes;
 }
 
-[[nodiscard]] bool is_evaluation_phrase(const ParsedFixture &parsed,
-                                        const EvaluationTier tier) {
+[[nodiscard]] bool matches_evaluation_tier(const ParsedFixture &parsed,
+                                           const EvaluationTier tier) {
     if (parsed.fixture == nullptr || !parsed.fixture->gold ||
-        !parsed.fixture->annotation || parsed.parser_output.status != "ok" ||
-        parsed.parser_output.morphology_nbest.empty()) {
+        !parsed.fixture->annotation) {
         return false;
     }
     const auto &status = parsed.fixture->annotation->status;
@@ -422,6 +451,69 @@ read_database(const std::filesystem::path &path) {
            (tier == EvaluationTier::verified && verified) ||
            (tier == EvaluationTier::attested && attested) ||
            (tier == EvaluationTier::treebank && treebank);
+}
+
+[[nodiscard]] bool is_evaluation_phrase(const ParsedFixture &parsed,
+                                        const EvaluationTier tier) {
+    return matches_evaluation_tier(parsed, tier) &&
+           parsed.parser_output.status == "ok" &&
+           !parsed.parser_output.morphology_nbest.empty();
+}
+
+[[nodiscard]] nlohmann::ordered_json
+evaluation_coverage(const std::vector<ParsedFixture> &parsed_fixtures,
+                    const EvaluationTier tier) {
+    std::size_t requested{};
+    std::size_t lexical_coverage{};
+    std::size_t within_budget{};
+    std::size_t parser_ok{};
+    std::size_t nonempty_nbest{};
+    std::size_t gold_in_lattice{};
+    std::size_t gold_survives_constraints{};
+    std::size_t rankable{};
+    std::map<std::string, std::size_t, std::less<>> status_counts;
+    for (const auto &parsed : parsed_fixtures) {
+        if (!matches_evaluation_tier(parsed, tier)) {
+            continue;
+        }
+        ++requested;
+        ++status_counts[parsed.parser_output.status];
+        const bool has_lexical_coverage =
+            parsed.parser_output.candidate_counts.size() ==
+                parsed.parser_output.token_count &&
+            std::ranges::all_of(parsed.parser_output.candidate_counts,
+                                [](const auto count) { return count != 0U; });
+        lexical_coverage += static_cast<std::size_t>(has_lexical_coverage);
+        within_budget += static_cast<std::size_t>(parsed.parser_output.status !=
+                                                  "experiment-budget-exceeded");
+        parser_ok +=
+            static_cast<std::size_t>(parsed.parser_output.status == "ok");
+        nonempty_nbest += static_cast<std::size_t>(
+            !parsed.parser_output.morphology_nbest.empty());
+        gold_in_lattice += static_cast<std::size_t>(
+            parsed.parser_output.morphology_gold_in_lattice);
+        gold_survives_constraints += static_cast<std::size_t>(
+            parsed.parser_output.morphology_gold_survives);
+        const bool contains_rankable_gold =
+            parsed.parser_output.status == "ok" &&
+            parsed.parser_output.morphology_gold_rank.has_value() &&
+            std::ranges::any_of(parsed.parser_output.morphology_nbest,
+                                [](const auto &candidate) {
+                                    return candidate.matches_morphology_gold;
+                                });
+        rankable += static_cast<std::size_t>(contains_rankable_gold);
+    }
+    return {
+        {"requestedGoldFixtures", requested},
+        {"lexicalCoverage", lexical_coverage},
+        {"withinBudget", within_budget},
+        {"parserOk", parser_ok},
+        {"nonemptyNBest", nonempty_nbest},
+        {"goldInLattice", gold_in_lattice},
+        {"goldSurvivesConstraints", gold_survives_constraints},
+        {"rankable", rankable},
+        {"parserStatusCounts", status_counts},
+    };
 }
 
 [[nodiscard]] std::optional<TrainingTier>
@@ -521,6 +613,28 @@ projection_name(const StateProjection projection) noexcept {
     return projection == StateProjection::part ? "part" : "part+morphology";
 }
 
+[[nodiscard]] std::string_view
+smoothing_name(const parsers::MarkovSmoothing smoothing) noexcept {
+    return smoothing == parsers::MarkovSmoothing::additive
+               ? "additive"
+               : "hierarchical-backoff";
+}
+
+[[nodiscard]] nlohmann::ordered_json
+diagnostics_json(const parsers::MarkovScoreDiagnostics &diagnostics) {
+    return {
+        {"transitions", diagnostics.transitions},
+        {"unknownStates", diagnostics.unknown_states},
+        {"fullContextHits", diagnostics.full_context_hits},
+        {"fullContextMisses", diagnostics.full_context_misses},
+        {"uniformFallbacks", diagnostics.uniform_fallbacks},
+        {"backedOffTransitions", diagnostics.backed_off_transitions},
+        {"noObservedContext", diagnostics.no_observed_context},
+        {"deepestObservedContextHits",
+         diagnostics.deepest_observed_context_hits},
+    };
+}
+
 [[nodiscard]] std::vector<std::string>
 surface_states(const parsers::RankedMorphologyAnalysis &analysis,
                const StateProjection projection) {
@@ -549,13 +663,18 @@ canonical_states(const parsers::RankedMorphologyAnalysis &analysis,
     }
 
     std::vector<std::string> result;
-    result.reserve(token_count);
-    const auto ordered = parsers::markov::parser_canonical_order(
+    result.reserve(token_count * 2U);
+    const auto events = parsers::markov::parser_canonical_events(
         analysis, [&](const auto token) -> const std::string & {
             return base_states[token];
         });
-    for (const auto &token : ordered) {
-        result.push_back(token.incoming_label + '|' + base_states[token.token]);
+    for (const auto &event : events) {
+        if (event.kind == parsers::markov::CanonicalEventKind::enter) {
+            result.push_back("enter|" + event.incoming_label + '|' +
+                             base_states[event.token]);
+        } else {
+            result.push_back("exit|" + event.incoming_label);
+        }
     }
     return result;
 }
@@ -743,7 +862,8 @@ controlled_sequence(const std::vector<std::string> &sequence,
 [[nodiscard]] nlohmann::ordered_json evaluate(
     const std::vector<ParsedFixture> &parsed_fixtures, const std::size_t order,
     const StateProjection projection, const double surface_weight,
-    const double alpha, const double attested_weight,
+    const double alpha, const parsers::MarkovSmoothing smoothing,
+    const double backoff_strength, const double attested_weight,
     const double treebank_weight, const double synthetic_weight,
     const double silver_weight, const double reordering_weight,
     const EvaluationPolicy evaluation_policy,
@@ -764,14 +884,18 @@ controlled_sequence(const std::vector<std::string> &sequence,
     double manual_reciprocal_rank_sum{};
     double markov_only_reciprocal_rank_sum{};
     double reciprocal_rank_sum{};
+    parsers::MarkovScoreDiagnostics surface_diagnostics;
+    parsers::MarkovScoreDiagnostics canonical_diagnostics;
 
     for (const auto &target : parsed_fixtures) {
         if (!is_evaluation_phrase(target, evaluation_tier)) {
             continue;
         }
 
-        parsers::MarkovModel surface_model{order, alpha};
-        parsers::MarkovModel canonical_model{order, alpha};
+        parsers::MarkovModel surface_model{order, alpha, smoothing,
+                                           backoff_strength};
+        parsers::MarkovModel canonical_model{order, alpha, smoothing,
+                                             backoff_strength};
         std::size_t training_phrases{};
         std::size_t training_sequence_count{};
         std::size_t relinearization_sequence_count{};
@@ -858,15 +982,20 @@ controlled_sequence(const std::vector<std::string> &sequence,
         std::vector<ScoredCandidate> candidates;
         candidates.reserve(target.parser_output.morphology_nbest.size());
         for (const auto &candidate : target.parser_output.morphology_nbest) {
-            const auto surface = surface_model.log_probability(
-                surface_states(candidate, projection));
-            const auto canonical = canonical_model.log_probability(
-                canonical_states(candidate, projection));
+            const auto surface =
+                surface_model.score(surface_states(candidate, projection));
+            const auto canonical =
+                canonical_model.score(canonical_states(candidate, projection));
+            surface_diagnostics.merge(surface.diagnostics);
+            canonical_diagnostics.merge(canonical.diagnostics);
             candidates.push_back(ScoredCandidate{
                 &candidate,
-                surface,
-                canonical,
-                surface_weight * surface + (1.0 - surface_weight) * canonical,
+                surface.log_probability,
+                canonical.log_probability,
+                surface_weight * surface.log_probability +
+                    (1.0 - surface_weight) * canonical.log_probability,
+                surface.diagnostics,
+                canonical.diagnostics,
             });
         }
         auto markov_only_candidates = candidates;
@@ -997,7 +1126,11 @@ controlled_sequence(const std::vector<std::string> &sequence,
              {"topSurfaceLogScore", candidates.front().surface_score},
              {"topParserOrderedLogScore", candidates.front().canonical_score},
              {"topMarkovLogScore", candidates.front().markov_score},
-             {"topManualScore", candidates.front().candidate->manual_score}});
+             {"topManualScore", candidates.front().candidate->manual_score},
+             {"topSurfaceDiagnostics",
+              diagnostics_json(candidates.front().surface_diagnostics)},
+             {"topParserOrderedDiagnostics",
+              diagnostics_json(candidates.front().canonical_diagnostics)}});
     }
 
     return Json{
@@ -1010,7 +1143,10 @@ controlled_sequence(const std::vector<std::string> &sequence,
         {"surfaceWeight", surface_weight},
         {"parserCanonicalWeight", 1.0 - surface_weight},
         {"targetExposureMultiplier", target_exposure_multiplier},
-        {"smoothing", {{"kind", "additive"}, {"alpha", alpha}}},
+        {"smoothing",
+         {{"kind", smoothing_name(smoothing)},
+          {"alpha", alpha},
+          {"backoffStrength", backoff_strength}}},
         {"summary",
          {{"evaluated", evaluated},
           {"manualTop1", manual_top1},
@@ -1021,6 +1157,9 @@ controlled_sequence(const std::vector<std::string> &sequence,
           {"markovMRR", evaluated == 0U ? 0.0
                                         : reciprocal_rank_sum /
                                               static_cast<double>(evaluated)},
+          {"scoringDiagnostics",
+           {{"surface", diagnostics_json(surface_diagnostics)},
+            {"parserCanonical", diagnostics_json(canonical_diagnostics)}}},
           {"rankingAblation",
            {{"manualOnly",
              {{"top1", manual_top1},
@@ -1109,7 +1248,8 @@ int main(const int argc, char *argv[]) try {
                 for (const auto surface_weight : surface_weights) {
                     configurations.push_back(evaluate(
                         parsed, order, projection, surface_weight,
-                        options->alpha, options->attested_weight,
+                        options->alpha, options->smoothing,
+                        options->backoff_strength, options->attested_weight,
                         options->treebank_weight, options->synthetic_weight,
                         options->silver_weight, options->reordering_weight,
                         options->evaluation_policy, options->evaluation_tier,
@@ -1132,6 +1272,9 @@ int main(const int argc, char *argv[]) try {
         {"parserStrategy", "dependency-projection"},
         {"candidatePolicy",
          "all morphology assignments surviving hard constraints"},
+        {"structurePolicy",
+         "one deterministic dependency projection per morphology assignment; "
+         "decoder tree alternatives are not consumed"},
         {"trainingCorpus", "tiered verified, attested editorial, treebank, "
                            "synthetic and preferred-lemma silver fixtures"},
         {"supplementalCorpus", options->supplemental_corpus.string()},
@@ -1146,6 +1289,8 @@ int main(const int argc, char *argv[]) try {
         {"evaluationPolicy",
          evaluation_policy_name(options->evaluation_policy)},
         {"evaluationTier", evaluation_tier_name(options->evaluation_tier)},
+        {"evaluationCoverage",
+         evaluation_coverage(parsed, options->evaluation_tier)},
         {"trainingControl", training_control_name(options->training_control)},
         {"trainingControlPolicy",
          options->training_control == TrainingControl::observed
@@ -1160,7 +1305,11 @@ int main(const int argc, char *argv[]) try {
         {"shuffleSeed", options->shuffle_seed},
         {"exposureMultipliers", exposure_multipliers},
         {"parserCanonicalOrder",
-         "root-first DFS; siblings sorted by relation, state, lemma, token"},
+         "root-first DFS; siblings sorted by recursive labeled-subtree "
+         "signature; token only breaks structurally indistinguishable ties"},
+        {"parserCanonicalEncoding",
+         "enter relation+state and exit relation events retain subtree "
+         "boundaries"},
         {"syntheticRelinearizationPolicy",
          "head-first and head-last parser traversals train only the surface "
          "model"},

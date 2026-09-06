@@ -31,6 +31,20 @@ if the experiment budget prevented an exact candidate set. This payload is the
 input of the Markov ranking investigation; its `manualScore` remains
 uncalibrated.
 
+`treeNBest` is emitted under the same opt-in flag for tree-oracle and decoder
+strategies. Unlike `morphologyNBest`, it keeps every complete tree as a
+separate candidate: canonical tree ID, morphology-assignment ID, morphology
+score, arc score, combined manual score, projectivity, tokens, relations and
+independent morphology/dependency-gold markers. A reranker can therefore
+reorder parser-produced trees without rebuilding arcs or combining fragments
+of different survivors.
+
+Each published analysis token also carries `features`, a compact typed
+projection of the morphology. A `null` field is not applicable to that
+morphology; the string `unknown` remains an applicable but unknown enum value. The gold
+morphology report separates `inLattice` from `survives`, so lexical coverage is
+not conflated with survival after constraints.
+
 The decision semantics are deliberately asymmetric. A hard-constraint conflict
 can mark an analysis impossible; every surviving analysis is only *possible*,
 and soft features may rank it as more or less plausible. Version 2 aggregates
@@ -125,3 +139,19 @@ didactic gold, attested morphology gold, controlled synthetic gold,
 Latin Dependency Treebank morphology gold, preferred-lemma silver and
 synthetic relinearizations, each with an explicit weight. It does not add a
 probability field to parser result v2.
+
+The Markov report additionally records the full evaluation denominator and
+per-model diagnostics for unknown states and contexts. Its canonical encoding
+orders recursively signed subtrees and emits enter/exit events, preventing
+token-index dependence and preserving subtree boundaries. Additive smoothing
+remains the default baseline; `hierarchical-backoff` is an optional ablation,
+not a selected production architecture.
+
+`dependency-markov-result-v1.schema.json` validates the separate structural
+experiment emitted by `dependency_markov_ranker`. It records the exact tree
+candidate policy, verbal-root convention, leave-one-fixture-out policy and
+three factor families: root, labeled local arc, and an optional joint
+predicate-dependent profile. Orders 1 and 2 mean local head and
+grandparent+incoming-relation+head respectively; they do not refer to surface
+token adjacency. The report keeps model-only, model-then-manual and manual-only
+ablations, plus root accuracy, UAS, LAS, exact-tree ranks and backoff coverage.

@@ -6,10 +6,11 @@
   "required": [
     "schema", "schemaVersion", "datasetId", "sourceCommit", "compiler",
     "compilerVersion", "buildType", "maxProduct", "parserStrategy",
-    "candidatePolicy", "trainingCorpus", "supplementalCorpus",
+    "candidatePolicy", "structurePolicy", "trainingCorpus", "supplementalCorpus",
     "attestedCorpus", "trainingWeights", "evaluationPolicy", "evaluationTier",
+    "evaluationCoverage",
     "trainingControl", "trainingControlPolicy", "shuffleSeed", "exposureMultipliers",
-    "parserCanonicalOrder", "syntheticRelinearizationPolicy",
+    "parserCanonicalOrder", "parserCanonicalEncoding", "syntheticRelinearizationPolicy",
     "goldAlternativeWeighting", "silverSelection",
     "tieBreak", "rankingAblation", "configurations"
   ],
@@ -24,6 +25,7 @@
     "maxProduct": {"type": "integer", "minimum": 1},
     "parserStrategy": {"const": "dependency-projection"},
     "candidatePolicy": {"type": "string", "minLength": 1},
+    "structurePolicy": {"type": "string", "minLength": 1},
     "trainingCorpus": {"type": "string", "minLength": 1},
     "supplementalCorpus": {"type": "string", "minLength": 1},
     "attestedCorpus": {"type": "string", "minLength": 1},
@@ -42,6 +44,25 @@
     },
     "evaluationPolicy": {"enum": ["leave-one-fixture-out", "in-sample", "exposure-curve"]},
     "evaluationTier": {"enum": ["verified", "attested", "treebank", "all"]},
+    "evaluationCoverage": {
+      "type": "object",
+      "required": ["requestedGoldFixtures", "lexicalCoverage", "withinBudget", "parserOk", "nonemptyNBest", "goldInLattice", "goldSurvivesConstraints", "rankable", "parserStatusCounts"],
+      "properties": {
+        "requestedGoldFixtures": {"type": "integer", "minimum": 0},
+        "lexicalCoverage": {"type": "integer", "minimum": 0},
+        "withinBudget": {"type": "integer", "minimum": 0},
+        "parserOk": {"type": "integer", "minimum": 0},
+        "nonemptyNBest": {"type": "integer", "minimum": 0},
+        "goldInLattice": {"type": "integer", "minimum": 0},
+        "goldSurvivesConstraints": {"type": "integer", "minimum": 0},
+        "rankable": {"type": "integer", "minimum": 0},
+        "parserStatusCounts": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        }
+      },
+      "additionalProperties": false
+    },
     "trainingControl": {"enum": ["observed", "shuffle-within-sequence", "counterfactual-analysis"]},
     "trainingControlPolicy": {"type": "string", "minLength": 1},
     "shuffleSeed": {"type": "integer", "minimum": 1},
@@ -51,6 +72,7 @@
       "items": {"type": "number", "minimum": 0}
     },
     "parserCanonicalOrder": {"type": "string", "minLength": 1},
+    "parserCanonicalEncoding": {"type": "string", "minLength": 1},
     "syntheticRelinearizationPolicy": {"type": "string", "minLength": 1},
     "goldAlternativeWeighting": {"type": "string", "minLength": 1},
     "silverSelection": {"type": "string", "minLength": 1},
@@ -75,10 +97,11 @@
           "targetExposureMultiplier": {"type": "number", "minimum": 0},
           "smoothing": {
             "type": "object",
-            "required": ["kind", "alpha"],
+            "required": ["kind", "alpha", "backoffStrength"],
             "properties": {
-              "kind": {"const": "additive"},
-              "alpha": {"type": "number", "exclusiveMinimum": 0}
+              "kind": {"enum": ["additive", "hierarchical-backoff"]},
+              "alpha": {"type": "number", "exclusiveMinimum": 0},
+              "backoffStrength": {"type": "number", "exclusiveMinimum": 0}
             },
             "additionalProperties": false
           },
@@ -87,7 +110,7 @@
             "required": [
               "evaluated", "manualTop1", "markovTop1", "markovTop3",
               "markovBestScoreTies", "markovStrictTop1", "markovMRR",
-              "rankingAblation"
+              "rankingAblation", "scoringDiagnostics"
             ],
             "properties": {
               "evaluated": {"type": "integer", "minimum": 0},
@@ -97,6 +120,15 @@
               "markovBestScoreTies": {"type": "integer", "minimum": 0},
               "markovStrictTop1": {"type": "integer", "minimum": 0},
               "markovMRR": {"type": "number", "minimum": 0, "maximum": 1},
+              "scoringDiagnostics": {
+                "type": "object",
+                "required": ["surface", "parserCanonical"],
+                "properties": {
+                  "surface": {"$ref": "#/$defs/markovDiagnostics"},
+                  "parserCanonical": {"$ref": "#/$defs/markovDiagnostics"}
+                },
+                "additionalProperties": false
+              },
               "rankingAblation": {
                 "type": "object",
                 "required": ["manualOnly", "markovOnly", "markovThenManual"],
@@ -126,7 +158,8 @@
                 "markovOnlyTopAssignmentId", "markovThenManualTopAssignmentId",
                 "topAssignmentId", "topSurfaceStates",
                 "topParserOrderedStates", "topSurfaceLogScore",
-                "topParserOrderedLogScore", "topMarkovLogScore", "topManualScore"
+                "topParserOrderedLogScore", "topMarkovLogScore", "topManualScore",
+                "topSurfaceDiagnostics", "topParserOrderedDiagnostics"
               ],
               "properties": {
                 "fixtureId": {"type": "string", "minLength": 1},
@@ -163,7 +196,9 @@
                 "topSurfaceLogScore": {"type": "number"},
                 "topParserOrderedLogScore": {"type": "number"},
                 "topMarkovLogScore": {"type": "number"},
-                "topManualScore": {"type": "number"}
+                "topManualScore": {"type": "number"},
+                "topSurfaceDiagnostics": {"$ref": "#/$defs/markovDiagnostics"},
+                "topParserOrderedDiagnostics": {"$ref": "#/$defs/markovDiagnostics"}
               },
               "additionalProperties": false
             }
@@ -174,6 +209,25 @@
     }
   },
   "$defs": {
+    "markovDiagnostics": {
+      "type": "object",
+      "required": ["transitions", "unknownStates", "fullContextHits", "fullContextMisses", "uniformFallbacks", "backedOffTransitions", "noObservedContext", "deepestObservedContextHits"],
+      "properties": {
+        "transitions": {"type": "integer", "minimum": 0},
+        "unknownStates": {"type": "integer", "minimum": 0},
+        "fullContextHits": {"type": "integer", "minimum": 0},
+        "fullContextMisses": {"type": "integer", "minimum": 0},
+        "uniformFallbacks": {"type": "integer", "minimum": 0},
+        "backedOffTransitions": {"type": "integer", "minimum": 0},
+        "noObservedContext": {"type": "integer", "minimum": 0},
+        "deepestObservedContextHits": {
+          "type": "array",
+          "minItems": 2,
+          "items": {"type": "integer", "minimum": 0}
+        }
+      },
+      "additionalProperties": false
+    },
     "rankingMetrics": {
       "type": "object",
       "required": ["top1", "top3", "mrr"],
