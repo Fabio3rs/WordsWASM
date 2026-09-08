@@ -364,7 +364,7 @@ export async function createWordsAnalysisEngine({
         throw new Error("analysis engine has been disposed");
       }
     };
-    const run = (operation, text, options) => {
+    const run = (operation, text, options, line = false) => {
       requireLive();
       if (typeof text !== "string") {
         throw new TypeError("Latin input must be a string");
@@ -375,7 +375,9 @@ export async function createWordsAnalysisEngine({
       const twoWords = options?.twoWords === true;
       // WHY: Embind transports typed value objects.  Only the CLI owns JSON
       // presentation; browser callers receive normal JavaScript structures.
-      return copyResult(native[operation](text, twoWords));
+      const nativeOperation = line ? `${operation}Line` : operation;
+      const result = native[nativeOperation](text, twoWords);
+      return line ? copyOwnedVector(result, copyResult) : copyResult(result);
     };
 
     return Object.freeze({
@@ -387,6 +389,12 @@ export async function createWordsAnalysisEngine({
       },
       search(text, options) {
         return run("search", text, options);
+      },
+      analyzeLine(text, options) {
+        return run("analyze", text, options, true);
+      },
+      searchLine(text, options) {
+        return run("search", text, options, true);
       },
       dispose() {
         if (!disposed) {

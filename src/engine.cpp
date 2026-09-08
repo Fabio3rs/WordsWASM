@@ -2226,36 +2226,14 @@ analyze_orthography_with_tackon(const Database &database,
     return {};
 }
 
-struct TokenizedText final {
-    std::array<std::string_view, 3> tokens{};
-    std::uint8_t count{};
-};
-
-[[nodiscard]] constexpr bool is_ascii_space(const char value) noexcept {
-    return value == ' ' || value == '\t' || value == '\n' || value == '\r' ||
-           value == '\f' || value == '\v';
-}
-
-[[nodiscard]] TokenizedText split_query(const std::string_view text) noexcept {
-    TokenizedText result;
-    std::size_t cursor{};
-    while (cursor < text.size()) {
-        while (cursor < text.size() && is_ascii_space(text[cursor])) {
-            ++cursor;
-        }
-        if (cursor == text.size()) {
-            break;
-        }
-        const auto begin = cursor;
-        while (cursor < text.size() && !is_ascii_space(text[cursor])) {
-            ++cursor;
-        }
-        if (result.count < result.tokens.size()) {
-            result.tokens[result.count] = text.substr(begin, cursor - begin);
-            ++result.count;
-        }
-    }
-    return result;
+[[nodiscard]] constexpr bool
+allows_compound(const BoundaryFlag boundary) noexcept {
+    constexpr auto blockers =
+        BoundaryFlag::comma | BoundaryFlag::semicolon | BoundaryFlag::colon |
+        BoundaryFlag::period | BoundaryFlag::question |
+        BoundaryFlag::exclamation | BoundaryFlag::apostrophe |
+        BoundaryFlag::dash | BoundaryFlag::other_punctuation;
+    return !has_any_flag(boundary, blockers);
 }
 
 [[nodiscard]] const AnalysisIR *
@@ -2329,8 +2307,9 @@ void append_compound(const AnalysisIR &source, const CompoundKind kind,
     });
 }
 
-void analyze_compound(const Database &database, QueryResult &result,
-                      const QueryResult &auxiliary) {
+[[nodiscard]] bool analyze_compound(const Database &database,
+                                    QueryResult &result,
+                                    const QueryResult &auxiliary) {
     const auto auxiliary_word = auxiliary.surface.lookup_ascii;
     const auto *finite_analysis = finite_sum_morphology(database, auxiliary);
     const auto *finite =
@@ -2343,9 +2322,10 @@ void analyze_compound(const Database &database, QueryResult &result,
                       : (finite != nullptr)        ? CompoundKind::finite_sum
                                                    : CompoundKind{};
 
-    std::vector<AnalysisIR> sources;
-    sources.reserve(result.analyses.size());
-    for (auto &analysis : result.analyses) {
+    std::vector<std::size_t> source_indices;
+    source_indices.reserve(result.analyses.size());
+    for (std::size_t index{}; index < result.analyses.size(); ++index) {
+        const auto &analysis = result.analyses[index];
         if (const auto *participle =
                 std::get_if<ParticipleMorphology>(&analysis.morphology)) {
             if (!is_compound_participle(*participle)) {
@@ -2395,7 +2375,7 @@ void analyze_compound(const Database &database, QueryResult &result,
                                 ? DerivationIR{}
                                 : finite_analysis->derivation,
                             morphology, result.compound_analyses);
-            sources.push_back(std::move(analysis));
+            source_indices.push_back(index);
             continue;
         }
 
@@ -2417,9 +2397,46 @@ void analyze_compound(const Database &database, QueryResult &result,
                                        .person = Person::unknown,
                                        .number = GrammaticalNumber::unknown},
                         result.compound_analyses);
-        sources.push_back(std::move(analysis));
+        source_indices.push_back(index);
+    }
+
+    // A failed lookahead must be observationally pure: the caller may reuse
+    // both independently analyzed words without lexing or analyzing either
+    // one again.
+    if (result.compound_analyses.empty()) {
+        return false;
+    }
+
+    std::vector<AnalysisIR> sources;
+    sources.reserve(source_indices.size());
+    for (const auto index : source_indices) {
+        sources.push_back(std::move(result.analyses[index]));
     }
     result.analyses = std::move(sources);
+    return true;
+}
+
+[[nodiscard]] bool try_compound_query(const Database &database,
+                                      const std::string_view original_utf8,
+                                      QueryResult &result,
+                                      const QueryResult &auxiliary) {
+    if (result.status == QueryStatus::error ||
+        auxiliary.status == QueryStatus::error ||
+        !analyze_compound(database, result, auxiliary)) {
+        return false;
+    }
+
+    std::string normalized = result.surface.normalized_nfc;
+    normalized.push_back(' ');
+    normalized.append(auxiliary.surface.normalized_nfc);
+    result.multi_token_query = MultiTokenQueryIR{
+        .original_utf8 = std::string{original_utf8},
+        .normalized_nfc = std::move(normalized),
+    };
+    result.artificial_analyses.clear();
+    result.status = QueryStatus::analyzed;
+    result.diagnostics.clear();
+    return true;
 }
 
 } // namespace
@@ -2448,6 +2465,16 @@ Engine::create(std::vector<std::byte> database_image, EngineConfig config) {
 
 QueryResult Engine::analyze(const std::string_view utf8,
                             const AnalysisOptions options) const {
+    return analyze(TextToken{.text = utf8,
+                             .byte_begin = 0U,
+                             .byte_end = utf8.size(),
+                             .boundary_after = {}},
+                   options);
+}
+
+QueryResult Engine::analyze(const TextToken &token,
+                            const AnalysisOptions options) const {
+    const auto utf8 = token.text;
     auto lexed = lexer_.lex(utf8);
     if (!lexed) {
         QueryResult result;
@@ -2603,10 +2630,11 @@ QueryResult Engine::analyze(const std::string_view utf8,
 
 QueryResult Engine::analyze_text(const std::string_view utf8,
                                  const AnalysisOptions options) const {
-    const auto tokenized = split_query(utf8);
-    if (tokenized.count == 1U) {
-        auto result = analyze(tokenized.tokens.front(), options);
-        if (tokenized.tokens.front() != utf8) {
+    TextTokenCursor cursor{utf8};
+    const auto first = cursor.next();
+    if (first && cursor.peek() == nullptr) {
+        auto result = analyze(*first, options);
+        if (first->text != utf8) {
             result.multi_token_query = MultiTokenQueryIR{
                 .original_utf8 = std::string{utf8},
                 .normalized_nfc = result.surface.normalized_nfc};
@@ -2614,7 +2642,8 @@ QueryResult Engine::analyze_text(const std::string_view utf8,
         return result;
     }
 
-    if (tokenized.count != 2U) {
+    const auto second = cursor.next();
+    if (!first || !second || cursor.peek() != nullptr) {
         QueryResult result;
         result.surface.original_utf8.assign(utf8);
         result.multi_token_query = MultiTokenQueryIR{
@@ -2624,8 +2653,8 @@ QueryResult Engine::analyze_text(const std::string_view utf8,
         return result;
     }
 
-    auto result = analyze(tokenized.tokens[0]);
-    auto auxiliary = analyze(tokenized.tokens[1]);
+    auto result = analyze(*first, options);
+    auto auxiliary = analyze(*second, options);
     std::string normalized = result.surface.normalized_nfc;
     normalized.push_back(' ');
     normalized.append(auxiliary.surface.normalized_nfc);
@@ -2644,10 +2673,10 @@ QueryResult Engine::analyze_text(const std::string_view utf8,
         return result;
     }
 
-    analyze_compound(*database_, result, auxiliary);
-    result.artificial_analyses.clear();
-    if (result.compound_analyses.empty()) {
+    if (!allows_compound(first->boundary_after.flags) ||
+        !analyze_compound(*database_, result, auxiliary)) {
         result.analyses.clear();
+        result.artificial_analyses.clear();
         result.status = QueryStatus::error;
         result.diagnostics = {{.code = "unsupported-multi-token",
                                .severity = "error",
@@ -2657,6 +2686,47 @@ QueryResult Engine::analyze_text(const std::string_view utf8,
     result.status = QueryStatus::analyzed;
     result.diagnostics.clear();
     return result;
+}
+
+std::vector<QueryResult>
+Engine::analyze_line(const std::string_view utf8,
+                     const AnalysisOptions options) const {
+    TextTokenCursor cursor{utf8};
+    auto current_token = cursor.next();
+    if (!current_token) {
+        return {analyze_text(utf8, options)};
+    }
+    if (cursor.peek() == nullptr) {
+        return {analyze(*current_token, options)};
+    }
+
+    std::vector<QueryResult> results;
+    auto current = analyze(*current_token, options);
+    while (const auto *peeked = cursor.peek()) {
+        const auto next_token = *peeked;
+        auto next = analyze(next_token, options);
+        static_cast<void>(cursor.next());
+
+        const auto compound_text =
+            utf8.substr(current_token->byte_begin,
+                        next_token.byte_end - current_token->byte_begin);
+        if (allows_compound(current_token->boundary_after.flags) &&
+            try_compound_query(*database_, compound_text, current, next)) {
+            results.push_back(std::move(current));
+            current_token = cursor.next();
+            if (!current_token) {
+                return results;
+            }
+            current = analyze(*current_token, options);
+            continue;
+        }
+
+        results.push_back(std::move(current));
+        current = std::move(next);
+        current_token = next_token;
+    }
+    results.push_back(std::move(current));
+    return results;
 }
 
 } // namespace words

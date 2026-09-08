@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://words.example/schemas/semantic-alignment-decision-v1.schema.json",
+  "title": "Semantic alignment decision v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "decision_id", "target", "disposition", "review"],
+  "properties": {
+    "schema": {"const": "whitakers-words.semantic-alignment-decision.v1"},
+    "decision_id": {"type": "string", "pattern": "^semdecision:[a-z0-9][a-z0-9:._-]*$"},
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packet_key", "analysis_revision", "part_of_speech", "members"],
+      "properties": {
+        "packet_key": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ascii_lemma", "proper"],
+          "properties": {
+            "ascii_lemma": {"type": "string", "pattern": "^[a-z]+$"},
+            "proper": {"type": "boolean"}
+          }
+        },
+        "analysis_revision": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "part_of_speech": {"enum": ["ADJ", "ADV", "CONJ", "INTERJ", "NOUN", "NUM", "PREP", "PRON", "UNKNOWN", "VERB"]},
+        "members": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 3}
+        }
+      }
+    },
+    "disposition": {"enum": ["accept_alignment", "reject_alignment", "defer"]},
+    "sense_summary": {"type": "string", "minLength": 1},
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewed_at", "reviewer", "note"],
+      "properties": {
+        "reviewed_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+        "reviewer": {"type": "string", "minLength": 1},
+        "note": {"type": "string", "minLength": 1}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"disposition": {"const": "accept_alignment"}}},
+      "then": {"required": ["sense_summary"]}
+    }
+  ]
+}

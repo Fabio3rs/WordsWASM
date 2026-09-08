@@ -67,6 +67,9 @@ console.log(love.hits[0].lemma);             // "amo"
 console.log(love.hits[0].morphology.tense);  // "present"
 console.log(love.hits[0].morphology.person); // 1
 const suggestion = engine.analyze("texto", {twoWords: true});
+const line = engine.searchLine("amo amatus sum amare");
+console.log(line.map(({query}) => query.text));
+// ["amo", "amatus sum", "amare"]
 
 engine.dispose();
 ```
@@ -85,7 +88,11 @@ const compactOnly = searchEngine.search("cuique");
 
 `analyze` e `search` devolvem, respectivamente, os contratos
 `whitakers-words.browser-analysis` e `whitakers-words.browser-search`, versão
-3. Hits são uma união discriminada por `kind`: `lexical`, `compound` ou
+3. `analyzeLine` e `searchLine` devolvem arrays desses mesmos documentos, na
+ordem das unidades encontradas pelo `TextTokenCursor`; um composto reconhecido
+ocupa uma única posição. Não existe envelope ou schema paralelo para a linha:
+cada elemento continua validável pelo contrato browser v3 correspondente.
+Hits são uma união discriminada por `kind`: `lexical`, `compound` ou
 `artificial`. Cada leitura contém a forma resolvida (`stem`, `ending`,
 `recognized`) e passos semânticos ordenados de addon e reescrita. Um passo
 indica seu `target` (`form`, `source` ou `auxiliary`) e resolve IDs para tipo e
@@ -96,11 +103,13 @@ expõem `requiredPackonId`, inclusive no perfil search, sem consultar meanings.
 devolve definições e funciona com os dois perfis. O segundo argumento
 `{twoWords: true}` habilita somente a sugestão legada opt-in. Consultas de dois
 tokens pertencentes à gramática fechada de compostos continuam sendo
-reconhecidas normalmente pelo núcleo.
+reconhecidas normalmente pelo núcleo. Nas funções de linha, a recuperação
+`twoWords` é aplicada separadamente a cada unidade lexical.
 
-`databaseKind` informa `"full"` ou `"search"`. `analyze()` exige o banco
-full e falha antes de consultar o núcleo quando a projeção search está ativa;
-`search()` funciona nas duas projeções com o mesmo contrato e espaço de IDs.
+`databaseKind` informa `"full"` ou `"search"`. `analyze()` e `analyzeLine()`
+exigem o banco full e falham antes de consultar o núcleo quando a projeção
+search está ativa; `search()` e `searchLine()` funcionam nas duas projeções com
+o mesmo contrato e espaço de IDs.
 Presença de lexema, regra e significado usa booleano explícito no C++; a
 wrapper converte IDs ausentes para `null`, sem reservar sentinelas.
 
@@ -181,7 +190,8 @@ separados da engine.
 
 O teste unitário
 [`tests/wasm_wrapper_test.mjs`](../../tests/wasm_wrapper_test.mjs) usa um módulo
-controlado para verificar load, contratos, modo `Two_Words`, falha e descarte.
+controlado para verificar load, contratos unitários e de linha, modo
+`Two_Words`, falha e descarte de todos os handles Embind.
 O smoke test
 [`tests/wasm_smoke_test.mjs`](../../tests/wasm_smoke_test.mjs) carrega os
 artefatos compilados e o WWDB real:
@@ -199,8 +209,9 @@ node tests/wasm_smoke_test.mjs \
   dist/words-web/words-search.wwdb
 ```
 
-Ele cobre `mālum`, `anaticulus`, os dois contratos tipados, a rejeição de `ß`,
-reload transacional e equivalência de busca entre full e search. Também
+Ele cobre `mālum`, `anaticulus`, os contratos tipados unitários e de linha, a
+rejeição de `ß`, reload transacional e equivalência de busca entre full e
+search. Também
 confere que `_malloc`/`HEAPU8` não fazem parte da API pública e que o banco
 search recusa análise rica.
 

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://words.example/schemas/lexical-embedding-gold-v1.schema.json",
+  "title": "Lexical embedding gold review v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "candidate_revision", "run_id", "packet_key", "left_entry_ref", "right_entry_ref", "stratum", "embedding", "label", "reviewer", "note"],
+  "properties": {
+    "schema": {"const": "whitakers-words.lexical-embedding-gold.v1"},
+    "candidate_revision": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "run_id": {"type": "string", "pattern": "^embedding:[0-9a-f]{64}$"},
+    "packet_key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ascii_lemma", "proper"],
+      "properties": {
+        "ascii_lemma": {"type": "string", "pattern": "^[a-z]+$"},
+        "proper": {"type": "boolean"}
+      }
+    },
+    "left_entry_ref": {"type": "string", "minLength": 3},
+    "right_entry_ref": {"type": "string", "minLength": 3},
+    "stratum": {"enum": ["words_target", "without_words", "homograph_or_quantity_conflict", "rejected_edge", "cross_language_without_bridge"]},
+    "embedding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_cosine", "top3_mean_cosine", "left_rank", "right_rank", "mutual_top1", "minimum_margin", "blocking_reason"],
+      "properties": {
+        "max_cosine": {"type": "number", "minimum": -1, "maximum": 1},
+        "top3_mean_cosine": {"type": "number", "minimum": -1, "maximum": 1},
+        "left_rank": {"type": ["integer", "null"], "minimum": 1},
+        "right_rank": {"type": ["integer", "null"], "minimum": 1},
+        "mutual_top1": {"type": "boolean"},
+        "minimum_margin": {"type": ["number", "null"]},
+        "blocking_reason": {"type": ["string", "null"]}
+      }
+    },
+    "existing_relation": {"type": ["string", "null"]},
+    "existing_edge_status": {"type": ["string", "null"]},
+    "label": {"enum": ["pending", "same_lexeme", "different_lexeme", "uncertain"]},
+    "reviewer": {"type": "string"},
+    "note": {"type": "string"}
+  }
+}

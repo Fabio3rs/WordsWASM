@@ -10,6 +10,7 @@
 #include <array>
 #include <ranges>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 
 namespace words {
@@ -764,6 +765,94 @@ TEST(EngineTest, RejectsGeneralPhraseParsingOutsideCompoundGrammar) {
     const auto full = Json::parse(analysis_json(test::engine(), padded));
     EXPECT_EQ(full.at("query").at("text"), "  amata\t");
     EXPECT_EQ(full.at("query").at("normalized"), "amata");
+}
+
+TEST(EngineTest, AnalyzeLineReusesFailedLookaheadAsAnIndependentWord) {
+    const auto results = test::engine().analyze_line("amata\t amare");
+    ASSERT_EQ(results.size(), 2U);
+    EXPECT_EQ(results[0].status, QueryStatus::analyzed);
+    EXPECT_EQ(results[0].surface.normalized_nfc, "amata");
+    EXPECT_FALSE(results[0].analyses.empty());
+    EXPECT_TRUE(results[0].compound_analyses.empty());
+    EXPECT_EQ(results[1].status, QueryStatus::analyzed);
+    EXPECT_EQ(results[1].surface.normalized_nfc, "amare");
+    EXPECT_FALSE(results[1].analyses.empty());
+}
+
+TEST(EngineTest, AnalyzeLineConsumesOnlyRecognizedCompounds) {
+    constexpr std::string_view input = "amo\tamatus\xC2\xA0"
+                                       "sum\xE2\x80\x83"
+                                       "amare";
+    const auto results = test::engine().analyze_line(input);
+    ASSERT_EQ(results.size(), 3U);
+    EXPECT_EQ(results[0].surface.normalized_nfc, "amo");
+    EXPECT_EQ(results[2].surface.normalized_nfc, "amare");
+
+    const auto &compound = results[1];
+    ASSERT_TRUE(compound.multi_token_query.has_value());
+    EXPECT_EQ(compound.multi_token_query->original_utf8, "amatus\xC2\xA0"
+                                                         "sum");
+    EXPECT_EQ(compound.multi_token_query->normalized_nfc, "amatus sum");
+    EXPECT_EQ(compound.status, QueryStatus::analyzed);
+    EXPECT_FALSE(compound.compound_analyses.empty());
+}
+
+TEST(EngineTest, AnalyzeLineSplitsAsciiAndUnicodePunctuation) {
+    const auto results =
+        test::engine().analyze_line("“amo”, 'amare'; (amatus.sum)!");
+    ASSERT_EQ(results.size(), 4U);
+    EXPECT_EQ(results[0].surface.normalized_nfc, "amo");
+    EXPECT_EQ(results[1].surface.normalized_nfc, "amare");
+    EXPECT_EQ(results[2].surface.normalized_nfc, "amatus");
+    EXPECT_EQ(results[3].surface.normalized_nfc, "sum");
+    EXPECT_TRUE(results[2].compound_analyses.empty());
+
+    const auto quoted = test::engine().analyze_line("“amatus sum”");
+    ASSERT_EQ(quoted.size(), 1U);
+    const auto &compound = quoted.front();
+    ASSERT_TRUE(compound.multi_token_query.has_value());
+    EXPECT_EQ(compound.multi_token_query->normalized_nfc, "amatus sum");
+    EXPECT_FALSE(compound.compound_analyses.empty());
+
+    const auto punctuated = test::engine().analyze_text("amatus, sum");
+    EXPECT_EQ(punctuated.status, QueryStatus::error);
+    ASSERT_EQ(punctuated.diagnostics.size(), 1U);
+    EXPECT_EQ(punctuated.diagnostics.front().code, "unsupported-multi-token");
+
+    const auto single = test::engine().analyze_line("“amo,”");
+    ASSERT_EQ(single.size(), 1U);
+    EXPECT_EQ(single.front().surface.original_utf8, "amo");
+    EXPECT_FALSE(single.front().multi_token_query.has_value());
+}
+
+TEST(EngineTest, AnalyzeLinePreservesUtf8NormalizationAndErrorsPerToken) {
+    const auto marked =
+        test::engine().analyze_line("puella\xCC\x84\vros\xC4\x83");
+    ASSERT_EQ(marked.size(), 2U);
+    EXPECT_EQ(marked[0].surface.normalized_nfc, "puellā");
+    EXPECT_EQ(marked[1].surface.normalized_nfc, "rosă");
+    EXPECT_FALSE(marked[0].analyses.empty());
+    EXPECT_FALSE(marked[1].analyses.empty());
+
+    std::string malformed{"amo "};
+    malformed.append("\xC3\x28", 2U);
+    malformed.append("\tamare");
+    const auto results = test::engine().analyze_line(malformed);
+    ASSERT_EQ(results.size(), 3U);
+    EXPECT_EQ(results[0].status, QueryStatus::analyzed);
+    EXPECT_EQ(results[1].status, QueryStatus::error);
+    ASSERT_FALSE(results[1].diagnostics.empty());
+    EXPECT_EQ(results[1].diagnostics.front().code, "invalid-utf8");
+    EXPECT_EQ(results[2].status, QueryStatus::analyzed);
+}
+
+TEST(EngineTest, AnalyzeLineAppliesLegacyTwoWordsRecoveryPerToken) {
+    constexpr AnalysisOptions legacy{TwoWordsMode::legacy_first_match};
+    const auto results = test::engine().analyze_line("respublica amo", legacy);
+    ASSERT_EQ(results.size(), 2U);
+    EXPECT_EQ(results[0].status, QueryStatus::unknown);
+    EXPECT_TRUE(results[0].two_word_suggestion.has_value());
+    EXPECT_EQ(results[1].status, QueryStatus::analyzed);
 }
 
 TEST(EngineTest, UnknownQuantityKeepsLegacyAnalysesAndNfcSurface) {

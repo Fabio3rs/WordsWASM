@@ -54,11 +54,17 @@ def main() -> None:
         search_validator.validate(document)
     for document in documents["analysis"]:
         analysis_validator.validate(document)
+    for document in documents["searchLine"]:
+        search_validator.validate(document)
+    for document in documents["analysisLine"]:
+        analysis_validator.validate(document)
 
     print(json.dumps({
         "ok": True,
         "analysisDocuments": len(documents["analysis"]),
         "searchDocuments": len(documents["search"]),
+        "analysisLineDocuments": len(documents["analysisLine"]),
+        "searchLineDocuments": len(documents["searchLine"]),
     }))
 
 

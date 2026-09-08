@@ -35,8 +35,17 @@ class Engine final {
 
     [[nodiscard]] QueryResult analyze(std::string_view utf8,
                                       AnalysisOptions options = {}) const;
+    // Preserve lexical context collected by TextTokenCursor for analysis
+    // policies that depend on the following boundary, such as abbreviations.
+    [[nodiscard]] QueryResult analyze(const TextToken &token,
+                                      AnalysisOptions options = {}) const;
     [[nodiscard]] QueryResult analyze_text(std::string_view utf8,
                                            AnalysisOptions options = {}) const;
+    // Analyze a complete input line using the historical one-token lookahead:
+    // a recognized verbal compound consumes two tokens, while a failed peek
+    // leaves both word results intact.
+    [[nodiscard]] std::vector<QueryResult>
+    analyze_line(std::string_view utf8, AnalysisOptions options = {}) const;
     [[nodiscard]] const Database &
     database() const noexcept WORDS_LIFETIMEBOUND {
         return *database_;

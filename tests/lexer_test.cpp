@@ -8,6 +8,44 @@
 
 namespace words {
 
+TEST(TextTokenCursorTest, PeeksWithoutConsumingAndClassifiesBoundaries) {
+    constexpr std::string_view input = "“C.”,\tamatus sum!";
+    TextTokenCursor cursor{input};
+
+    const auto *peeked = cursor.peek();
+    ASSERT_NE(peeked, nullptr);
+    EXPECT_EQ(peeked->text, "C");
+    EXPECT_EQ(cursor.peek(), peeked);
+    EXPECT_TRUE(
+        has_any_flag(peeked->boundary_after.flags, BoundaryFlag::period));
+    EXPECT_TRUE(
+        has_any_flag(peeked->boundary_after.flags, BoundaryFlag::quote));
+    EXPECT_TRUE(
+        has_any_flag(peeked->boundary_after.flags, BoundaryFlag::comma));
+    EXPECT_TRUE(
+        has_any_flag(peeked->boundary_after.flags, BoundaryFlag::whitespace));
+
+    const auto first = cursor.next();
+    ASSERT_TRUE(first.has_value());
+    EXPECT_EQ(first->text, "C");
+    EXPECT_EQ(
+        input.substr(first->byte_begin, first->byte_end - first->byte_begin),
+        first->text);
+
+    const auto second = cursor.next();
+    ASSERT_TRUE(second.has_value());
+    EXPECT_EQ(second->text, "amatus");
+    EXPECT_TRUE(
+        has_any_flag(second->boundary_after.flags, BoundaryFlag::whitespace));
+
+    const auto third = cursor.next();
+    ASSERT_TRUE(third.has_value());
+    EXPECT_EQ(third->text, "sum");
+    EXPECT_TRUE(
+        has_any_flag(third->boundary_after.flags, BoundaryFlag::exclamation));
+    EXPECT_EQ(cursor.peek(), nullptr);
+}
+
 TEST(LatinLexerTest, KeepsDistinctSurfaceAndLookupRepresentations) {
     const LatinLexer lexer;
     const auto result = lexer.lex("JŪVĔNIS");

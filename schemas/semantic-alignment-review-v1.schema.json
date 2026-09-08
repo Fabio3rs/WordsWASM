@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://words.example/schemas/semantic-alignment-review-v1.schema.json",
+  "title": "Semantic alignment review v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "algorithm", "packet_key", "packet_revision", "analysis", "decision", "revision"],
+  "properties": {
+    "schema": {"const": "whitakers-words.semantic-alignment-review.v1"},
+    "algorithm": {"const": "explainable-multilingual-section-overlap-v1"},
+    "packet_key": {
+      "type": "object",
+      "required": ["ascii_lemma", "proper"],
+      "properties": {
+        "ascii_lemma": {"type": "string", "pattern": "^[a-z]+$"},
+        "proper": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "packet_revision": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "analysis": {"type": "array", "minItems": 1, "items": {"type": "object"}},
+    "decision": {
+      "type": "object",
+      "required": ["status", "required", "automatic_promotion_allowed"],
+      "properties": {
+        "status": {"const": "needs_review"},
+        "required": {"type": "string", "minLength": 1},
+        "automatic_promotion_allowed": {"const": false}
+      },
+      "additionalProperties": false
+    },
+    "revision": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

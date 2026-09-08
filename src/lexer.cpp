@@ -49,6 +49,97 @@ is_supported_quantity_mark(const utf8proc_int32_t codepoint) noexcept {
 }
 
 [[nodiscard]] constexpr bool
+is_unicode_whitespace(const utf8proc_int32_t codepoint) noexcept {
+    return (codepoint >= 0x0009 && codepoint <= 0x000D) ||
+           codepoint == 0x0020 || codepoint == 0x0085 || codepoint == 0x00A0 ||
+           codepoint == 0x1680 ||
+           (codepoint >= 0x2000 && codepoint <= 0x200A) ||
+           codepoint == 0x2028 || codepoint == 0x2029 || codepoint == 0x202F ||
+           codepoint == 0x205F || codepoint == 0x3000;
+}
+
+[[nodiscard]] BoundaryFlag
+boundary_flag(const utf8proc_int32_t codepoint) noexcept {
+    if (is_unicode_whitespace(codepoint)) {
+        return BoundaryFlag::whitespace;
+    }
+
+    switch (codepoint) {
+    case U',':
+    case U'،':
+    case U'、':
+    case U'，':
+        return BoundaryFlag::comma;
+    case U';':
+    case U'؛':
+    case U'；':
+        return BoundaryFlag::semicolon;
+    case U':':
+    case U'：':
+        return BoundaryFlag::colon;
+    case U'.':
+    case U'․':
+    case U'…':
+    case U'。':
+    case U'．':
+        return BoundaryFlag::period;
+    case U'?':
+    case U'؟':
+    case U'？':
+        return BoundaryFlag::question;
+    case U'!':
+    case U'！':
+        return BoundaryFlag::exclamation;
+    case U'\'':
+    case U'’':
+        return BoundaryFlag::apostrophe;
+    case U'"':
+        return BoundaryFlag::quote;
+    default:
+        break;
+    }
+
+    const auto category = utf8proc_category(codepoint);
+    if (category == UTF8PROC_CATEGORY_PI || category == UTF8PROC_CATEGORY_PF) {
+        return BoundaryFlag::quote;
+    }
+    if (category == UTF8PROC_CATEGORY_PD) {
+        return BoundaryFlag::dash;
+    }
+    if (category == UTF8PROC_CATEGORY_PS || category == UTF8PROC_CATEGORY_PE) {
+        return BoundaryFlag::bracket;
+    }
+    if (category >= UTF8PROC_CATEGORY_PC && category <= UTF8PROC_CATEGORY_PO) {
+        return BoundaryFlag::other_punctuation;
+    }
+    return BoundaryFlag::none;
+}
+
+struct DecodedCodepoint final {
+    utf8proc_int32_t value{};
+    std::size_t byte_count{1U};
+    bool valid{};
+};
+
+[[nodiscard]] DecodedCodepoint
+decode_at(const std::span<const utf8proc_uint8_t> bytes,
+          const std::size_t byte_offset) noexcept {
+    const auto remaining = bytes.subspan(byte_offset);
+    const auto available = static_cast<utf8proc_ssize_t>(std::min(
+        remaining.size(), static_cast<std::size_t>(
+                              std::numeric_limits<utf8proc_ssize_t>::max())));
+    utf8proc_int32_t codepoint{};
+    const auto consumed =
+        utf8proc_iterate(remaining.data(), available, &codepoint);
+    if (consumed <= 0) {
+        return {};
+    }
+    return DecodedCodepoint{.value = codepoint,
+                            .byte_count = static_cast<std::size_t>(consumed),
+                            .valid = true};
+}
+
+[[nodiscard]] constexpr bool
 is_supported_original_codepoint(const utf8proc_int32_t codepoint) noexcept {
     if ((codepoint >= 'A' && codepoint <= 'Z') ||
         (codepoint >= 'a' && codepoint <= 'z') ||
@@ -206,6 +297,80 @@ build_logical_offsets(SurfaceForm &surface) {
 }
 
 } // namespace
+
+std::optional<TextTokenCursor::CachedToken>
+TextTokenCursor::scan(const std::size_t byte_offset) const noexcept {
+    const auto bytes = std::span<const utf8proc_uint8_t>{
+        reinterpret_cast<const utf8proc_uint8_t *>(input_.data()),
+        input_.size()};
+    auto cursor = byte_offset;
+
+    while (cursor < bytes.size()) {
+        const auto decoded = decode_at(bytes, cursor);
+        if (!decoded.valid ||
+            boundary_flag(decoded.value) == BoundaryFlag::none) {
+            break;
+        }
+        cursor += decoded.byte_count;
+    }
+    if (cursor == bytes.size()) {
+        return std::nullopt;
+    }
+
+    const auto word_begin = cursor;
+    while (cursor < bytes.size()) {
+        const auto decoded = decode_at(bytes, cursor);
+        if (decoded.valid &&
+            boundary_flag(decoded.value) != BoundaryFlag::none) {
+            break;
+        }
+        cursor += decoded.byte_count;
+    }
+    const auto word_end = cursor;
+
+    TextBoundary boundary{.byte_begin = word_end, .byte_end = word_end};
+    while (cursor < bytes.size()) {
+        const auto decoded = decode_at(bytes, cursor);
+        if (!decoded.valid) {
+            break;
+        }
+        const auto flag = boundary_flag(decoded.value);
+        if (flag == BoundaryFlag::none) {
+            break;
+        }
+        boundary.flags |= flag;
+        cursor += decoded.byte_count;
+        boundary.byte_end = cursor;
+    }
+
+    return CachedToken{
+        .token =
+            TextToken{
+                .text = input_.substr(word_begin, word_end - word_begin),
+                .byte_begin = word_begin,
+                .byte_end = word_end,
+                .boundary_after = boundary,
+            },
+        .next_cursor = cursor,
+    };
+}
+
+const TextToken *TextTokenCursor::peek() noexcept {
+    if (!peeked_) {
+        peeked_ = scan(cursor_);
+    }
+    return peeked_ ? &peeked_->token : nullptr;
+}
+
+std::optional<TextToken> TextTokenCursor::next() noexcept {
+    if (peek() == nullptr) {
+        return std::nullopt;
+    }
+    auto token = peeked_->token;
+    cursor_ = peeked_->next_cursor;
+    peeked_.reset();
+    return token;
+}
 
 std::expected<SurfaceForm, LexError>
 LatinLexer::lex(const std::string_view utf8) const {

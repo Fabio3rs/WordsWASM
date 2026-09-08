@@ -1,7 +1,10 @@
 import {
   createWordsAnalysisEngine,
+  type AnalysisDocument,
   type AnalysisHit,
+  type SearchDocument,
   type SearchHit,
+  type WordsAnalysisEngine,
 } from "../wasmsrc/words-engine.mjs";
 
 declare const searchHit: SearchHit;
@@ -35,6 +38,10 @@ if (analysisHit.kind !== "artificial" &&
 }
 declare const addonStep: import("../wasmsrc/words-engine.mjs").AddonStepBase;
 addonStep.enclitic satisfies boolean;
+
+declare const engine: WordsAnalysisEngine;
+engine.analyzeLine("amo amatus sum")[0] satisfies AnalysisDocument;
+engine.searchLine("amo amatus sum")[0] satisfies SearchDocument;
 
 void createWordsAnalysisEngine({
   datasetId: "sha256:test",

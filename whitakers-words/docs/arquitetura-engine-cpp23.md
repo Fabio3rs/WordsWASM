@@ -391,9 +391,19 @@ auxiliar. Isso evita inventar um `RuleId` persistente para a forma sintética.
 O backend completo publica `method: compound`; o search conserva a regra de
 origem e acrescenta `compound.construction` e `compound.auxiliary`.
 
-Frases gerais e entradas com mais de dois tokens retornam erro explícito. O
-`LatinLexer` continua sendo um lexer de palavra, sem whitespace ou estado de
-frase.
+Frases gerais e entradas com mais de dois tokens retornam erro explícito em
+`analyze_text`. O `LatinLexer` continua sendo um lexer de palavra; a camada de
+texto é o `TextTokenCursor`, que percorre UTF-8 uma vez e entrega
+`std::string_view` e offsets em bytes sem materializar cópias dos tokens.
+`peek()` mantém somente um token em cache e não avança o cursor.
+
+As fronteiras são preservadas como uma máscara `BoundaryFlag`. Whitespace,
+aspas e delimitadores de agrupamento permitem a tentativa de composto;
+vírgula, ponto, ponto e vírgula, dois-pontos, interrogação, exclamação,
+apóstrofo e travessão a bloqueiam. Assim, `amatus sum` pode compor, enquanto
+`amatus.sum` produz duas unidades em `analyze_line`. A distinção de `period`
+também deixa disponível o contexto usado pelas abreviações do WORDS original,
+sem misturá-lo à superfície entregue ao lexer de palavra.
 
 Também não se deve confundir este caminho com `Tricks.Two_Words`. O porte dessa
 rotina é uma recuperação opcional de **uma** grafia concatenada, habilitada por
@@ -533,13 +543,46 @@ Engine::create(std::vector<std::byte>, EngineConfig)
 Engine::analyze(std::string_view) const
     -> QueryResult;
 
+Engine::analyze(const TextToken&) const
+    -> QueryResult;
+
 Engine::analyze_text(std::string_view) const
     -> QueryResult;
+
+Engine::analyze_line(std::string_view) const
+    -> std::vector<QueryResult>;
 ```
 
 `analyze` permanece a via sem ambiguidade para uma palavra. `analyze_text`
-tokeniza somente whitespace ASCII, delega uma palavra a `analyze` e limita a
-entrada composta a dois tokens; não promete análise sintática de uma oração.
+representa uma unidade semântica e limita a entrada composta a dois tokens;
+não promete análise sintática de uma oração. `analyze_line` separa qualquer
+whitespace ou pontuação Unicode, mantém uma `SurfaceForm` por unidade e
+reproduz o lookahead histórico: se a fronteira permite e dois tokens formam um
+composto reconhecido, consome ambos; caso contrário, preserva as duas análises
+independentes. O token observado à frente é reutilizado quando a composição
+falha, sem repetir lexer ou análise. O cursor é lazy, baseado em
+`std::string_view` e `std::span`, e não cria um vetor intermediário de strings.
+Marcas combinantes de quantidade não são separadores e continuam sob
+responsabilidade do lexer de palavra.
+
+A sobrecarga tipada de `analyze` recebe o `TextToken` completo. O caminho de
+linha a utiliza, de modo que `boundary_after` e seus offsets não sejam
+descartados na chamada do núcleo. A sobrecarga de `std::string_view` permanece
+como conveniência para consumidores de uma palavra e constrói um token sem
+fronteira. O perfil canônico ainda não ativa a filtragem interativa de
+abreviações, mas uma política futura pode consultar `BoundaryFlag::period`
+sem retokenizar nem acrescentar pontuação à superfície lexical.
+
+O binding browser preserva a mesma separação: `analyze`/`search` chamam
+`analyze_text`, enquanto `analyzeLine`/`searchLine` chamam `analyze_line` e
+devolvem arrays dos documentos browser v3 já existentes. Na fronteira Embind,
+o vetor externo é `std::vector<BrowserSearchResult>`; o wrapper o copia para um
+array JavaScript e libera tanto esse handle quanto os vetores aninhados.
+
+Em `analyze_text`, `query.text` corresponde à entrada completa dessa chamada.
+Em `analyze_line`, cada resultado corresponde à unidade delimitada pelos
+offsets dos tokens: pontuação externa não integra `query.text`, enquanto o
+whitespace interno de um composto reconhecido é preservado no trecho original.
 
 `EngineConfig` exige um `datasetId` no formato `sha256:`. O PoC ainda não
 armazena esse valor, portanto ele é fornecido pelo host.
@@ -551,13 +594,21 @@ words_cli --database FILE --dataset-id sha256:... \
           --format analysis|search LATIN_TEXT
 ```
 
-Consultas de dois tokens devem ser passadas como um único argumento quoted,
-por exemplo `"amata est"`.
+O CLI junta argumentos posicionais, portanto aceita tanto `amo amare` quanto
+`"amo amare"`. Cada palavra independente produz um documento JSON; um composto
+como `"amata est"` consome os dois tokens e produz somente um documento.
 
-Para testes de corpus, `--batch-json-lines` lê uma consulta não vazia por linha
-de `stdin` e escreve um documento JSON por linha. O processo carrega um único
-snapshot imutável e o reutiliza no lote; esse modo existe para aceitação e
-benchmark, não altera a API semântica nem cria estado entre consultas.
+Para testes de corpus, `--batch-json-lines` lê uma consulta semântica não vazia
+por linha de `stdin` e escreve exatamente um documento JSON por linha. Cada
+entrada é processada por `analyze_text`: uma palavra ou composto reconhecido é
+aceito, enquanto uma frase geral retorna um único envelope de erro. O processo
+carrega um snapshot imutável e o reutiliza no lote; esse modo existe para
+aceitação e benchmark, sem criar estado entre consultas. A análise livre de
+uma linha em várias unidades pertence ao modo posicional do CLI e à API
+`analyze_line`.
+
+Diferenças deliberadas do pré-processamento interativo histórico são mantidas
+em [`diferencas-comportamentais-legado.md`](diferencas-comportamentais-legado.md).
 
 Falha de uso ou carregamento pertence ao status do processo. Uma consulta
 inválida produz um documento JSON com `status:error`.

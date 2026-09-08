@@ -19,6 +19,10 @@ function fakeResult(schema, text, twoWords) {
   };
 }
 
+function fakeLineResults(schema, text, twoWords) {
+  return text.split(/\s+/u).map((unit) => fakeResult(schema, unit, twoWords));
+}
+
 function fakeFactory(
   log,
   loadResult = {ok: true, code: "", message: ""},
@@ -45,6 +49,18 @@ function fakeFactory(
         return fakeResult("whitakers-words.browser-search", text, twoWords);
       }
 
+      analyzeLine(text, twoWords) {
+        log.push(["analyzeLine", text, twoWords]);
+        return fakeLineResults(
+          "whitakers-words.browser-analysis", text, twoWords,
+        );
+      }
+
+      searchLine(text, twoWords) {
+        log.push(["searchLine", text, twoWords]);
+        return fakeLineResults("whitakers-words.browser-search", text, twoWords);
+      }
+
       delete() { log.push(["delete"]); }
     },
   });
@@ -69,6 +85,14 @@ test("loads bytes once and exposes typed analysis/search contracts", async () =>
     engine.search("anaticulus", {twoWords: true}).schema,
     "whitakers-words.browser-search",
   );
+  assert.deepEqual(
+    engine.analyzeLine("mālum amamus").map(({query}) => query.text),
+    ["mālum", "amamus"],
+  );
+  assert.deepEqual(
+    engine.searchLine("amo amare", {twoWords: true}).map(({query}) => query.text),
+    ["amo", "amare"],
+  );
   engine.dispose();
   engine.dispose();
 
@@ -76,9 +100,12 @@ test("loads bytes once and exposes typed analysis/search contracts", async () =>
     ["load", [1, 2, 3], datasetId],
     ["analyze", "mālum", false],
     ["search", "anaticulus", true],
+    ["analyzeLine", "mālum amamus", false],
+    ["searchLine", "amo amare", true],
     ["delete"],
   ]);
   assert.throws(() => engine.analyze("amo"), /disposed/);
+  assert.throws(() => engine.searchLine("amo amare"), /disposed/);
 });
 
 test("deletes the native object when WWDB validation fails", async () => {
@@ -115,7 +142,9 @@ test("search database exposes search but refuses the full contract", async () =>
     engine.search("puella").schema,
     "whitakers-words.browser-search",
   );
+  assert.equal(engine.searchLine("puella rosa").length, 2);
   assert.throws(() => engine.analyze("puella"), /words-full\.wwdb/);
+  assert.throws(() => engine.analyzeLine("puella rosa"), /words-full\.wwdb/);
   engine.dispose();
 });
 
@@ -238,6 +267,54 @@ test("releases every direct result handle when hit copying throws", async () => 
   });
   assert.throws(() => engine.search("x"), /unsupported morphology/);
   assert.deepEqual(deletions.sort(), ["diagnostics", "hits", "suggestions"]);
+  engine.dispose();
+});
+
+test("releases the line and nested handles when result copying throws", async () => {
+  const deletions = [];
+  const moduleFactory = async () => ({
+    AnalysisEngine: class {
+      loadDatabase() { return {ok: true, code: "", message: ""}; }
+      datasetId() { return datasetId; }
+      databaseBytes() { return 1; }
+      databaseKind() { return "full"; }
+      searchLine() {
+        const result = {
+          schema: "whitakers-words.browser-search",
+          schemaVersion: 3,
+          datasetId,
+          query: {text: "x", normalized: "x", mode: "latin"},
+          status: "analyzed",
+          hits: fakeVector([{
+            kind: "lexical",
+            partOfSpeech: "noun",
+            form: {
+              stem: "x",
+              hasStemKey: false,
+              stemKey: 0,
+              ending: "",
+              recognized: "x",
+            },
+            morphology: {kind: "unsupported"},
+          }], deletions, "hits"),
+          diagnostics: fakeVector([], deletions, "diagnostics"),
+          suggestions: fakeVector([], deletions, "suggestions"),
+        };
+        return fakeVector([result], deletions, "results");
+      }
+      delete() {}
+    },
+  });
+  const engine = await createWordsAnalysisEngine({
+    datasetId,
+    databaseBytes: new Uint8Array([1]),
+    moduleFactory,
+  });
+  assert.throws(() => engine.searchLine("x"), /unsupported morphology/);
+  assert.deepEqual(
+    deletions.sort(),
+    ["diagnostics", "hits", "results", "suggestions"],
+  );
   engine.dispose();
 });
 

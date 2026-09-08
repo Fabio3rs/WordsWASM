@@ -321,6 +321,52 @@ def main() -> None:
     if any(item["form"]["ending"] != "ā" for item in marked["analyses"]):
         raise AssertionError("surface ending did not preserve the macron")
     analysis_validator.validate(marked)
+
+    line = subprocess.run(
+        [
+            *native_base,
+            "--format", "search",
+            "amo", "amatus", "sum", "amare",
+        ],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    line_documents = [
+        json.loads(document) for document in line.stdout.splitlines()
+    ]
+    if [document["query"]["text"] for document in line_documents] != [
+        "amo", "amatus sum", "amare",
+    ]:
+        raise AssertionError("CLI lookahead did not preserve word boundaries")
+    for document in line_documents:
+        search_validator.validate(document)
+
+    batch_lines = subprocess.run(
+        [*native_base, "--format", "search", "--batch-json-lines"],
+        check=True,
+        input="amo amare\namatus sum\n",
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    batch_documents = [
+        json.loads(document) for document in batch_lines.stdout.splitlines()
+    ]
+    if len(batch_documents) != 2:
+        raise AssertionError("batch mode must emit one document per input line")
+    if batch_documents[0]["query"]["text"] != "amo amare":
+        raise AssertionError("batch mode lost the first input query")
+    if batch_documents[0]["status"] != "error":
+        raise AssertionError("a general phrase must remain one batch query")
+    if batch_documents[1]["query"]["text"] != "amatus sum":
+        raise AssertionError("batch mode lost the compound query")
+    if batch_documents[1]["status"] != "analyzed":
+        raise AssertionError("a recognized compound must work in batch mode")
+    for document in batch_documents:
+        search_validator.validate(document)
+
     if cpp_documents:
         raise AssertionError(
             f"unused batched C++ queries: {sorted(cpp_documents)}")

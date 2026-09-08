@@ -53,6 +53,7 @@ const engine = await createWordsAnalysisEngine({
 
 let expectedSearch;
 const expectedSearches = new Map();
+let expectedSearchLine;
 try {
   const macron = engine.analyze("mālum");
   assert.equal(macron.schema, "whitakers-words.browser-analysis");
@@ -188,6 +189,23 @@ try {
   assert.equal(compound.compound.auxiliary, "est");
   assert.equal(compound.form.recognized, "amata est");
 
+  expectedSearchLine = engine.searchLine("amo, amatus\u00A0sum; amare");
+  assert.deepEqual(
+    expectedSearchLine.map(({query}) => query.text),
+    ["amo", "amatus\u00A0sum", "amare"],
+  );
+  assert.ok(expectedSearchLine[1].hits.some((hit) =>
+    hit.kind === "compound" && hit.compound.construction === "finite-sum"
+  ));
+  const analysisLine = engine.analyzeLine("amo amatus sum");
+  assert.equal(analysisLine.length, 2);
+  assert.ok(analysisLine.every(({hits}) => hits.some((hit) =>
+    hit.kind !== "artificial" && typeof hit.meaning === "string"
+  )));
+  const suggestedLine = engine.searchLine("respublica amo", {twoWords: true});
+  assert.equal(suggestedLine.length, 2);
+  assert.equal(suggestedLine[0].suggestions[0].method, "two-words");
+
   const auxiliaryEnclitic = engine.search("amata estque").hits.find((hit) =>
     hit.kind === "compound"
   );
@@ -233,8 +251,16 @@ if (searchDatabasePath !== undefined) {
     ]) {
       assert.deepEqual(searchEngine.search(fixture), expectedSearches.get(fixture));
     }
+    assert.deepEqual(
+      searchEngine.searchLine("amo, amatus\u00A0sum; amare"),
+      expectedSearchLine,
+    );
     assert.throws(
       () => searchEngine.analyze("anaticulus"),
+      /words-full\.wwdb/,
+    );
+    assert.throws(
+      () => searchEngine.analyzeLine("amo amare"),
       /words-full\.wwdb/,
     );
   } finally {

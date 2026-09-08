@@ -656,6 +656,20 @@ browser_search_result(const words::Engine &engine,
     return output;
 }
 
+[[nodiscard]] std::vector<BrowserSearchResult>
+browser_search_results(const words::Engine &engine,
+                       const std::vector<words::QueryResult> &results,
+                       const bool include_meanings) {
+    std::vector<BrowserSearchResult> output;
+    output.reserve(results.size());
+    std::ranges::transform(results, std::back_inserter(output),
+                           [&](const words::QueryResult &result) {
+                               return browser_search_result(engine, result,
+                                                            include_meanings);
+                           });
+    return output;
+}
+
 class BrowserAnalysisEngine final {
   public:
     [[nodiscard]] LoadResult load_database(emscripten::val bytes,
@@ -747,6 +761,26 @@ class BrowserAnalysisEngine final {
         const auto options = analysis_options(two_words);
         const auto result = engine_->analyze_text(utf8, options);
         return browser_search_result(*engine_, result, false);
+    }
+
+    [[nodiscard]] std::vector<BrowserSearchResult>
+    analyze_line(const std::string &utf8, const bool two_words) const {
+        require_ready();
+        if (!engine_->supports_full_analysis()) {
+            throw std::logic_error{
+                "analysis requires a full WWDB with meanings"};
+        }
+        const auto options = analysis_options(two_words);
+        const auto results = engine_->analyze_line(utf8, options);
+        return browser_search_results(*engine_, results, true);
+    }
+
+    [[nodiscard]] std::vector<BrowserSearchResult>
+    search_line(const std::string &utf8, const bool two_words) const {
+        require_ready();
+        const auto options = analysis_options(two_words);
+        const auto results = engine_->analyze_line(utf8, options);
+        return browser_search_results(*engine_, results, false);
     }
 
     void reset() noexcept {
@@ -931,6 +965,8 @@ EMSCRIPTEN_BINDINGS(words_analysis_engine) {
         .field("hits", &BrowserSearchResult::hits)
         .field("diagnostics", &BrowserSearchResult::diagnostics)
         .field("suggestions", &BrowserSearchResult::suggestions);
+    emscripten::register_vector<BrowserSearchResult>(
+        "VectorResolvedSearchResult");
 
     emscripten::class_<BrowserAnalysisEngine>("AnalysisEngine")
         .constructor<>()
@@ -941,5 +977,7 @@ EMSCRIPTEN_BINDINGS(words_analysis_engine) {
         .function("databaseKind", &BrowserAnalysisEngine::database_kind)
         .function("analyze", &BrowserAnalysisEngine::analyze)
         .function("search", &BrowserAnalysisEngine::search)
+        .function("analyzeLine", &BrowserAnalysisEngine::analyze_line)
+        .function("searchLine", &BrowserAnalysisEngine::search_line)
         .function("reset", &BrowserAnalysisEngine::reset);
 }

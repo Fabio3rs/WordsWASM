@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://words.example/schemas/lexical-embedding-calibration-v1.schema.json",
+  "title": "Lexical embedding calibration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "minimum_precision", "cosine_threshold", "minimum_margin", "promotion_allowed", "gold_sha256", "policy"],
+  "properties": {
+    "schema": {"const": "whitakers-words.lexical-embedding-calibration.v1"},
+    "run_id": {"type": "string", "pattern": "^embedding:[0-9a-f]{64}$"},
+    "minimum_precision": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+    "cosine_threshold": {"type": "number", "minimum": 0, "maximum": 1},
+    "minimum_margin": {"type": "number", "minimum": 0, "maximum": 1},
+    "promotion_allowed": {"type": "boolean"},
+    "gold_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "policy": {"const": "mutual_top1_and_no_structural_blocker"}
+  }
+}

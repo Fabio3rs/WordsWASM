@@ -135,7 +135,11 @@ O executável `words_cli` suporta:
 - `--format analysis` para o contrato completo;
 - `--format search` para a projeção enxuta;
 - `--two-words=legacy` como recuperação opt-in;
-- `--batch-json-lines` para corpus sem recarregar a base a cada palavra.
+- múltiplas palavras separadas por whitespace ou pontuação Unicode, com
+  `TextTokenCursor` lazy, tokens em `std::string_view`, fronteiras tipadas e
+  lookahead não destrutivo para compostos verbais;
+- `--batch-json-lines` para corpus sem recarregar a base, preservando uma
+  consulta de entrada e um documento de saída por linha.
 
 Os contratos são fechados e separados:
 

@@ -294,6 +294,8 @@ export interface WordsAnalysisEngine {
   readonly databaseKind: "full" | "search";
   analyze(text: string, options?: AnalyzeOptions): AnalysisDocument;
   search(text: string, options?: AnalyzeOptions): SearchDocument;
+  analyzeLine(text: string, options?: AnalyzeOptions): AnalysisDocument[];
+  searchLine(text: string, options?: AnalyzeOptions): SearchDocument[];
   dispose(): void;
 }
 

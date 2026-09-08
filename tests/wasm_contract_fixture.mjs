@@ -31,6 +31,8 @@ try {
   process.stdout.write(JSON.stringify({
     analysis: fixtures.map(([text, options]) => engine.analyze(text, options)),
     search: fixtures.map(([text, options]) => engine.search(text, options)),
+    analysisLine: engine.analyzeLine("amo amatus sum amare"),
+    searchLine: engine.searchLine("amo amatus sum amare"),
   }));
 } finally {
   engine.dispose();

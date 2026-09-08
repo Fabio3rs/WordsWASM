@@ -66,11 +66,11 @@ parse_options(const int argc, char *const argv[]) {
             return std::unexpected("two-words mode must be legacy");
         } else if (argument.starts_with('-')) {
             return std::unexpected("unknown option: " + std::string{argument});
-        } else if (options.word.empty()) {
-            options.word = argument;
         } else {
-            return std::unexpected(
-                "pass a multi-token Latin query as one quoted argument");
+            if (!options.word.empty()) {
+                options.word.push_back(' ');
+            }
+            options.word.append(argument);
         }
     }
 
@@ -121,17 +121,31 @@ read_file(const std::filesystem::path &path) {
 void usage() {
     std::cerr << "usage: words_cli --database FILE --dataset-id sha256:... "
                  "--format analysis|search [--two-words=legacy] "
-                 "[--batch-json-lines | LATIN_TEXT]\n";
+                 "[--batch-json-lines | LATIN_TEXT ...]\n";
 }
 
-void write_result(const words::Engine &engine, const std::string_view query,
-                  const std::string_view format,
-                  const words::AnalysisOptions options) {
-    const auto result = engine.analyze_text(query, options);
+void write_result(const words::Engine &engine, const words::QueryResult &result,
+                  const std::string_view format) {
     if (format == "analysis") {
         std::cout << words::analysis_json(engine, result) << '\n';
     } else {
         std::cout << words::search_json(engine, result) << '\n';
+    }
+}
+
+void write_text_result(const words::Engine &engine,
+                       const std::string_view query,
+                       const std::string_view format,
+                       const words::AnalysisOptions options) {
+    write_result(engine, engine.analyze_text(query, options), format);
+}
+
+void write_line_results(const words::Engine &engine,
+                        const std::string_view query,
+                        const std::string_view format,
+                        const words::AnalysisOptions options) {
+    for (const auto &result : engine.analyze_line(query, options)) {
+        write_result(engine, result, format);
     }
 }
 
@@ -156,8 +170,7 @@ int main(const int argc, char *argv[]) try {
                   << engine.error().message << '\n';
         return 3;
     }
-    if (options->format == "analysis" &&
-        !(*engine)->supports_full_analysis()) {
+    if (options->format == "analysis" && !(*engine)->supports_full_analysis()) {
         std::cerr << "words_cli: unsupported-output: analysis format requires "
                      "a full WWDB with meanings\n";
         return 3;
@@ -173,13 +186,13 @@ int main(const int argc, char *argv[]) try {
                 query.pop_back();
             }
             if (!query.empty()) {
-                write_result(**engine, query, options->format,
-                             analysis_options);
+                write_text_result(**engine, query, options->format,
+                                  analysis_options);
             }
         }
     } else {
-        write_result(**engine, options->word, options->format,
-                     analysis_options);
+        write_line_results(**engine, options->word, options->format,
+                           analysis_options);
     }
     return 0;
 } catch (const std::bad_alloc &) {
