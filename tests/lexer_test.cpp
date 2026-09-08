@@ -100,21 +100,21 @@ TEST(LatinLexerTest, RejectsInvalidUtf8) {
     const std::string invalid{"\xC3\x28", 2};
     const auto result = lexer.lex(invalid);
     ASSERT_FALSE(result);
-    EXPECT_EQ(result.error().code, "invalid-utf8");
+    EXPECT_EQ(result.error().code, DiagnosticCode::invalid_utf8);
 }
 
 TEST(LatinLexerTest, RejectsConflictingQuantityMarks) {
     const LatinLexer lexer;
     const auto result = lexer.lex("a\xCC\x84\xCC\x86");
     ASSERT_FALSE(result);
-    EXPECT_EQ(result.error().code, "invalid-vowel-quantity");
+    EXPECT_EQ(result.error().code, DiagnosticCode::invalid_vowel_quantity);
 }
 
 TEST(LatinLexerTest, RejectsUnsupportedDiacritics) {
     const LatinLexer lexer;
     const auto result = lexer.lex("á");
     ASSERT_FALSE(result);
-    EXPECT_EQ(result.error().code, "unsupported-character");
+    EXPECT_EQ(result.error().code, DiagnosticCode::unsupported_character);
 }
 
 TEST(LatinLexerTest, RejectsCharactersThatCaseFoldIntoAscii) {
@@ -123,7 +123,8 @@ TEST(LatinLexerTest, RejectsCharactersThatCaseFoldIntoAscii) {
     for (const auto input : rejected) {
         const auto result = lexer.lex(input);
         ASSERT_FALSE(result) << input;
-        EXPECT_EQ(result.error().code, "unsupported-character") << input;
+        EXPECT_EQ(result.error().code, DiagnosticCode::unsupported_character)
+            << input;
     }
 }
 
@@ -131,7 +132,7 @@ TEST(LatinLexerTest, RejectsQuantityOnAConsonant) {
     const LatinLexer lexer;
     const auto result = lexer.lex("m\xCC\x84");
     ASSERT_FALSE(result);
-    EXPECT_EQ(result.error().code, "invalid-vowel-quantity");
+    EXPECT_EQ(result.error().code, DiagnosticCode::invalid_vowel_quantity);
 }
 
 } // namespace words

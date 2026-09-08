@@ -214,6 +214,21 @@ read_database(const std::filesystem::path &path) {
     return projection == Projection::part ? "part" : "part+morphology";
 }
 
+[[nodiscard]] constexpr char
+factor_kind_marker(const parsers::dependency_markov::FactorKind kind) noexcept {
+    switch (std::to_underlying(kind)) {
+    case std::to_underlying(parsers::dependency_markov::FactorKind::root):
+        return 'R';
+    case std::to_underlying(parsers::dependency_markov::FactorKind::arc):
+        return 'A';
+    case std::to_underlying(
+        parsers::dependency_markov::FactorKind::predicate_profile):
+        return 'P';
+    default:
+        return '?';
+    }
+}
+
 [[nodiscard]] bool is_verified(const ParsedFixture &parsed) {
     return parsed.fixture != nullptr && parsed.fixture->annotation &&
            parsed.fixture->annotation->status == "verified-didactic";
@@ -248,12 +263,7 @@ factors(const Analysis &analysis, const Projection projection,
         signature += value;
     };
     for (const auto &factor : factors) {
-        signature +=
-            factor.kind == parsers::dependency_markov::FactorKind::root
-                ? 'R'
-                : (factor.kind == parsers::dependency_markov::FactorKind::arc
-                       ? 'A'
-                       : 'P');
+        signature += factor_kind_marker(factor.kind);
         append(factor.event);
         for (const auto &context : factor.contexts) {
             append(context);
@@ -410,8 +420,10 @@ diagnostics_json(const parsers::dependency_markov::Diagnostics &diagnostics) {
             const auto score = model.score(factors(candidate, projection, order,
                                                    include_predicate_profiles));
             all_diagnostics.merge(score.diagnostics);
-            candidates.push_back(ScoredCandidate{&candidate, score.log_score,
-                                                 score.diagnostics});
+            candidates.push_back(
+                ScoredCandidate{.candidate = &candidate,
+                                .score = score.log_score,
+                                .diagnostics = score.diagnostics});
         }
         auto model_only = candidates;
         std::ranges::stable_sort(
@@ -544,8 +556,9 @@ int main(const int argc, char *argv[]) try {
     parsed.reserve(fixtures.size());
     for (const auto &fixture : fixtures) {
         parsed.push_back(ParsedFixture{
-            &fixture,
-            experiment.run(fixture, parsers::Strategy::dependency_tree_oracle),
+            .fixture = &fixture,
+            .parser_output = experiment.run(
+                fixture, parsers::Strategy::dependency_tree_oracle),
         });
     }
 

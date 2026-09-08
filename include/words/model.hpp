@@ -3,14 +3,34 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
 namespace words {
+
+class Engine;
+
+// Opaque provenance carried by analysis results.  Consumers can compare it
+// only through Engine::owns(), so dataset strings cannot be substituted for a
+// result's actual origin by accident.
+class DatasetIdentity final {
+  public:
+    DatasetIdentity() = default;
+    auto operator<=>(const DatasetIdentity &) const = default;
+
+  private:
+    explicit DatasetIdentity(std::string value) : value_{std::move(value)} {}
+
+    std::string value_;
+
+    friend class Engine;
+};
 
 template <class Tag> class Id final {
   public:
@@ -345,6 +365,28 @@ enum class QueryStatus : std::uint8_t {
     error,
 };
 
+// Diagnostic codes cross the lexer, engine and presentation boundaries.  Keep
+// the closed vocabulary typed here; textual spellings belong to adapters.
+enum class DiagnosticCode : std::uint8_t {
+    empty_input,
+    input_too_large,
+    invalid_utf8,
+    invalid_vowel_quantity,
+    unicode_normalization_failed,
+    unsupported_character,
+    unsupported_part_of_speech,
+    unsupported_token_count,
+    unsupported_multi_token,
+    unknown_word,
+    two_words_suggestion,
+};
+
+enum class DiagnosticSeverity : std::uint8_t {
+    info,
+    warning,
+    error,
+};
+
 enum class TwoWordsMode : std::uint8_t {
     disabled,
     legacy_first_match,
@@ -361,6 +403,7 @@ enum class CompoundKind : std::uint8_t {
 struct SurfaceRange final {
     std::uint32_t begin{};
     std::uint32_t count{};
+    auto operator<=>(const SurfaceRange &) const = default;
 };
 
 struct SurfaceForm final {
@@ -389,6 +432,7 @@ struct NounMorphology final {
     GrammaticalCase grammatical_case{GrammaticalCase::unknown};
     GrammaticalNumber number{GrammaticalNumber::unknown};
     Gender gender{Gender::unknown};
+    auto operator<=>(const NounMorphology &) const = default;
 };
 
 struct AdjectiveMorphology final {
@@ -398,6 +442,7 @@ struct AdjectiveMorphology final {
     GrammaticalNumber number{GrammaticalNumber::unknown};
     Gender gender{Gender::unknown};
     Degree degree{Degree::unknown};
+    auto operator<=>(const AdjectiveMorphology &) const = default;
 };
 
 struct PronounMorphology final {
@@ -406,6 +451,7 @@ struct PronounMorphology final {
     GrammaticalCase grammatical_case{GrammaticalCase::unknown};
     GrammaticalNumber number{GrammaticalNumber::unknown};
     Gender gender{Gender::unknown};
+    auto operator<=>(const PronounMorphology &) const = default;
 };
 
 struct NumeralMorphology final {
@@ -415,10 +461,12 @@ struct NumeralMorphology final {
     GrammaticalNumber number{GrammaticalNumber::unknown};
     Gender gender{Gender::unknown};
     NumeralType numeral_type{NumeralType::unknown};
+    auto operator<=>(const NumeralMorphology &) const = default;
 };
 
 struct AdverbMorphology final {
     Degree degree{Degree::unknown};
+    auto operator<=>(const AdverbMorphology &) const = default;
 };
 
 struct VerbMorphology final {
@@ -429,6 +477,7 @@ struct VerbMorphology final {
     Mood mood{Mood::unknown};
     Person person{Person::unknown};
     GrammaticalNumber number{GrammaticalNumber::unknown};
+    auto operator<=>(const VerbMorphology &) const = default;
 };
 
 struct ParticipleMorphology final {
@@ -439,6 +488,7 @@ struct ParticipleMorphology final {
     Gender gender{Gender::unknown};
     Tense tense{Tense::unknown};
     Voice voice{Voice::unknown};
+    auto operator<=>(const ParticipleMorphology &) const = default;
 };
 
 struct SupineMorphology final {
@@ -447,13 +497,17 @@ struct SupineMorphology final {
     GrammaticalCase grammatical_case{GrammaticalCase::unknown};
     GrammaticalNumber number{GrammaticalNumber::unknown};
     Gender gender{Gender::unknown};
+    auto operator<=>(const SupineMorphology &) const = default;
 };
 
 struct PrepositionMorphology final {
     GrammaticalCase governs{GrammaticalCase::unknown};
+    auto operator<=>(const PrepositionMorphology &) const = default;
 };
 
-struct InvariableMorphology final {};
+struct InvariableMorphology final {
+    auto operator<=>(const InvariableMorphology &) const = default;
+};
 
 using Morphology =
     std::variant<NounMorphology, PronounMorphology, AdjectiveMorphology,
@@ -470,6 +524,7 @@ struct RewrittenFormIR final {
     std::uint8_t leading_addon_count{};
     std::string stem;
     std::string ending;
+    auto operator<=>(const RewrittenFormIR &) const = default;
 
     [[nodiscard]] std::span<const RewriteId> steps() const noexcept {
         return std::span<const RewriteId>{rules}.first(
@@ -483,6 +538,7 @@ struct DerivationIR final {
     std::array<AddonId, 3> addon_ids{};
     std::uint8_t count{};
     std::optional<RewrittenFormIR> rewritten_form;
+    auto operator<=>(const DerivationIR &) const = default;
 
     [[nodiscard]] std::span<const AddonId> steps() const noexcept {
         return std::span<const AddonId>{addon_ids}.first(
@@ -545,9 +601,9 @@ struct RomanNumeralIR final {
 using ArtificialAnalysisIR = std::variant<RomanNumeralIR>;
 
 struct Diagnostic final {
-    std::string code;
-    std::string severity;
-    std::string part_of_speech;
+    DiagnosticCode code{DiagnosticCode::unknown_word};
+    DiagnosticSeverity severity{DiagnosticSeverity::info};
+    std::optional<PartOfSpeech> part_of_speech;
 };
 
 struct MultiTokenQueryIR final {
@@ -556,6 +612,11 @@ struct MultiTokenQueryIR final {
 };
 
 struct QueryResult final {
+    QueryResult() = default;
+    explicit QueryResult(DatasetIdentity result_origin)
+        : origin{std::move(result_origin)} {}
+
+    DatasetIdentity origin;
     SurfaceForm surface;
     // Single-word analysis continues to use SurfaceForm directly.  Only the
     // bounded two-token API allocates these strings, keeping ranges in the IR
@@ -575,5 +636,24 @@ struct QueryResult final {
     std::vector<ArtificialAnalysisIR> artificial_analyses;
     std::vector<Diagnostic> diagnostics;
 };
+
+// QueryResult intentionally stores lexical, compound and artificial analyses
+// separately because their identities differ.  This visitor gives consumers
+// one exhaustive read path without forcing those distinct domains into fake
+// IDs or parallel merge loops.
+template <class Visitor>
+constexpr void for_each_analysis(const QueryResult &result, Visitor &&visitor) {
+    auto &&callable = visitor;
+    for (const auto &analysis : result.analyses) {
+        std::invoke(callable, analysis);
+    }
+    for (const auto &analysis : result.compound_analyses) {
+        std::invoke(callable, analysis);
+    }
+    for (const auto &analysis : result.artificial_analyses) {
+        std::visit([&](const auto &value) { std::invoke(callable, value); },
+                   analysis);
+    }
+}
 
 } // namespace words

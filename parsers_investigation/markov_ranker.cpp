@@ -67,6 +67,14 @@
 
 namespace {
 
+constexpr double score_comparison_epsilon{1.0e-12};
+constexpr std::uint64_t fnv1a_64_offset_basis{1'469'598'103'934'665'603ULL};
+constexpr std::uint64_t fnv1a_64_prime{1'099'511'628'211ULL};
+constexpr std::string_view surface_linearization_name{"surface"};
+constexpr std::string_view parser_canonical_linearization_name{
+    "parser-canonical"};
+constexpr std::string_view hybrid_linearization_name{"hybrid"};
+
 enum class StateProjection { part, morphology };
 enum class TrainingTier {
     verified_gold,
@@ -597,6 +605,34 @@ training_control_name(const TrainingControl control) noexcept {
                : "counterfactual-analysis";
 }
 
+[[nodiscard]] constexpr std::string_view
+linearization_name(const double surface_weight) noexcept {
+    if (surface_weight == 1.0) {
+        return surface_linearization_name;
+    }
+    if (surface_weight == 0.0) {
+        return parser_canonical_linearization_name;
+    }
+    return hybrid_linearization_name;
+}
+
+[[nodiscard]] constexpr std::string_view
+training_control_policy(const TrainingControl control) noexcept {
+    switch (std::to_underlying(control)) {
+    case std::to_underlying(TrainingControl::observed):
+        return "train observed selected state sequences";
+    case std::to_underlying(TrainingControl::shuffle_within_sequence):
+        return "deterministically shuffle states within each selected sequence";
+    case std::to_underlying(TrainingControl::counterfactual_analysis):
+        return "select the best manual-score non-gold candidate with a "
+               "projected "
+               "sequence distinct from every gold sequence; skip fixtures "
+               "without one";
+    default:
+        return {};
+    }
+}
+
 [[nodiscard]] std::string_view
 evaluation_tier_name(const EvaluationTier tier) noexcept {
     if (tier == EvaluationTier::verified) {
@@ -742,18 +778,20 @@ training_sequences(const ParsedFixture &parsed, const TrainingTier tier,
     for (const auto &candidate : parsed.parser_output.morphology_nbest) {
         bool selected{};
         if (tier == TrainingTier::preferred_lemma_silver) {
-            selected =
-                candidate.matches_preferred_lemmas && best_silver_score &&
-                std::abs(candidate.manual_score - *best_silver_score) < 1.0e-12;
+            selected = candidate.matches_preferred_lemmas &&
+                       best_silver_score &&
+                       std::abs(candidate.manual_score - *best_silver_score) <
+                           score_comparison_epsilon;
         } else if (control == TrainingControl::counterfactual_analysis) {
             const StateSequencePair sequence{
                 surface_states(candidate, projection),
                 canonical_states(candidate, projection)};
-            selected = !candidate.matches_morphology_gold &&
-                       !gold_sequences.contains(sequence) &&
-                       best_counterfactual_score &&
-                       std::abs(candidate.manual_score -
-                                *best_counterfactual_score) < 1.0e-12;
+            selected =
+                !candidate.matches_morphology_gold &&
+                !gold_sequences.contains(sequence) &&
+                best_counterfactual_score &&
+                std::abs(candidate.manual_score - *best_counterfactual_score) <
+                    score_comparison_epsilon;
         } else {
             selected = candidate.matches_morphology_gold;
         }
@@ -804,7 +842,8 @@ synthetic_relinearizations(const ParsedFixture &parsed, const TrainingTier tier,
                       !gold_sequences.contains(sequence) &&
                       best_counterfactual_score &&
                       std::abs(candidate.manual_score -
-                               *best_counterfactual_score) < 1.0e-12
+                               *best_counterfactual_score) <
+                          score_comparison_epsilon
                 : candidate.matches_morphology_gold;
         if (!selected) {
             continue;
@@ -829,17 +868,17 @@ stable_shuffle_seed(const std::uint64_t seed, const std::string_view fixture_id,
                     const std::size_t ordinal) noexcept {
     // FNV-1a is used only to make the negative control reproducible across
     // standard-library implementations; this is not a cryptographic hash.
-    std::uint64_t hash = 1'469'598'103'934'665'603ULL ^ seed;
+    std::uint64_t hash = fnv1a_64_offset_basis ^ seed;
     const auto append = [&](const std::string_view text) {
         for (const auto byte : text) {
             hash ^= static_cast<unsigned char>(byte);
-            hash *= 1'099'511'628'211ULL;
+            hash *= fnv1a_64_prime;
         }
     };
     append(fixture_id);
     append(channel);
     hash ^= static_cast<std::uint64_t>(ordinal);
-    hash *= 1'099'511'628'211ULL;
+    hash *= fnv1a_64_prime;
     return hash;
 }
 
@@ -989,13 +1028,14 @@ controlled_sequence(const std::vector<std::string> &sequence,
             surface_diagnostics.merge(surface.diagnostics);
             canonical_diagnostics.merge(canonical.diagnostics);
             candidates.push_back(ScoredCandidate{
-                &candidate,
-                surface.log_probability,
-                canonical.log_probability,
-                surface_weight * surface.log_probability +
+                .candidate = &candidate,
+                .surface_score = surface.log_probability,
+                .canonical_score = canonical.log_probability,
+                .markov_score =
+                    surface_weight * surface.log_probability +
                     (1.0 - surface_weight) * canonical.log_probability,
-                surface.diagnostics,
-                canonical.diagnostics,
+                .surface_diagnostics = surface.diagnostics,
+                .canonical_diagnostics = canonical.diagnostics,
             });
         }
         auto markov_only_candidates = candidates;
@@ -1077,17 +1117,19 @@ controlled_sequence(const std::vector<std::string> &sequence,
         reciprocal_rank_sum += 1.0 / static_cast<double>(*gold_rank);
         const bool best_score_tie =
             std::abs(*best_gold_score - candidates.front().markov_score) <
-            1.0e-12;
+            score_comparison_epsilon;
         const auto top_score_candidates = static_cast<std::size_t>(
             std::ranges::count_if(candidates, [&](const auto &candidate) {
                 return std::abs(candidate.markov_score -
-                                candidates.front().markov_score) < 1.0e-12;
+                                candidates.front().markov_score) <
+                       score_comparison_epsilon;
             }));
         const auto top_score_gold_candidates = static_cast<std::size_t>(
             std::ranges::count_if(candidates, [&](const auto &candidate) {
                 return candidate.candidate->matches_morphology_gold &&
                        std::abs(candidate.markov_score -
-                                candidates.front().markov_score) < 1.0e-12;
+                                candidates.front().markov_score) <
+                           score_comparison_epsilon;
             }));
         const bool strict_top1 =
             top_score_candidates != 0U &&
@@ -1136,10 +1178,7 @@ controlled_sequence(const std::vector<std::string> &sequence,
     return Json{
         {"order", order},
         {"stateProjection", projection_name(projection)},
-        {"linearization",
-         surface_weight == 1.0
-             ? "surface"
-             : (surface_weight == 0.0 ? "parser-canonical" : "hybrid")},
+        {"linearization", linearization_name(surface_weight)},
         {"surfaceWeight", surface_weight},
         {"parserCanonicalWeight", 1.0 - surface_weight},
         {"targetExposureMultiplier", target_exposure_multiplier},
@@ -1213,20 +1252,23 @@ int main(const int argc, char *argv[]) try {
                    attested_fixtures.size());
     for (const auto &fixture : fixtures) {
         parsed.push_back(ParsedFixture{
-            &fixture,
-            experiment.run(fixture, parsers::Strategy::dependency_projection),
+            .fixture = &fixture,
+            .parser_output = experiment.run(
+                fixture, parsers::Strategy::dependency_projection),
         });
     }
     for (const auto &fixture : supplemental_fixtures) {
         parsed.push_back(ParsedFixture{
-            &fixture,
-            experiment.run(fixture, parsers::Strategy::dependency_projection),
+            .fixture = &fixture,
+            .parser_output = experiment.run(
+                fixture, parsers::Strategy::dependency_projection),
         });
     }
     for (const auto &fixture : attested_fixtures) {
         parsed.push_back(ParsedFixture{
-            &fixture,
-            experiment.run(fixture, parsers::Strategy::dependency_projection),
+            .fixture = &fixture,
+            .parser_output = experiment.run(
+                fixture, parsers::Strategy::dependency_projection),
         });
     }
 
@@ -1293,15 +1335,7 @@ int main(const int argc, char *argv[]) try {
          evaluation_coverage(parsed, options->evaluation_tier)},
         {"trainingControl", training_control_name(options->training_control)},
         {"trainingControlPolicy",
-         options->training_control == TrainingControl::observed
-             ? "train observed selected state sequences"
-             : (options->training_control ==
-                        TrainingControl::shuffle_within_sequence
-                    ? "deterministically shuffle states within each selected "
-                      "sequence"
-                    : "select the best manual-score non-gold candidate with a "
-                      "projected sequence distinct from every gold sequence; "
-                      "skip fixtures without one")},
+         training_control_policy(options->training_control)},
         {"shuffleSeed", options->shuffle_seed},
         {"exposureMultipliers", exposure_multipliers},
         {"parserCanonicalOrder",

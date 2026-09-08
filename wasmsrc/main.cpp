@@ -1,5 +1,7 @@
+#include "words/artificial.hpp"
 #include "words/engine.hpp"
 #include "words/lexeme.hpp"
+#include "words/projection.hpp"
 #include "words/semantics.hpp"
 
 #include <emscripten/bind.h>
@@ -65,7 +67,7 @@ struct BrowserMorphology final {
     std::string mood;
     std::uint32_t person{};
     std::string governs;
-    auto operator<=>(const BrowserMorphology &) const = default;
+    bool operator==(const BrowserMorphology &) const = default;
 };
 
 struct BrowserLexicalFlags final {
@@ -90,14 +92,14 @@ struct BrowserLexicalFlags final {
     std::string geography;
     std::string frequency;
     std::string source;
-    auto operator<=>(const BrowserLexicalFlags &) const = default;
+    bool operator==(const BrowserLexicalFlags &) const = default;
 };
 
 struct BrowserRuleFlags final {
     bool present{};
     std::string age;
     std::string frequency;
-    auto operator<=>(const BrowserRuleFlags &) const = default;
+    bool operator==(const BrowserRuleFlags &) const = default;
 };
 
 struct BrowserForm final {
@@ -106,7 +108,7 @@ struct BrowserForm final {
     std::uint32_t stem_key{};
     std::string ending;
     std::string recognized;
-    auto operator<=>(const BrowserForm &) const = default;
+    bool operator==(const BrowserForm &) const = default;
 };
 
 struct BrowserDerivationStep final {
@@ -121,13 +123,13 @@ struct BrowserDerivationStep final {
     std::string after;
     bool has_meaning{};
     std::string meaning;
-    auto operator<=>(const BrowserDerivationStep &) const = default;
+    bool operator==(const BrowserDerivationStep &) const = default;
 };
 
 struct BrowserDerivation final {
     std::string method;
     std::vector<BrowserDerivationStep> steps;
-    auto operator<=>(const BrowserDerivation &) const = default;
+    bool operator==(const BrowserDerivation &) const = default;
 };
 
 struct BrowserSearchHit final {
@@ -155,7 +157,8 @@ struct BrowserSearchHit final {
     std::string artificial_method;
     std::uint32_t artificial_value{};
     bool artificial_well_formed{};
-    auto operator<=>(const BrowserSearchHit &) const = default;
+    words::AnalysisOrderKey order_key;
+    bool operator==(const BrowserSearchHit &) const = default;
 };
 
 struct BrowserSearchSegment final {
@@ -186,6 +189,8 @@ using words::age_name;
 using words::case_name;
 using words::compound_kind_name;
 using words::degree_name;
+using words::diagnostic_code_name;
+using words::diagnostic_severity_name;
 using words::gender_name;
 using words::geography_name;
 using words::lexical_frequency_name;
@@ -310,17 +315,27 @@ browser_lexical_flags(const words::LexemeRecord &lexeme) {
     flags.frequency = lexical_frequency_name(lexeme.frequency);
     flags.source = source_name(lexeme.source);
 
+    std::visit(
+        [&flags](const auto &paradigm) {
+            using Paradigm = std::remove_cvref_t<decltype(paradigm)>;
+            if constexpr (std::is_same_v<Paradigm, words::DeclensionParadigm>) {
+                flags.declension = paradigm.number;
+                flags.variant = paradigm.variant;
+            } else if constexpr (std::is_same_v<Paradigm,
+                                                words::ConjugationParadigm>) {
+                flags.conjugation = paradigm.number;
+                flags.variant = paradigm.variant;
+            }
+        },
+        words::lexeme_paradigm(lexeme));
+
     switch (std::to_underlying(lexeme.part_of_speech)) {
     case std::to_underlying(words::PartOfSpeech::noun):
-        flags.declension = lexeme.declension;
-        flags.variant = lexeme.variant;
         flags.gender = gender_name(lexeme.gender);
         flags.noun_kind = noun_kind_name(lexeme.noun_kind);
         break;
     case std::to_underlying(words::PartOfSpeech::pronoun):
     case std::to_underlying(words::PartOfSpeech::pack):
-        flags.declension = lexeme.declension;
-        flags.variant = lexeme.variant;
         flags.pronoun_kind = pronoun_kind_name(lexeme.pronoun_kind);
         flags.has_required_packon = lexeme.required_packon.has_value();
         if (lexeme.required_packon) {
@@ -328,13 +343,9 @@ browser_lexical_flags(const words::LexemeRecord &lexeme) {
         }
         break;
     case std::to_underlying(words::PartOfSpeech::adjective):
-        flags.declension = lexeme.declension;
-        flags.variant = lexeme.variant;
         flags.degree = degree_name(lexeme.adjective_degree);
         break;
     case std::to_underlying(words::PartOfSpeech::numeral):
-        flags.declension = lexeme.declension;
-        flags.variant = lexeme.variant;
         flags.numeral_type = numeral_type_name(lexeme.numeral_type);
         flags.numeral_value = lexeme.numeral_value;
         break;
@@ -342,8 +353,6 @@ browser_lexical_flags(const words::LexemeRecord &lexeme) {
         flags.degree = degree_name(lexeme.adverb_degree);
         break;
     case std::to_underlying(words::PartOfSpeech::verb):
-        flags.conjugation = lexeme.declension;
-        flags.variant = lexeme.variant;
         flags.verb_kind = verb_kind_name(lexeme.verb_kind);
         break;
     case std::to_underlying(words::PartOfSpeech::preposition):
@@ -499,6 +508,7 @@ browser_rewrite_step(const words::Database &database, const words::RewriteId id,
     hit.lexical = browser_lexical_flags(lexeme);
     hit.derivation = browser_derivation(database, analysis.derivation,
                                         lexeme.dictionary, include_meaning);
+    hit.order_key = words::analysis_order_key(database, surface, analysis);
     return hit;
 }
 
@@ -547,19 +557,12 @@ browser_hit(const words::Database &database, const words::SurfaceForm &surface,
     hit.compound_auxiliary = analysis.auxiliary;
     hit.compound_source_tense = tense_name(analysis.source_tense);
     hit.compound_source_voice = voice_name(analysis.source_voice);
+    hit.order_key = words::analysis_order_key(database, analysis);
     return hit;
 }
 
-[[nodiscard]] bool search_hit_less(const BrowserSearchHit &left,
-                                   const BrowserSearchHit &right) {
-    if (left.has_lexeme != right.has_lexeme) {
-        return left.has_lexeme;
-    }
-    return left < right;
-}
-
 void canonicalize_hits(std::vector<BrowserSearchHit> &hits) {
-    std::ranges::sort(hits, search_hit_less);
+    std::ranges::sort(hits, {}, &BrowserSearchHit::order_key);
     const auto unique = std::ranges::unique(hits).begin();
     hits.erase(unique, hits.end());
 }
@@ -568,6 +571,10 @@ void canonicalize_hits(std::vector<BrowserSearchHit> &hits) {
 browser_search_result(const words::Engine &engine,
                       const words::QueryResult &result,
                       const bool include_meanings) {
+    if (!engine.owns(result)) {
+        throw std::logic_error{
+            "analysis result belongs to a different dataset"};
+    }
     BrowserSearchResult output;
     if (include_meanings) {
         output.schema = "whitakers-words.browser-analysis";
@@ -585,51 +592,62 @@ browser_search_result(const words::Engine &engine,
         output.hits.reserve(result.analyses.size() +
                             result.compound_analyses.size() +
                             result.artificial_analyses.size());
-        for (const auto &analysis : result.analyses) {
-            output.hits.push_back(browser_hit(engine.database(), result.surface,
-                                              analysis, include_meanings));
-        }
-        for (const auto &analysis : result.compound_analyses) {
-            output.hits.push_back(browser_hit(engine.database(), result.surface,
-                                              analysis, include_meanings,
-                                              output.query.normalized));
-        }
-        for (const auto &artificial : result.artificial_analyses) {
-            std::visit(
-                [&](const auto &analysis) {
-                    BrowserSearchHit hit;
-                    hit.has_lexeme = false;
-                    hit.kind = "artificial";
-                    hit.part_of_speech = "numeral";
-                    hit.morphology.kind = "numeral";
-                    hit.morphology.declension = 2U;
-                    hit.morphology.numeral_type = "cardinal";
-                    hit.form.stem = result.surface.slice(analysis.stem);
-                    hit.form.recognized = hit.form.stem;
-                    hit.derivation = browser_derivation(
-                        engine.database(), analysis.derivation,
-                        words::DictionaryKind::general, include_meanings,
-                        "roman-numeral");
-                    hit.artificial = true;
-                    hit.artificial_method = "roman-numeral";
-                    hit.artificial_value = analysis.value;
-                    hit.artificial_well_formed = analysis.well_formed;
-                    output.hits.push_back(std::move(hit));
-                },
-                artificial);
-        }
+        words::for_each_analysis(result, [&](const auto &analysis) {
+            using Analysis = std::remove_cvref_t<decltype(analysis)>;
+            if constexpr (std::is_same_v<Analysis, words::AnalysisIR>) {
+                output.hits.push_back(browser_hit(engine.database(),
+                                                  result.surface, analysis,
+                                                  include_meanings));
+            } else if constexpr (std::is_same_v<Analysis,
+                                                words::CompoundAnalysisIR>) {
+                output.hits.push_back(
+                    browser_hit(engine.database(), result.surface, analysis,
+                                include_meanings, output.query.normalized));
+            } else if constexpr (std::is_same_v<Analysis,
+                                                words::RomanNumeralIR>) {
+                BrowserSearchHit hit;
+                hit.has_lexeme = false;
+                hit.kind = "artificial";
+                const auto morphology = words::roman_numeral_morphology();
+                hit.part_of_speech =
+                    words::morphology_part_name(words::Morphology{morphology},
+                                                words::PartOfSpeech::numeral);
+                hit.morphology =
+                    browser_morphology(words::Morphology{morphology},
+                                       words::PartOfSpeech::numeral);
+                hit.form.stem = result.surface.slice(analysis.stem);
+                hit.form.recognized = hit.form.stem;
+                hit.derivation =
+                    browser_derivation(engine.database(), analysis.derivation,
+                                       words::DictionaryKind::general,
+                                       include_meanings, "roman-numeral");
+                hit.artificial = true;
+                hit.artificial_method = "roman-numeral";
+                hit.artificial_value = analysis.value;
+                hit.artificial_well_formed = analysis.well_formed;
+                hit.order_key = words::analysis_order_key(analysis);
+                output.hits.push_back(std::move(hit));
+            } else {
+                static_assert(sizeof(Analysis) == 0U,
+                              "new analysis requires browser projection");
+            }
+        });
         canonicalize_hits(output.hits);
     }
 
     output.diagnostics.reserve(result.diagnostics.size());
-    std::ranges::transform(result.diagnostics,
-                           std::back_inserter(output.diagnostics),
-                           [](const words::Diagnostic &diagnostic) {
-                               return BrowserDiagnostic{
-                                   .code = diagnostic.code,
-                                   .severity = diagnostic.severity,
-                                   .part_of_speech = diagnostic.part_of_speech};
-                           });
+    std::ranges::transform(
+        result.diagnostics, std::back_inserter(output.diagnostics),
+        [](const words::Diagnostic &diagnostic) {
+            return BrowserDiagnostic{
+                .code = std::string{diagnostic_code_name(diagnostic.code)},
+                .severity =
+                    std::string{diagnostic_severity_name(diagnostic.severity)},
+                .part_of_speech = diagnostic.part_of_speech
+                                      ? std::string{lexical_part_name(
+                                            *diagnostic.part_of_speech)}
+                                      : std::string{}};
+        });
 
     if (result.two_word_suggestion) {
         BrowserSearchSuggestion suggestion;

@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <utility>
+#include <variant>
 
 namespace words {
 namespace {
@@ -11,7 +12,7 @@ template <std::size_t Size>
 [[nodiscard]] constexpr std::string_view
 token(const std::uint8_t ordinal,
       const std::array<std::string_view, Size> &values) noexcept {
-    return ordinal < values.size() ? values[ordinal] : std::string_view{};
+    return ordinal < values.size() ? values.at(ordinal) : std::string_view{};
 }
 
 template <class Enum, std::size_t Size>
@@ -190,6 +191,40 @@ std::string_view lexical_part_name(const PartOfSpeech value) noexcept {
     return enum_token(value, values);
 }
 
+std::string_view
+morphology_part_name(const Morphology &morphology,
+                     const PartOfSpeech invariable_part) noexcept {
+    if (std::holds_alternative<NounMorphology>(morphology)) {
+        return "noun";
+    }
+    if (std::holds_alternative<PronounMorphology>(morphology)) {
+        return "pronoun";
+    }
+    if (std::holds_alternative<AdjectiveMorphology>(morphology)) {
+        return "adjective";
+    }
+    if (std::holds_alternative<NumeralMorphology>(morphology)) {
+        return "numeral";
+    }
+    if (std::holds_alternative<AdverbMorphology>(morphology)) {
+        return "adverb";
+    }
+    if (std::holds_alternative<VerbMorphology>(morphology)) {
+        return "verb";
+    }
+    if (std::holds_alternative<ParticipleMorphology>(morphology)) {
+        return "participle";
+    }
+    if (std::holds_alternative<SupineMorphology>(morphology)) {
+        return "supine";
+    }
+    if (std::holds_alternative<PrepositionMorphology>(morphology)) {
+        return "preposition";
+    }
+    return invariable_part == PartOfSpeech::interjection ? "interjection"
+                                                         : "conjunction";
+}
+
 std::string_view compound_kind_name(const CompoundKind value) noexcept {
     constexpr std::array<std::string_view, 5> values{"", "finite-sum", "esse",
                                                      "fuisse", "iri"};
@@ -198,6 +233,30 @@ std::string_view compound_kind_name(const CompoundKind value) noexcept {
 
 std::string_view status_name(const QueryStatus value) noexcept {
     constexpr std::array<std::string_view, 3> values{"analyzed", "unknown",
+                                                     "error"};
+    return enum_token(value, values);
+}
+
+std::string_view diagnostic_code_name(const DiagnosticCode value) noexcept {
+    constexpr std::array<std::string_view, 11> values{
+        "empty-input",
+        "input-too-large",
+        "invalid-utf8",
+        "invalid-vowel-quantity",
+        "unicode-normalization-failed",
+        "unsupported-character",
+        "unsupported-part-of-speech",
+        "unsupported-token-count",
+        "unsupported-multi-token",
+        "unknown-word",
+        "two-words-suggestion",
+    };
+    return enum_token(value, values);
+}
+
+std::string_view
+diagnostic_severity_name(const DiagnosticSeverity value) noexcept {
+    constexpr std::array<std::string_view, 3> values{"info", "warning",
                                                      "error"};
     return enum_token(value, values);
 }

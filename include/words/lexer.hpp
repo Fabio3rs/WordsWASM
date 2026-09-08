@@ -15,7 +15,7 @@
 namespace words {
 
 struct LexError final {
-    std::string code;
+    DiagnosticCode code{DiagnosticCode::invalid_utf8};
     std::string message;
 };
 
@@ -45,6 +45,10 @@ concept EnumFlags = std::is_scoped_enum_v<Enum> && enable_enum_flags<Enum>;
 template <EnumFlags Enum>
 [[nodiscard]] constexpr Enum operator|(const Enum left,
                                        const Enum right) noexcept {
+    // A fixed-underlying scoped enum may hold any value representable by its
+    // base type; the analyzer nevertheless treats flag combinations as if
+    // they had to name an enumerator.
+    // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
     return static_cast<Enum>(std::to_underlying(left) |
                              std::to_underlying(right));
 }

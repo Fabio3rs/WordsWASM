@@ -52,7 +52,10 @@ class Engine final {
     }
     [[nodiscard]] std::string_view
     dataset_id() const noexcept WORDS_LIFETIMEBOUND {
-        return config_.dataset_id;
+        return dataset_identity_.value_;
+    }
+    [[nodiscard]] bool owns(const QueryResult &result) const noexcept {
+        return result.origin == dataset_identity_;
     }
     [[nodiscard]] bool supports_full_analysis() const noexcept {
         return database_->has_meanings();
@@ -60,10 +63,11 @@ class Engine final {
 
   private:
     Engine(std::unique_ptr<const Database> database, EngineConfig config)
-        : database_{std::move(database)}, config_{std::move(config)} {}
+        : database_{std::move(database)},
+          dataset_identity_{std::move(config.dataset_id)} {}
 
     std::unique_ptr<const Database> database_;
-    EngineConfig config_;
+    DatasetIdentity dataset_identity_;
     LatinLexer lexer_;
 };
 

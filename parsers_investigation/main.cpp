@@ -4,6 +4,7 @@
 
 #include <array>
 #include <charconv>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -207,7 +208,10 @@ void print_human(const parsers::Result &result) {
               << '\t' << result.accepted_assignments << '\t'
               << result.parser_units_created << '\t'
               << result.parser_duplicate_deductions << '\t'
-              << result.elapsed_ns / 1'000U << '\n';
+              << std::chrono::duration_cast<std::chrono::microseconds>(
+                     std::chrono::nanoseconds{result.elapsed_ns})
+                     .count()
+              << '\n';
 }
 
 } // namespace
@@ -236,15 +240,15 @@ int main(const int argc, char *argv[]) try {
     auto fixtures = parsers::load_corpus(options->corpus);
     if (options->text) {
         fixtures = {parsers::Fixture{
-            "ad-hoc",
-            *options->text,
-            "ad-hoc",
-            {},
-            options->fragment ? parsers::GrammarMode::fragment
-                              : parsers::GrammarMode::complete_clause,
-            {},
-            std::nullopt,
-            std::nullopt}};
+            .id = "ad-hoc",
+            .text = *options->text,
+            .phenomenon = "ad-hoc",
+            .preferred_lemmas = {},
+            .mode = options->fragment ? parsers::GrammarMode::fragment
+                                      : parsers::GrammarMode::complete_clause,
+            .lookup_overrides = {},
+            .annotation = std::nullopt,
+            .gold = std::nullopt}};
     }
 
     if (options->self_test) {

@@ -542,6 +542,17 @@ TEST(DatabaseTest, ClosedSemanticDomainsHaveTypedCanonicalNames) {
     expect_closed_domain(Mood::participle, mood_name);
     expect_closed_domain(VerbKind::perfect_definite, verb_kind_name);
 
+    EXPECT_EQ(lexical_part_name(PartOfSpeech::participle), "verb");
+    EXPECT_EQ(lexical_part_name(PartOfSpeech::supine), "verb");
+    EXPECT_EQ(morphology_part_name(ParticipleMorphology{}, PartOfSpeech::verb),
+              "participle");
+    EXPECT_EQ(morphology_part_name(SupineMorphology{}, PartOfSpeech::verb),
+              "supine");
+    EXPECT_EQ(diagnostic_code_name(DiagnosticCode::unsupported_character),
+              "unsupported-character");
+    EXPECT_EQ(diagnostic_severity_name(DiagnosticSeverity::warning),
+              "warning");
+
     EXPECT_EQ(governed_case(VerbKind::governs_genitive),
               GrammaticalCase::genitive);
     EXPECT_EQ(governed_case(VerbKind::governs_dative), GrammaticalCase::dative);

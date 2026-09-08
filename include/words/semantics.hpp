@@ -41,8 +41,17 @@ governed_case(const VerbKind value) noexcept {
     return std::nullopt;
 }
 [[nodiscard]] std::string_view lexical_part_name(PartOfSpeech value) noexcept;
+// Lexical categories intentionally collapse participles and supines into
+// verbs. Analysis output must retain the concrete morphology instead.
+[[nodiscard]] std::string_view
+morphology_part_name(const Morphology &morphology,
+                     PartOfSpeech invariable_part) noexcept;
 [[nodiscard]] std::string_view compound_kind_name(CompoundKind value) noexcept;
 [[nodiscard]] std::string_view status_name(QueryStatus value) noexcept;
+[[nodiscard]] std::string_view
+diagnostic_code_name(DiagnosticCode value) noexcept;
+[[nodiscard]] std::string_view
+diagnostic_severity_name(DiagnosticSeverity value) noexcept;
 [[nodiscard]] std::string_view addon_kind_name(AddonKind value) noexcept;
 [[nodiscard]] std::string_view rewrite_kind_name(RewriteKind value) noexcept;
 [[nodiscard]] std::string_view

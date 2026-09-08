@@ -34,8 +34,11 @@ ImplementationFileExtensions:
   - cc
   - cpp
   - cxx
-HeaderFilterRegex: '.*/(include|src)/.*'
-ExcludeHeaderFilterRegex: '.*/(include|src)/.*'
+# Keep diagnostics inside first-party code. Main translation units are scoped
+# separately by run-clang-tidy.sh because header filters never suppress the
+# main file from a compilation database entry.
+HeaderFilterRegex: '.*/(include|src|parsers_investigation|tests|wasmsrc)/.*'
+ExcludeHeaderFilterRegex: '.*/(vendor|build[^/]*|whitakers-words)/.*'
 FormatStyle:     none
 User:            fabio
 CheckOptions:

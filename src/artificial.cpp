@@ -1,5 +1,7 @@
 #include "words/artificial.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -8,38 +10,35 @@
 namespace words {
 namespace {
 
+struct RomanDigit final {
+    char symbol;
+    std::uint32_t value;
+};
+
+constexpr std::array roman_digits{
+    RomanDigit{.symbol = 'm', .value = 1000U},
+    RomanDigit{.symbol = 'd', .value = 500U},
+    RomanDigit{.symbol = 'c', .value = 100U},
+    RomanDigit{.symbol = 'l', .value = 50U},
+    RomanDigit{.symbol = 'x', .value = 10U},
+    RomanDigit{.symbol = 'v', .value = 5U},
+    RomanDigit{.symbol = 'i', .value = 1U},
+};
+
 [[nodiscard]] constexpr std::uint32_t
 roman_digit_value(const char value) noexcept {
-    switch (value) {
-    case 'm':
-        return 1000U;
-    case 'd':
-        return 500U;
-    case 'c':
-        return 100U;
-    case 'l':
-        return 50U;
-    case 'x':
-        return 10U;
-    case 'v':
-        return 5U;
-    case 'i':
-        return 1U;
-    default:
-        return 0U;
+    for (const auto digit : roman_digits) {
+        if (digit.symbol == value) {
+            return digit.value;
+        }
     }
+    return 0U;
 }
 
 [[nodiscard]] bool only_roman_digits(const std::string_view word) noexcept {
-    if (word.empty()) {
-        return false;
-    }
-    for (const auto value : word) {
-        if (roman_digit_value(value) == 0U) {
-            return false;
-        }
-    }
-    return true;
+    return !word.empty() && std::ranges::all_of(word, [](const char value) {
+        return roman_digit_value(value) != 0U;
+    });
 }
 
 [[nodiscard]] bool consume_repeated(const std::string_view word,
@@ -67,10 +66,14 @@ roman_digit_value(const char value) noexcept {
                                          std::size_t &cursor, const char one,
                                          const char five,
                                          const char ten) noexcept {
-    const char subtractive_five[] = {one, five, '\0'};
-    const char subtractive_ten[] = {one, ten, '\0'};
-    if (consume_pair(word, cursor, std::string_view{subtractive_ten, 2U}) ||
-        consume_pair(word, cursor, std::string_view{subtractive_five, 2U})) {
+    const std::array subtractive_five{one, five};
+    const std::array subtractive_ten{one, ten};
+    if (consume_pair(
+            word, cursor,
+            std::string_view{subtractive_ten.data(), subtractive_ten.size()}) ||
+        consume_pair(word, cursor,
+                     std::string_view{subtractive_five.data(),
+                                      subtractive_five.size()})) {
         return true;
     }
     if (cursor < word.size() && word[cursor] == five) {

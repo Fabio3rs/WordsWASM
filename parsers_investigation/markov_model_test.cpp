@@ -97,27 +97,41 @@ int main() {
     const auto make_token =
         [](const std::size_t token, const std::string &lemma,
            const std::string &part, const std::string &morphology) {
-            return parsers::AnalysisChoice{token, token,      lemma,
-                                           part,  morphology, {}};
+            return parsers::AnalysisChoice{.token = token,
+                                           .candidate = token,
+                                           .lemma = lemma,
+                                           .part = part,
+                                           .morphology = morphology,
+                                           .features = {}};
         };
     const parsers::RankedMorphologyAnalysis svo{
-        "svo",
-        0.0,
-        {make_token(0U, "puella", "noun", "nominative-singular-feminine"),
-         make_token(1U, "poeta", "noun", "accusative-singular-masculine"),
-         make_token(2U, "amo", "verb", "present-active-indicative-3-singular")},
-        {{0U, 2U, "nsubj"}, {1U, 2U, "obj"}, {2U, std::nullopt, "root"}},
-        true,
-        true};
+        .assignment_id = "svo",
+        .manual_score = 0.0,
+        .analysis = {make_token(0U, "puella", "noun",
+                                "nominative-singular-feminine"),
+                     make_token(1U, "poeta", "noun",
+                                "accusative-singular-masculine"),
+                     make_token(2U, "amo", "verb",
+                                "present-active-indicative-3-singular")},
+        .relations = {{.dependent = 0U, .head = 2U, .label = "nsubj"},
+                      {.dependent = 1U, .head = 2U, .label = "obj"},
+                      {.dependent = 2U, .head = std::nullopt, .label = "root"}},
+        .matches_preferred_lemmas = true,
+        .matches_morphology_gold = true};
     const parsers::RankedMorphologyAnalysis vos{
-        "vos",
-        0.0,
-        {make_token(0U, "amo", "verb", "present-active-indicative-3-singular"),
-         make_token(1U, "poeta", "noun", "accusative-singular-masculine"),
-         make_token(2U, "puella", "noun", "nominative-singular-feminine")},
-        {{0U, std::nullopt, "root"}, {1U, 0U, "obj"}, {2U, 0U, "nsubj"}},
-        true,
-        true};
+        .assignment_id = "vos",
+        .manual_score = 0.0,
+        .analysis = {make_token(0U, "amo", "verb",
+                                "present-active-indicative-3-singular"),
+                     make_token(1U, "poeta", "noun",
+                                "accusative-singular-masculine"),
+                     make_token(2U, "puella", "noun",
+                                "nominative-singular-feminine")},
+        .relations = {{.dependent = 0U, .head = std::nullopt, .label = "root"},
+                      {.dependent = 1U, .head = 0U, .label = "obj"},
+                      {.dependent = 2U, .head = 0U, .label = "nsubj"}},
+        .matches_preferred_lemmas = true,
+        .matches_morphology_gold = true};
     const auto canonical_signature = [](const auto &analysis,
                                         const auto traversal) {
         std::vector<std::string> signature;
@@ -162,31 +176,35 @@ int main() {
         "head-last parser order must preserve reordered trees");
 
     const parsers::RankedMorphologyAnalysis repeated_siblings{
-        "repeated-siblings",
-        0.0,
-        {make_token(0U, "v", "verb", "V"), make_token(1U, "n", "noun", "N"),
-         make_token(2U, "a", "adjective", "A"),
-         make_token(3U, "n", "noun", "N"), make_token(4U, "b", "noun", "B")},
-        {{0U, std::nullopt, "root"},
-         {1U, 0U, "obj"},
-         {2U, 1U, "amod"},
-         {3U, 0U, "obj"},
-         {4U, 3U, "nmod"}},
-        false,
-        false};
+        .assignment_id = "repeated-siblings",
+        .manual_score = 0.0,
+        .analysis = {make_token(0U, "v", "verb", "V"),
+                     make_token(1U, "n", "noun", "N"),
+                     make_token(2U, "a", "adjective", "A"),
+                     make_token(3U, "n", "noun", "N"),
+                     make_token(4U, "b", "noun", "B")},
+        .relations = {{.dependent = 0U, .head = std::nullopt, .label = "root"},
+                      {.dependent = 1U, .head = 0U, .label = "obj"},
+                      {.dependent = 2U, .head = 1U, .label = "amod"},
+                      {.dependent = 3U, .head = 0U, .label = "obj"},
+                      {.dependent = 4U, .head = 3U, .label = "nmod"}},
+        .matches_preferred_lemmas = false,
+        .matches_morphology_gold = false};
     const parsers::RankedMorphologyAnalysis permuted_repeated_siblings{
-        "permuted-repeated-siblings",
-        0.0,
-        {make_token(0U, "v", "verb", "V"), make_token(1U, "n", "noun", "N"),
-         make_token(2U, "b", "noun", "B"), make_token(3U, "n", "noun", "N"),
-         make_token(4U, "a", "adjective", "A")},
-        {{0U, std::nullopt, "root"},
-         {1U, 0U, "obj"},
-         {2U, 1U, "nmod"},
-         {3U, 0U, "obj"},
-         {4U, 3U, "amod"}},
-        false,
-        false};
+        .assignment_id = "permuted-repeated-siblings",
+        .manual_score = 0.0,
+        .analysis = {make_token(0U, "v", "verb", "V"),
+                     make_token(1U, "n", "noun", "N"),
+                     make_token(2U, "b", "noun", "B"),
+                     make_token(3U, "n", "noun", "N"),
+                     make_token(4U, "a", "adjective", "A")},
+        .relations = {{.dependent = 0U, .head = std::nullopt, .label = "root"},
+                      {.dependent = 1U, .head = 0U, .label = "obj"},
+                      {.dependent = 2U, .head = 1U, .label = "nmod"},
+                      {.dependent = 3U, .head = 0U, .label = "obj"},
+                      {.dependent = 4U, .head = 3U, .label = "amod"}},
+        .matches_preferred_lemmas = false,
+        .matches_morphology_gold = false};
     for (const auto traversal : {parsers::markov::TraversalOrder::head_first,
                                  parsers::markov::TraversalOrder::head_last}) {
         require(canonical_signature(repeated_siblings, traversal) ==
@@ -201,19 +219,23 @@ int main() {
                                              make_token(1U, "n", "noun", "N"),
                                              make_token(2U, "p", "part", "P")};
     const parsers::RankedMorphologyAnalysis sibling_topology{
-        "sibling-topology",
-        0.0,
-        topology_tokens,
-        {{0U, std::nullopt, "root"}, {1U, 0U, "dep"}, {2U, 0U, "dep"}},
-        false,
-        false};
+        .assignment_id = "sibling-topology",
+        .manual_score = 0.0,
+        .analysis = topology_tokens,
+        .relations = {{.dependent = 0U, .head = std::nullopt, .label = "root"},
+                      {.dependent = 1U, .head = 0U, .label = "dep"},
+                      {.dependent = 2U, .head = 0U, .label = "dep"}},
+        .matches_preferred_lemmas = false,
+        .matches_morphology_gold = false};
     const parsers::RankedMorphologyAnalysis nested_topology{
-        "nested-topology",
-        0.0,
-        topology_tokens,
-        {{0U, std::nullopt, "root"}, {1U, 0U, "dep"}, {2U, 1U, "dep"}},
-        false,
-        false};
+        .assignment_id = "nested-topology",
+        .manual_score = 0.0,
+        .analysis = topology_tokens,
+        .relations = {{.dependent = 0U, .head = std::nullopt, .label = "root"},
+                      {.dependent = 1U, .head = 0U, .label = "dep"},
+                      {.dependent = 2U, .head = 1U, .label = "dep"}},
+        .matches_preferred_lemmas = false,
+        .matches_morphology_gold = false};
     require(
         canonical_signature(sibling_topology,
                             parsers::markov::TraversalOrder::head_first) ==
@@ -225,22 +247,22 @@ int main() {
             "structural events must retain subtree boundaries");
 
     const parsers::RankedMorphologyAnalysis intended_attachment{
-        "intended-attachment",
-        0.0,
-        {make_token(0U, "sum", "verb", "finite"),
-         make_token(1U, "mens", "noun", "nominative"),
-         make_token(2U, "sanus", "adjective", "nominative"),
-         make_token(3U, "in", "preposition", "ablative"),
-         make_token(4U, "corpus", "noun", "ablative"),
-         make_token(5U, "sanus", "adjective", "ablative")},
-        {{5U, 4U, "amod"},
-         {3U, 4U, "case"},
-         {0U, std::nullopt, "root"},
-         {4U, 0U, "obl"},
-         {2U, 0U, "predicative"},
-         {1U, 0U, "nsubj"}},
-        true,
-        true};
+        .assignment_id = "intended-attachment",
+        .manual_score = 0.0,
+        .analysis = {make_token(0U, "sum", "verb", "finite"),
+                     make_token(1U, "mens", "noun", "nominative"),
+                     make_token(2U, "sanus", "adjective", "nominative"),
+                     make_token(3U, "in", "preposition", "ablative"),
+                     make_token(4U, "corpus", "noun", "ablative"),
+                     make_token(5U, "sanus", "adjective", "ablative")},
+        .relations = {{.dependent = 5U, .head = 4U, .label = "amod"},
+                      {.dependent = 3U, .head = 4U, .label = "case"},
+                      {.dependent = 0U, .head = std::nullopt, .label = "root"},
+                      {.dependent = 4U, .head = 0U, .label = "obl"},
+                      {.dependent = 2U, .head = 0U, .label = "predicative"},
+                      {.dependent = 1U, .head = 0U, .label = "nsubj"}},
+        .matches_preferred_lemmas = true,
+        .matches_morphology_gold = true};
     auto permuted_relations = intended_attachment;
     std::ranges::reverse(permuted_relations.relations);
     const auto dependency_state = [&](const std::size_t token) {

@@ -40,6 +40,22 @@ TEST(EngineTest, SearchDatabasePreservesTheFullDatabaseHitContract) {
         std::logic_error);
 }
 
+TEST(EngineTest, RejectsResultFromDifferentDataset) {
+    auto other_dataset_id = std::string{test::dataset_id};
+    other_dataset_id.back() = other_dataset_id.back() == '0' ? '1' : '0';
+    auto loaded = Engine::create(test::read_database(),
+                                 EngineConfig{std::move(other_dataset_id)});
+    ASSERT_TRUE(loaded);
+
+    const auto result = test::engine().analyze("puella");
+    EXPECT_TRUE(test::engine().owns(result));
+    EXPECT_FALSE((**loaded).owns(result));
+    EXPECT_THROW(static_cast<void>(analysis_json(**loaded, result)),
+                 std::logic_error);
+    EXPECT_THROW(static_cast<void>(search_json(**loaded, result)),
+                 std::logic_error);
+}
+
 TEST(EngineTest, SearchDatabaseResolvesCanonicalLemmaWithoutMeanings) {
     constexpr LexemeId amo{2870U};
     const auto &full_database = test::engine().database();
@@ -48,6 +64,12 @@ TEST(EngineTest, SearchDatabaseResolvesCanonicalLemmaWithoutMeanings) {
     EXPECT_EQ(citation_lemma(full_database, full_database.lexeme(amo)), "amo");
     EXPECT_EQ(citation_lemma(search_database, search_database.lexeme(amo)),
               "amo");
+    EXPECT_EQ(dictionary_form(full_database, full_database.lexeme(amo)),
+              "amo, amare, amavi, amatus");
+    const auto paradigm = lexeme_paradigm(full_database.lexeme(amo));
+    ASSERT_TRUE(std::holds_alternative<ConjugationParadigm>(paradigm));
+    EXPECT_EQ(std::get<ConjugationParadigm>(paradigm).number, 1U);
+    EXPECT_EQ(std::get<ConjugationParadigm>(paradigm).variant, 1U);
 
     constexpr std::array<std::pair<std::string_view, std::string_view>, 9>
         fixtures{{
@@ -259,6 +281,23 @@ TEST(EngineTest, EmitsTypedRemainingMorphologies) {
     EXPECT_TRUE(contains(test::engine().analyze("et"), InvariableMorphology{}));
 }
 
+TEST(EngineTest, PreservesParticipleAndSupineInAnalysisOutput) {
+    const auto expect_part = [](const std::string_view word,
+                                const std::string_view expected) {
+        const auto result = test::engine().analyze(word);
+        const auto full = Json::parse(analysis_json(test::engine(), result));
+        const auto found = std::ranges::find_if(
+            full.at("analyses"), [&](const Json &analysis) {
+                return analysis.at("partOfSpeech") == expected;
+            });
+        ASSERT_NE(found, full.at("analyses").end()) << word;
+        EXPECT_EQ(found->at("lexeme").at("partOfSpeech"), "verb") << word;
+    };
+
+    expect_part("amans", "participle");
+    expect_part("amatum", "supine");
+}
+
 TEST(EngineTest, CombinesUniqueAndRegularHomographs) {
     const auto result = test::engine().analyze("eadem");
     ASSERT_EQ(result.status, QueryStatus::analyzed);
@@ -351,7 +390,8 @@ TEST(EngineTest, SuggestsLegacyTwoWordSplitOnlyWhenRequested) {
                 });
         }));
     ASSERT_EQ(result.diagnostics.size(), 2U);
-    EXPECT_EQ(result.diagnostics.back().code, "two-words-suggestion");
+    EXPECT_EQ(result.diagnostics.back().code,
+              DiagnosticCode::two_words_suggestion);
 
     const auto full = Json::parse(analysis_json(test::engine(), result));
     ASSERT_EQ(full.at("suggestions").size(), 1U);
@@ -817,7 +857,8 @@ TEST(EngineTest, AnalyzeLineSplitsAsciiAndUnicodePunctuation) {
     const auto punctuated = test::engine().analyze_text("amatus, sum");
     EXPECT_EQ(punctuated.status, QueryStatus::error);
     ASSERT_EQ(punctuated.diagnostics.size(), 1U);
-    EXPECT_EQ(punctuated.diagnostics.front().code, "unsupported-multi-token");
+    EXPECT_EQ(punctuated.diagnostics.front().code,
+              DiagnosticCode::unsupported_multi_token);
 
     const auto single = test::engine().analyze_line("“amo,”");
     ASSERT_EQ(single.size(), 1U);
@@ -842,7 +883,8 @@ TEST(EngineTest, AnalyzeLinePreservesUtf8NormalizationAndErrorsPerToken) {
     EXPECT_EQ(results[0].status, QueryStatus::analyzed);
     EXPECT_EQ(results[1].status, QueryStatus::error);
     ASSERT_FALSE(results[1].diagnostics.empty());
-    EXPECT_EQ(results[1].diagnostics.front().code, "invalid-utf8");
+    EXPECT_EQ(results[1].diagnostics.front().code,
+              DiagnosticCode::invalid_utf8);
     EXPECT_EQ(results[2].status, QueryStatus::analyzed);
 }
 
@@ -1006,7 +1048,8 @@ TEST(EngineTest, RejectsCharactersThatOnlyCaseFoldIntoLatinAscii) {
         EXPECT_EQ(result.status, QueryStatus::error) << text;
         EXPECT_TRUE(result.analyses.empty()) << text;
         ASSERT_EQ(result.diagnostics.size(), 1U) << text;
-        EXPECT_EQ(result.diagnostics.front().code, "unsupported-character")
+        EXPECT_EQ(result.diagnostics.front().code,
+                  DiagnosticCode::unsupported_character)
             << text;
     }
 }

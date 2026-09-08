@@ -104,6 +104,7 @@ target_sources(words_core PRIVATE
     src/lexeme.cpp
     src/lexer.cpp
     src/model.cpp
+    src/projection.cpp
     src/semantics.cpp
 )
 target_include_directories(words_core PUBLIC

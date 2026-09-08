@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <expected>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -14,11 +15,45 @@
 #include <string_view>
 #include <tuple>
 #include <utility>
+#include <variant>
 
 namespace words {
 namespace {
 
 constexpr std::string_view primary_enclitic{"que"};
+constexpr std::string_view esse_auxiliary{"esse"};
+constexpr std::string_view fuisse_auxiliary{"fuisse"};
+constexpr std::string_view iri_auxiliary{"iri"};
+constexpr std::string_view dataset_id_prefix{"sha256:"};
+constexpr std::size_t sha256_hex_digit_count{64U};
+
+constexpr std::uint8_t indeclinable_paradigm{9U};
+// LexemeRecord stores the legacy conjugation digit in its shared declension
+// field for verbs. Keep that representation detail at the comparison boundary.
+constexpr std::uint8_t sum_lexeme_conjugation{5U};
+constexpr std::uint8_t sum_lexeme_variant{1U};
+constexpr std::uint8_t eo_conjugation{6U};
+constexpr std::uint8_t eo_variant{1U};
+
+constexpr std::size_t morphology_key_width{12U};
+using MorphologyKey = std::array<std::uint8_t, morphology_key_width>;
+enum class MorphologyKeyKind : std::uint8_t {
+    noun,
+    pronoun,
+    adjective,
+    numeral,
+    adverb,
+    verb,
+    participle,
+    supine,
+    preposition,
+    invariable,
+};
+
+constexpr std::size_t rewrite_priority_count =
+    static_cast<std::size_t>(std::numeric_limits<std::uint8_t>::max()) + 1U;
+constexpr std::size_t maximum_ending_length{7U};
+constexpr std::size_t ending_length_count{maximum_ending_length + 1U};
 
 constexpr std::array<std::string_view, 11> two_words_common_prefixes{
     "dis", "ex", "in",  "per",   "prae",  "pro",
@@ -45,7 +80,7 @@ constexpr std::array<std::string_view, 11> two_words_common_prefixes{
 [[nodiscard]] bool paradigm_matches(const LexemeRecord &lexeme,
                                     const InflectionRule &rule) noexcept {
     if (rule.declension == 0U && rule.variant == 0U) {
-        return lexeme.declension != 9U;
+        return lexeme.declension != indeclinable_paradigm;
     }
     return rule.declension == lexeme.declension &&
            (rule.variant == 0U || rule.variant == lexeme.variant);
@@ -226,7 +261,7 @@ transformed_adverb_degree(const SuffixRule &suffix) noexcept {
 transformed_paradigm_matches(const SuffixRule &suffix,
                              const InflectionRule &rule) noexcept {
     if (rule.declension == 0U && rule.variant == 0U) {
-        return suffix.target_declension != 9U;
+        return suffix.target_declension != indeclinable_paradigm;
     }
     return rule.declension == suffix.target_declension &&
            (rule.variant == 0U || rule.variant == suffix.target_variant);
@@ -247,20 +282,6 @@ transformed_paradigm_matches(const SuffixRule &suffix,
           lexeme.part_of_speech == PartOfSpeech::verb) &&
          (suffix.root_key == 1U || suffix.root_key == 2U));
     return part_matches && key_matches;
-}
-
-[[nodiscard]] std::string_view part_name(const PartOfSpeech part) noexcept {
-    constexpr std::array<std::string_view, 16> names{
-        "unknown",      "noun",    "pronoun",     "pronoun",
-        "adjective",    "numeral", "adverb",      "verb",
-        "participle",   "supine",  "preposition", "conjunction",
-        "interjection", "tackon",  "prefix",      "suffix",
-    };
-    const auto ordinal = static_cast<std::size_t>(std::to_underlying(part));
-    if (ordinal >= names.size()) {
-        return "unknown";
-    }
-    return names[ordinal];
 }
 
 [[nodiscard]] bool has_quantity(const SurfaceForm &surface) noexcept {
@@ -316,10 +337,10 @@ candidate_quantity_match(const Database &database, const SurfaceForm &surface,
     return has_unknown_evidence ? QuantityMatch::unknown : QuantityMatch::exact;
 }
 
-[[nodiscard]] std::array<std::uint8_t, 12>
+[[nodiscard]] MorphologyKey
 morphology_key(const Morphology &morphology) noexcept {
     if (const auto *noun = std::get_if<NounMorphology>(&morphology)) {
-        return {0U,
+        return {std::to_underlying(MorphologyKeyKind::noun),
                 noun->declension,
                 noun->variant,
                 std::to_underlying(noun->grammatical_case),
@@ -327,7 +348,7 @@ morphology_key(const Morphology &morphology) noexcept {
                 std::to_underlying(noun->gender)};
     }
     if (const auto *pronoun = std::get_if<PronounMorphology>(&morphology)) {
-        return {1U,
+        return {std::to_underlying(MorphologyKeyKind::pronoun),
                 pronoun->declension,
                 pronoun->variant,
                 std::to_underlying(pronoun->grammatical_case),
@@ -335,7 +356,7 @@ morphology_key(const Morphology &morphology) noexcept {
                 std::to_underlying(pronoun->gender)};
     }
     if (const auto *adjective = std::get_if<AdjectiveMorphology>(&morphology)) {
-        return {2U,
+        return {std::to_underlying(MorphologyKeyKind::adjective),
                 adjective->declension,
                 adjective->variant,
                 std::to_underlying(adjective->grammatical_case),
@@ -344,7 +365,7 @@ morphology_key(const Morphology &morphology) noexcept {
                 std::to_underlying(adjective->degree)};
     }
     if (const auto *numeral = std::get_if<NumeralMorphology>(&morphology)) {
-        return {3U,
+        return {std::to_underlying(MorphologyKeyKind::numeral),
                 numeral->declension,
                 numeral->variant,
                 std::to_underlying(numeral->grammatical_case),
@@ -353,10 +374,11 @@ morphology_key(const Morphology &morphology) noexcept {
                 std::to_underlying(numeral->numeral_type)};
     }
     if (const auto *adverb = std::get_if<AdverbMorphology>(&morphology)) {
-        return {4U, std::to_underlying(adverb->degree)};
+        return {std::to_underlying(MorphologyKeyKind::adverb),
+                std::to_underlying(adverb->degree)};
     }
     if (const auto *verb = std::get_if<VerbMorphology>(&morphology)) {
-        return {5U,
+        return {std::to_underlying(MorphologyKeyKind::verb),
                 verb->conjugation,
                 verb->variant,
                 std::to_underlying(verb->tense),
@@ -367,7 +389,7 @@ morphology_key(const Morphology &morphology) noexcept {
     }
     if (const auto *participle =
             std::get_if<ParticipleMorphology>(&morphology)) {
-        return {6U,
+        return {std::to_underlying(MorphologyKeyKind::participle),
                 participle->conjugation,
                 participle->variant,
                 std::to_underlying(participle->grammatical_case),
@@ -377,7 +399,7 @@ morphology_key(const Morphology &morphology) noexcept {
                 std::to_underlying(participle->voice)};
     }
     if (const auto *supine = std::get_if<SupineMorphology>(&morphology)) {
-        return {7U,
+        return {std::to_underlying(MorphologyKeyKind::supine),
                 supine->conjugation,
                 supine->variant,
                 std::to_underlying(supine->grammatical_case),
@@ -386,9 +408,10 @@ morphology_key(const Morphology &morphology) noexcept {
     }
     if (const auto *preposition =
             std::get_if<PrepositionMorphology>(&morphology)) {
-        return {8U, std::to_underlying(preposition->governs)};
+        return {std::to_underlying(MorphologyKeyKind::preposition),
+                std::to_underlying(preposition->governs)};
     }
-    return {9U};
+    return {std::to_underlying(MorphologyKeyKind::invariable)};
 }
 
 struct EnumerationState final {
@@ -637,7 +660,7 @@ append_derivation(const DerivationIR &base,
     }
     auto result = base;
     for (const auto id : additions) {
-        result.addon_ids[result.count] = id;
+        result.addon_ids.at(result.count) = id;
         ++result.count;
     }
     return result;
@@ -840,9 +863,9 @@ void append_suffix_semantics(
         std::array<AddonId, 2> additions{};
         std::size_t addition_count = 0;
         if (prefix_id) {
-            additions[addition_count++] = *prefix_id;
+            additions.at(addition_count++) = *prefix_id;
         }
-        additions[addition_count++] = suffix.id;
+        additions.at(addition_count++) = suffix.id;
         const auto derivation = append_derivation(
             initial_derivation,
             std::span<const AddonId>{additions}.first(addition_count));
@@ -1164,19 +1187,20 @@ enumerate_candidates(const Database &database, const SurfaceForm &surface,
 
     const auto word_text =
         std::string_view{surface.lookup_ascii}.substr(word.begin, word.count);
-    const auto maximum_ending = std::min<std::size_t>(7U, word_text.size());
+    const auto maximum_ending =
+        std::min(maximum_ending_length, word_text.size());
 
     // There are at most eight distinct ending lengths. Retaining their stable
     // database spans lets the output reserve exactly once instead of growing
     // geometrically through a candidate set that commonly exceeds 100 rows.
-    std::array<EndingGroup, 8> groups{};
+    std::array<EndingGroup, ending_length_count> groups{};
     std::size_t group_count{};
     std::size_t candidate_count{};
     for (std::size_t ending_size = maximum_ending;; --ending_size) {
         const auto stem_size = word_text.size() - ending_size;
         const auto ending_text = word_text.substr(stem_size);
         const auto rules = database.lookup_ending(ending_text);
-        groups[group_count++] = EndingGroup{
+        groups.at(group_count++) = EndingGroup{
             .stem_size = stem_size, .ending_size = ending_size, .rules = rules};
         candidate_count += rules.size();
         if (ending_size == 0U) {
@@ -1895,8 +1919,8 @@ analyze_two_words(const Database &database, const LatinLexer &lexer,
 
     if (rewrite.constraint == RewriteConstraint::eo_verb) {
         const auto *verb = std::get_if<VerbMorphology>(&analysis.morphology);
-        return verb != nullptr && verb->conjugation == 6U &&
-               verb->variant == 1U;
+        return verb != nullptr && verb->conjugation == eo_conjugation &&
+               verb->variant == eo_variant;
     }
     if (rewrite.constraint == RewriteConstraint::adjective_iis) {
         const auto *adjective =
@@ -1928,7 +1952,7 @@ replace_logical_surface(const SurfaceForm &surface, const std::size_t position,
                         replacement.size());
     transformed.append(surface.normalized_nfc, 0U, first);
     transformed.append(replacement);
-    transformed.append(surface.normalized_nfc, last, std::string::npos);
+    transformed.append(std::string_view{surface.normalized_nfc}.substr(last));
     return transformed;
 }
 
@@ -2016,7 +2040,7 @@ rewrite_attempts(const Database &database, const std::string_view word,
 [[nodiscard]] std::vector<AnalysisIR>
 analyze_syncope(const Database &database, const LatinLexer &lexer,
                 const SurfaceForm &surface) {
-    std::array<bool, 256> priorities{};
+    std::array<bool, rewrite_priority_count> priorities{};
     for (const auto &rewrite : database.rewrites()) {
         if (rewrite.kind == RewriteKind::syncope) {
             priorities.at(rewrite.priority) = true;
@@ -2099,7 +2123,7 @@ analyze_syncope(const Database &database, const LatinLexer &lexer,
 [[nodiscard]] std::vector<AnalysisIR>
 analyze_orthography(const Database &database, const LatinLexer &lexer,
                     const SurfaceForm &surface, const RewriteStage stage) {
-    std::array<bool, 256> priorities{};
+    std::array<bool, rewrite_priority_count> priorities{};
     for (const auto &rewrite : database.rewrites()) {
         if (rewrite.kind == RewriteKind::orthographic &&
             rewrite.stage == stage) {
@@ -2247,7 +2271,8 @@ finite_sum_morphology(const Database &database, const QueryResult &auxiliary) {
         }
         const auto &lexeme = database.lexeme(analysis.lexeme);
         if (lexeme.part_of_speech != PartOfSpeech::verb ||
-            lexeme.declension != 5U || lexeme.variant != 1U) {
+            lexeme.declension != sum_lexeme_conjugation ||
+            lexeme.variant != sum_lexeme_variant) {
             continue;
         }
         const auto key = [](const VerbMorphology &value) {
@@ -2277,6 +2302,33 @@ finite_sum_morphology(const Database &database, const QueryResult &auxiliary) {
         return Tense::future_perfect;
     }
     return Tense::unknown;
+}
+
+[[nodiscard]] CompoundKind
+compound_kind_from_auxiliary(const std::string_view auxiliary,
+                             const bool has_finite_sum) noexcept {
+    if (auxiliary == esse_auxiliary) {
+        return CompoundKind::esse;
+    }
+    if (auxiliary == fuisse_auxiliary) {
+        return CompoundKind::fuisse;
+    }
+    if (auxiliary == iri_auxiliary) {
+        return CompoundKind::iri;
+    }
+    return has_finite_sum ? CompoundKind::finite_sum : CompoundKind::unknown;
+}
+
+[[nodiscard]] Tense
+infinitive_compound_tense(const ParticipleMorphology &participle,
+                          const CompoundKind kind) noexcept {
+    if (participle.tense != Tense::future) {
+        return participle.tense;
+    }
+    if (kind == CompoundKind::fuisse) {
+        return Tense::perfect;
+    }
+    return participle.voice == Voice::active ? Tense::future : Tense::present;
 }
 
 [[nodiscard]] bool
@@ -2316,11 +2368,8 @@ void append_compound(const AnalysisIR &source, const CompoundKind kind,
         finite_analysis == nullptr
             ? nullptr
             : std::get_if<VerbMorphology>(&finite_analysis->morphology);
-    const auto kind = auxiliary_word == "esse"     ? CompoundKind::esse
-                      : auxiliary_word == "fuisse" ? CompoundKind::fuisse
-                      : auxiliary_word == "iri"    ? CompoundKind::iri
-                      : (finite != nullptr)        ? CompoundKind::finite_sum
-                                                   : CompoundKind{};
+    const auto kind =
+        compound_kind_from_auxiliary(auxiliary_word, finite != nullptr);
 
     std::vector<std::size_t> source_indices;
     source_indices.reserve(result.analyses.size());
@@ -2355,13 +2404,7 @@ void append_compound(const AnalysisIR &source, const CompoundKind kind,
                           participle->tense == Tense::future;
                 if (accepts) {
                     morphology.tense =
-                        participle->tense != Tense::future
-                            ? participle->tense
-                            : (kind == CompoundKind::fuisse
-                                   ? Tense::perfect
-                                   : (participle->voice == Voice::active
-                                          ? Tense::future
-                                          : Tense::present));
+                        infinitive_compound_tense(*participle, kind);
                     morphology.voice = participle->voice;
                     morphology.mood = Mood::infinitive;
                 }
@@ -2442,9 +2485,10 @@ void append_compound(const AnalysisIR &source, const CompoundKind kind,
 } // namespace
 
 bool valid_dataset_id(const std::string_view value) noexcept {
-    constexpr std::string_view prefix = "sha256:";
-    return value.size() == prefix.size() + 64U && value.starts_with(prefix) &&
-           std::ranges::all_of(value.substr(prefix.size()), is_lower_hex);
+    return value.size() == dataset_id_prefix.size() + sha256_hex_digit_count &&
+           value.starts_with(dataset_id_prefix) &&
+           std::ranges::all_of(value.substr(dataset_id_prefix.size()),
+                               is_lower_hex);
 }
 
 std::expected<std::unique_ptr<const Engine>, LoadError>
@@ -2477,14 +2521,16 @@ QueryResult Engine::analyze(const TextToken &token,
     const auto utf8 = token.text;
     auto lexed = lexer_.lex(utf8);
     if (!lexed) {
-        QueryResult result;
+        QueryResult result{dataset_identity_};
         result.surface.original_utf8.assign(utf8);
         result.status = QueryStatus::error;
-        result.diagnostics.push_back({lexed.error().code, "error", {}});
+        result.diagnostics.push_back({.code = lexed.error().code,
+                                      .severity = DiagnosticSeverity::error,
+                                      .part_of_speech = std::nullopt});
         return result;
     }
 
-    QueryResult result;
+    QueryResult result{dataset_identity_};
     result.surface = std::move(*lexed);
     const auto logical_size = result.surface.lookup_ascii.size();
     const SurfaceRange full_word{
@@ -2527,7 +2573,8 @@ QueryResult Engine::analyze(const TextToken &token,
             const auto &lexeme = database_->lexeme(analysis.lexeme);
             return std::holds_alternative<VerbMorphology>(
                        analysis.morphology) &&
-                   lexeme.declension == 5U && lexeme.variant == 1U;
+                   lexeme.declension == sum_lexeme_conjugation &&
+                   lexeme.variant == sum_lexeme_variant;
         });
     const auto has_direct_tackon =
         std::ranges::any_of(result.analyses, [&](const AnalysisIR &analysis) {
@@ -2586,8 +2633,9 @@ QueryResult Engine::analyze(const TextToken &token,
         result.analyses.clear();
         result.status = QueryStatus::error;
         result.diagnostics.push_back(
-            {"unsupported-part-of-speech", "error",
-             std::string{part_name(enumeration.unsupported_part)}});
+            {.code = DiagnosticCode::unsupported_part_of_speech,
+             .severity = DiagnosticSeverity::error,
+             .part_of_speech = enumeration.unsupported_part});
     } else if (result.analyses.empty() && result.artificial_analyses.empty()) {
         if (const auto roman = roman_numeral_with_tackon(
                 *database_, result.surface, full_word)) {
@@ -2617,10 +2665,14 @@ QueryResult Engine::analyze(const TextToken &token,
                 analyze_two_words(*database_, lexer_, result.surface);
         }
         result.status = QueryStatus::unknown;
-        result.diagnostics.push_back({"unknown-word", "info", {}});
+        result.diagnostics.push_back({.code = DiagnosticCode::unknown_word,
+                                      .severity = DiagnosticSeverity::info,
+                                      .part_of_speech = std::nullopt});
         if (result.two_word_suggestion) {
             result.diagnostics.push_back(
-                {"two-words-suggestion", "warning", {}});
+                {.code = DiagnosticCode::two_words_suggestion,
+                 .severity = DiagnosticSeverity::warning,
+                 .part_of_speech = std::nullopt});
         }
     } else {
         result.status = QueryStatus::analyzed;
@@ -2644,12 +2696,15 @@ QueryResult Engine::analyze_text(const std::string_view utf8,
 
     const auto second = cursor.next();
     if (!first || !second || cursor.peek() != nullptr) {
-        QueryResult result;
+        QueryResult result{dataset_identity_};
         result.surface.original_utf8.assign(utf8);
         result.multi_token_query = MultiTokenQueryIR{
             .original_utf8 = std::string{utf8}, .normalized_nfc = {}};
         result.status = QueryStatus::error;
-        result.diagnostics.push_back({"unsupported-token-count", "error", {}});
+        result.diagnostics.push_back(
+            {.code = DiagnosticCode::unsupported_token_count,
+             .severity = DiagnosticSeverity::error,
+             .part_of_speech = std::nullopt});
         return result;
     }
 
@@ -2678,9 +2733,9 @@ QueryResult Engine::analyze_text(const std::string_view utf8,
         result.analyses.clear();
         result.artificial_analyses.clear();
         result.status = QueryStatus::error;
-        result.diagnostics = {{.code = "unsupported-multi-token",
-                               .severity = "error",
-                               .part_of_speech = {}}};
+        result.diagnostics = {{.code = DiagnosticCode::unsupported_multi_token,
+                               .severity = DiagnosticSeverity::error,
+                               .part_of_speech = std::nullopt}};
         return result;
     }
     result.status = QueryStatus::analyzed;
