@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f4efe5">
+    <meta
+      id="meta-description"
+      name="description"
+      content="Browser demonstration of the WordsWASM Latin morphological analyzer."
+    >
+    <title>WordsWASM — Latin morphological analysis</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css">
+    <link rel="modulepreload" href="./engine/words-engine.mjs">
+    <link rel="modulepreload" href="./engine/words_wasm.mjs">
+    <link
+      rel="preload"
+      href="./engine/words_wasm.wasm"
+      as="fetch"
+      type="application/wasm"
+      crossorigin
+    >
+  </head>
+  <body>
+    <main class="page">
+      <nav
+        class="language-switch"
+        aria-label="Interface language"
+        data-i18n-aria-label="languageAriaLabel"
+      >
+        <button
+          type="button"
+          data-language="pt-BR"
+          lang="pt-BR"
+          aria-label="Português"
+          title="Português"
+        >PT</button>
+        <button
+          type="button"
+          data-language="en"
+          lang="en"
+          aria-label="English"
+          title="English"
+        >EN</button>
+        <button
+          type="button"
+          data-language="la"
+          lang="la"
+          aria-label="Latine"
+          title="Latine"
+        >LA</button>
+      </nav>
+
+      <header class="intro">
+        <p class="eyebrow">C++23 · WebAssembly</p>
+        <h1>WordsWASM</h1>
+        <p class="lede" data-i18n="introduction">
+          A C++23 rewrite of Whitaker's WORDS for Latin morphological analysis,
+          designed primarily for WebAssembly.
+        </p>
+        <p class="dictionary-note" data-i18n="dictionaryNote">
+          Interface labels can be translated. Dictionary definitions remain
+          in the original English distributed with Whitaker's WORDS.
+        </p>
+      </header>
+
+      <section id="loader" class="loader" aria-live="polite">
+        <div class="loader__line">
+          <span class="spinner" aria-hidden="true"></span>
+          <span id="loader-text">Preparing the engine…</span>
+        </div>
+        <progress id="loader-progress" max="1" value="0"></progress>
+        <button
+          id="retry"
+          class="text-button"
+          type="button"
+          data-i18n="retry"
+          hidden
+        >
+          Try again
+        </button>
+      </section>
+
+      <form
+        id="query-form"
+        class="query"
+        aria-label="Analyze Latin text"
+        data-i18n-aria-label="formAriaLabel"
+      >
+        <fieldset id="query-controls" disabled>
+          <label for="latin-input" data-i18n="inputLabel">Latin text</label>
+          <textarea
+            id="latin-input"
+            name="latin"
+            rows="3"
+            placeholder="Enter a word or a short passage…"
+            data-i18n-placeholder="inputPlaceholder"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            required
+          >amamus</textarea>
+
+          <div class="query__actions">
+            <span class="shortcut">Ctrl/⌘ + Enter</span>
+            <button
+              id="analyze"
+              class="primary-button"
+              type="submit"
+              data-i18n="analyze"
+            >
+              Analyze
+            </button>
+          </div>
+
+          <div
+            class="examples"
+            aria-label="Examples"
+            data-i18n-aria-label="examples"
+          >
+            <span data-i18n="examples">Examples</span>
+            <button type="button" data-example="mālum">mālum</button>
+            <button type="button" data-example="amamus">amamus</button>
+            <button type="button" data-example="loquitur">loquitur</button>
+            <button type="button" data-example="amata est">amata est</button>
+            <button type="button" data-example="studiisque">studiisque</button>
+            <button type="button" data-example="IV">IV</button>
+          </div>
+        </fieldset>
+      </form>
+
+      <section
+        id="results"
+        class="results"
+        aria-live="polite"
+        aria-busy="false"
+      ></section>
+    </main>
+
+    <footer class="footer">
+      <span>WordsWASM · C++23 + WebAssembly</span>
+      <a
+        href="https://github.com/Fabio3rs/WordsWASM"
+        rel="noreferrer"
+        data-i18n="sourceCode"
+      >Source code</a>
+    </footer>
+
+    <noscript>
+      JavaScript is required to run WebAssembly. · JavaScript é necessário
+      para executar o WebAssembly.
+    </noscript>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

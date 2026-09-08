@@ -5,6 +5,7 @@ name: Native and WebAssembly build
     branches: [main, master]
     tags: ["v*"]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -144,6 +145,38 @@ jobs:
             "${dataset_id}" \
             release/words-web/words-search.wwdb
 
+      # Pages is assembled independently from the tagged release bundle. This
+      # keeps its manifest full-only while publishing raw, Brotli and gzip
+      # representations for post-deployment content-negotiation checks.
+      - name: Assemble GitHub Pages site
+        if: >-
+          github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        run: |
+          mkdir -p release/pages
+          cp \
+            web/index.html \
+            web/styles.css \
+            web/app.js \
+            web/favicon.svg \
+            release/pages/
+          node scripts/export-wasm-assets.mjs \
+            --bundle full \
+            --build-dir build/wasm \
+            --full-database whitakers-words/poc/compact-db/output/words-poc-dense.wwdb \
+            --out-dir release/pages/engine
+
+      - name: Configure GitHub Pages
+        if: >-
+          github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages artifact
+        if: >-
+          github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: release/pages
+
       - name: Package tagged release
         if: startsWith(github.ref, 'refs/tags/')
         run: |
@@ -178,6 +211,28 @@ jobs:
             release/words-web/**
             release/packages/**
           if-no-files-found: error
+
+  deploy-pages:
+    name: Publish GitHub Pages
+    if: >-
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    needs: wasm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
 
   publish-release:
     name: Publish tagged GitHub release

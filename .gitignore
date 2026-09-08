@@ -9,6 +9,7 @@ bin
 /cmake-build-*/
 /dist/
 /release/
+/web/engine/
 
 # Interpreter/tool caches never carry editorial evidence.
 __pycache__/
