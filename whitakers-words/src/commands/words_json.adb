@@ -14,6 +14,9 @@ procedure Words_JSON is
    Argument_Index : Positive := 1;
    Enable_Two_Words : Boolean := False;
    Batch_JSON_Lines : Boolean := False;
+   Configured_Profile : Boolean := False;
+   Invalid_Arguments : Boolean := False;
+   Have_Query : Boolean := False;
 
    procedure Put_Analysis (Query_Text : String) is
    begin
@@ -33,30 +36,53 @@ procedure Words_JSON is
          Query_Text);
    end Put_Analysis;
 begin
-   if Ada.Command_Line.Argument_Count = 1 and then
-     Ada.Command_Line.Argument (1) = "--batch-json-lines"
+   for Index in 1 .. Ada.Command_Line.Argument_Count loop
+      if Ada.Command_Line.Argument (Index) = "--configured" then
+         Configured_Profile := True;
+      elsif Ada.Command_Line.Argument (Index) = "--two-words=legacy" then
+         Enable_Two_Words := True;
+      elsif Ada.Command_Line.Argument (Index) = "--batch-json-lines" then
+         Batch_JSON_Lines := True;
+      elsif Ada.Command_Line.Argument (Index)'Length > 0 and then
+        Ada.Command_Line.Argument (Index) (1) = '-'
+      then
+         Invalid_Arguments := True;
+      elsif Have_Query then
+         Invalid_Arguments := True;
+      else
+         Argument_Index := Index;
+         Have_Query := True;
+      end if;
+   end loop;
+
+   if Invalid_Arguments or else
+     (Batch_JSON_Lines and then Have_Query) or else
+     (not Batch_JSON_Lines and then not Have_Query)
    then
-      Batch_JSON_Lines := True;
-   elsif Ada.Command_Line.Argument_Count = 2 and then
-     Ada.Command_Line.Argument (1) = "--two-words=legacy"
-   then
-      Argument_Index := 2;
-      Enable_Two_Words := True;
-   elsif Ada.Command_Line.Argument_Count /= 1 then
       Ada.Text_IO.Put_Line
         (Ada.Text_IO.Standard_Error,
-         "usage: words_json [--two-words=legacy] LATIN_TEXT | " &
-         "--batch-json-lines");
+         "usage: words_json [--configured] [--two-words=legacy] " &
+         "LATIN_TEXT | [--configured] --batch-json-lines");
       Ada.Command_Line.Set_Exit_Status (Ada.Command_Line.Failure);
       return;
    end if;
 
    Suppress_Preface := True;
    Method := Command_Line_Input;
-   Words_Engine.Initialization.Initialize_Canonical_Engine;
-   -- WHY: normal canonical output keeps this low-confidence recovery off;
-   -- the flag only exposes the original splitter to differential tests.
-   Words_Mdev (Do_Two_Words) := Enable_Two_Words;
+   if Configured_Profile then
+      -- WHY: differential tests need to exercise the original parameter
+      -- loader without scraping the terminal renderer.  The caller must use
+      -- an isolated WHITAKERS_WORDS_DATADIR with complete mode fixtures.
+      Words_Engine.Initialization.Initialize_Engine;
+      if Enable_Two_Words then
+         Words_Mdev (Do_Two_Words) := True;
+      end if;
+   else
+      Words_Engine.Initialization.Initialize_Canonical_Engine;
+      -- WHY: normal canonical output keeps this low-confidence recovery off;
+      -- the flag only exposes the original splitter to differential tests.
+      Words_Mdev (Do_Two_Words) := Enable_Two_Words;
+   end if;
 
    if Batch_JSON_Lines then
       -- WHY: the acceptance corpus contains thousands of distinct words; one

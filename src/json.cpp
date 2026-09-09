@@ -35,6 +35,17 @@ constexpr std::string_view regular_method_name{"regular"};
 constexpr std::string_view derived_method_name{"derived"};
 constexpr std::string_view compound_method_name{"compound"};
 
+[[nodiscard]] bool legacy_projection_visible(
+    const WhitakerTrimAssessment &assessment) noexcept {
+    // analysis-v1/search-v1 predate compatibility assessment.  Their only
+    // eagerly enforced List_Sweep rule was the deponent active-form check, so
+    // preserve that exact contract while newer projections expose all
+    // candidates and their reasons.
+    return std::ranges::find(assessment.values(),
+                             WhitakerTrimReason::deponent_active_form) ==
+           assessment.values().end();
+}
+
 [[nodiscard]] constexpr std::string_view
 dictionary_name(const DictionaryKind dictionary) noexcept {
     return dictionary == DictionaryKind::unique ? unique_dictionary_name
@@ -52,6 +63,14 @@ derivation_method(const std::optional<std::string_view> rewrite_method,
         return unique_dictionary_name;
     }
     return has_addons ? derived_method_name : regular_method_name;
+}
+
+[[nodiscard]] constexpr std::string_view
+rewrite_category(const RewriteRule &rewrite) noexcept {
+    if (rewrite.kind == RewriteKind::syncope) {
+        return "syncope";
+    }
+    return rewrite.medieval ? "medieval" : "classical";
 }
 
 [[nodiscard]] Json nullable_semantic(const std::string_view value) {
@@ -159,6 +178,27 @@ derivation_method(const std::optional<std::string_view> rewrite_method,
         {"text", text},
         {"normalized", normalized},
         {"mode", "latin"},
+    };
+}
+
+[[nodiscard]] Json analysis_options_json(const AnalysisOptions &options) {
+    const auto &mechanisms = options.mechanisms;
+    return Json{
+        {"whitakerTrim", whitaker_trim_mode_name(options.whitaker_trim)},
+        {"orthography", orthography_mode_name(options.orthography)},
+        {"twoWords",
+         options.two_words == TwoWordsMode::legacy_first_match ? "legacy"
+                                                                : "disabled"},
+        {"mechanisms",
+         Json{{"productiveDerivations",
+               mechanisms.productive_derivations},
+              {"prefixes", mechanisms.prefixes},
+              {"suffixes", mechanisms.suffixes},
+              {"tickons", mechanisms.tickons},
+              {"tackons", mechanisms.tackons},
+              {"packons", mechanisms.packons},
+              {"syncope", mechanisms.syncope},
+              {"verbalCompounds", mechanisms.verbal_compounds}}},
     };
 }
 
@@ -293,7 +333,8 @@ derivation_method(const std::optional<std::string_view> rewrite_method,
 [[nodiscard]] Json
 derivation_json(const Database &database, const DerivationIR &derivation,
                 const DictionaryKind dictionary,
-                const std::optional<RewrittenFormIR> &rewritten_form) {
+                const std::optional<RewrittenFormIR> &rewritten_form,
+                const bool extended = false) {
     Json steps = Json::array();
     std::optional<std::string_view> rewrite_method;
     const auto append_addon = [&](const AddonId addon_id) {
@@ -334,6 +375,7 @@ derivation_json(const Database &database, const DerivationIR &derivation,
         append_addon(addon_id);
     }
     if (rewritten_form) {
+        std::size_t rewrite_index{};
         for (const auto rewrite_id : rewritten_form->steps()) {
             const auto &rewrite = database.rewrite(rewrite_id);
             const auto method = rewrite.kind == RewriteKind::syncope
@@ -355,18 +397,87 @@ derivation_json(const Database &database, const DerivationIR &derivation,
             if (!after.empty()) {
                 step["after"] = after;
             }
+            if (extended) {
+                step["category"] = rewrite_category(rewrite);
+                step["scope"] = rewrite_scope_name(rewrite.scope);
+                step["operation"] =
+                    rewrite_operation_name(rewrite.operation);
+                step["stage"] = rewrite_stage_name(rewrite.stage);
+                step["application"] = Json{
+                    {"position",
+                     rewritten_form->positions.at(rewrite_index)},
+                    {"removeCount",
+                     rewritten_form->remove_counts.at(rewrite_index)},
+                    {"observed",
+                     rewritten_form->observed.at(rewrite_index)},
+                    {"replacement",
+                     rewritten_form->replacements.at(rewrite_index)},
+                };
+            }
             steps.push_back(std::move(step));
+            ++rewrite_index;
         }
     }
     for (const auto addon_id : addon_steps.subspan(leading_addons)) {
         append_addon(addon_id);
     }
-    return Json{
+    Json output{
         // Unique remains the method even when a recursively stripped tackon
         // contributes steps; this is the precedence used by the Ada emitter.
         {"method",
          derivation_method(rewrite_method, dictionary, derivation.count != 0U)},
         {"steps", std::move(steps)},
+    };
+    if (extended && rewritten_form) {
+        output["recognizedForm"] =
+            rewritten_form->stem + rewritten_form->ending;
+    }
+    return output;
+}
+
+[[nodiscard]] Json
+morphological_notice_json(const MorphologicalNotice notice) {
+    Json output{{"code", morphological_notice_name(notice)}};
+    if (notice == MorphologicalNotice::related_passive_usage_attested) {
+        output["note"] =
+            "Related passive uses of audeo are attested; this does not claim "
+            "that the exact queried surface is attested.";
+        output["documentation"] =
+            "docs/morphological-assessment.md#audeo-passive";
+    } else if (notice == MorphologicalNotice::source_disagreement) {
+        output["note"] =
+            "Whitaker's trim policy and external grammatical or lexical "
+            "evidence do not support the same early rejection.";
+        output["documentation"] =
+            "docs/morphological-assessment.md#source-disagreement";
+    } else if (notice ==
+               MorphologicalNotice::manual_review_recommended) {
+        output["note"] =
+            "Keep this candidate available for contextual ranking or manual "
+            "review.";
+        output["documentation"] =
+            "docs/morphological-assessment.md#review-policy";
+    }
+    return output;
+}
+
+[[nodiscard]] Json
+morphological_assessment_json(const MorphologicalAssessmentIR &assessment) {
+    Json reasons = Json::array();
+    for (const auto reason : assessment.whitaker_trim.values()) {
+        reasons.push_back(whitaker_trim_reason_name(reason));
+    }
+    Json notices = Json::array();
+    for (const auto notice : assessment.notice_values()) {
+        notices.push_back(morphological_notice_json(notice));
+    }
+    return Json{
+        {"generatedByWhitaker", assessment.generated_by_whitaker},
+        {"structurallyGenerated", true},
+        {"whitakerTrim",
+         Json{{"compatible", assessment.whitaker_trim.accepted()},
+              {"reasons", std::move(reasons)}}},
+        {"notices", std::move(notices)},
     };
 }
 
@@ -428,7 +539,8 @@ compound_meaning(const CompoundAnalysisIR &analysis) noexcept {
 
 [[nodiscard]] Json full_analysis(const Engine &engine,
                                  const SurfaceForm &surface,
-                                 const AnalysisIR &analysis) {
+                                 const AnalysisIR &analysis,
+                                 const bool extended = false) {
     const auto &database = engine.database();
     const auto &lexeme = database.lexeme(analysis.lexeme);
     const auto stem =
@@ -458,20 +570,26 @@ compound_meaning(const CompoundAnalysisIR &analysis) noexcept {
     const auto morphology =
         std::visit([](const auto &value) { return morphology_json(value); },
                    analysis.morphology);
-    return Json{
+    Json output{
         {"partOfSpeech", analysis_part_of_speech},
         {"lexeme", full_lexeme_json(database, lexeme, surface.normalized_nfc)},
         {"form", std::move(form)},
         {"morphology", morphology},
         {"derivation",
          derivation_json(database, analysis.derivation, lexeme.dictionary,
-                         analysis.derivation.rewritten_form)},
+                         analysis.derivation.rewritten_form, extended)},
     };
+    if (extended) {
+        output["assessment"] =
+            morphological_assessment_json(analysis.assessment);
+    }
+    return output;
 }
 
 [[nodiscard]] Json full_compound_analysis(const Engine &engine,
                                           const QueryResult &result,
-                                          const CompoundAnalysisIR &analysis) {
+                                          const CompoundAnalysisIR &analysis,
+                                          const bool extended = false) {
     const auto &database = engine.database();
     const auto &lexeme = database.lexeme(analysis.lexeme);
     std::string stem =
@@ -480,7 +598,7 @@ compound_meaning(const CompoundAnalysisIR &analysis) noexcept {
 
     auto derivation =
         derivation_json(database, analysis.source_derivation, lexeme.dictionary,
-                        analysis.source_derivation.rewritten_form);
+                        analysis.source_derivation.rewritten_form, extended);
     derivation["method"] = compound_method_name;
     derivation["steps"].push_back(Json{
         {"type", compound_method_name},
@@ -489,7 +607,7 @@ compound_meaning(const CompoundAnalysisIR &analysis) noexcept {
         {"rule", compound_kind_name(analysis.kind)},
     });
 
-    return Json{
+    Json output{
         {"partOfSpeech", lexical_part_name(PartOfSpeech::verb)},
         {"lexeme",
          full_lexeme_json(database, lexeme, result.surface.normalized_nfc)},
@@ -504,6 +622,11 @@ compound_meaning(const CompoundAnalysisIR &analysis) noexcept {
         {"morphology", morphology_json(analysis.morphology)},
         {"derivation", std::move(derivation)},
     };
+    if (extended) {
+        output["assessment"] =
+            morphological_assessment_json(analysis.assessment);
+    }
+    return output;
 }
 
 [[nodiscard]] std::string roman_meaning(const RomanNumeralIR &analysis) {
@@ -577,12 +700,14 @@ struct SearchHit final {
     std::uint8_t rewrite_count{};
     CompoundKind compound_kind{CompoundKind::unknown};
     std::string compound_auxiliary;
+    MorphologicalAssessmentIR assessment;
     auto operator<=>(const SearchHit &) const = default;
 };
 
 void append_search_hit(std::vector<SearchHit> &output, const LexemeId lexeme,
                        const std::optional<RuleId> rule,
                        const DerivationIR &derivation,
+                       const MorphologicalAssessmentIR &assessment,
                        const CompoundKind compound_kind = CompoundKind::unknown,
                        const std::string_view auxiliary = {}) {
     SearchHit hit;
@@ -601,10 +726,12 @@ void append_search_hit(std::vector<SearchHit> &output, const LexemeId lexeme,
                            [](const AddonId id) { return id.value(); });
     hit.compound_kind = compound_kind;
     hit.compound_auxiliary = auxiliary;
+    hit.assessment = assessment;
     output.push_back(std::move(hit));
 }
 
-[[nodiscard]] Json search_hits_json(std::vector<SearchHit> ordered_hits) {
+[[nodiscard]] Json search_hits_json(std::vector<SearchHit> ordered_hits,
+                                    const bool extended = false) {
     std::ranges::sort(ordered_hits);
     const auto unique = std::ranges::unique(ordered_hits).begin();
     ordered_hits.erase(unique, ordered_hits.end());
@@ -621,6 +748,10 @@ void append_search_hit(std::vector<SearchHit> &output, const LexemeId lexeme,
             {"addonIds", std::move(addon_ids)},
             {"scoreFlags", 0},
         };
+        if (extended) {
+            serialized_hit["assessment"] =
+                morphological_assessment_json(hit.assessment);
+        }
         if (hit.rewrite_count > 0U) {
             Json rewrite_ids = Json::array();
             for (std::size_t index = 0; index < hit.rewrite_count; ++index) {
@@ -641,13 +772,19 @@ void append_search_hit(std::vector<SearchHit> &output, const LexemeId lexeme,
 
 [[nodiscard]] Json
 full_two_word_suggestion(const Engine &engine,
-                         const TwoWordSuggestionIR &suggestion) {
+                         const TwoWordSuggestionIR &suggestion,
+                         const bool extended = false) {
     Json segments = Json::array();
     for (const auto &segment : suggestion.segments) {
         std::vector<std::pair<AnalysisOrderKey, Json>> ordered;
         ordered.reserve(segment.analyses.size());
         for (const auto &analysis : segment.analyses) {
-            auto value = full_analysis(engine, segment.surface, analysis);
+            if (!extended && !legacy_projection_visible(
+                                 analysis.assessment.whitaker_trim)) {
+                continue;
+            }
+            auto value =
+                full_analysis(engine, segment.surface, analysis, extended);
             ordered.emplace_back(analysis_order_key(engine.database(),
                                                     segment.surface, analysis),
                                  std::move(value));
@@ -674,18 +811,23 @@ full_two_word_suggestion(const Engine &engine,
 }
 
 [[nodiscard]] Json
-search_two_word_suggestion(const TwoWordSuggestionIR &suggestion) {
+search_two_word_suggestion(const TwoWordSuggestionIR &suggestion,
+                           const bool extended = false) {
     Json segments = Json::array();
     for (const auto &segment : suggestion.segments) {
         std::vector<SearchHit> hits;
         hits.reserve(segment.analyses.size());
         for (const auto &analysis : segment.analyses) {
+            if (!extended && !legacy_projection_visible(
+                                 analysis.assessment.whitaker_trim)) {
+                continue;
+            }
             append_search_hit(hits, analysis.lexeme, analysis.rule,
-                              analysis.derivation);
+                              analysis.derivation, analysis.assessment);
         }
         segments.push_back(Json{
             {"text", segment.surface.normalized_nfc},
-            {"hits", search_hits_json(std::move(hits))},
+            {"hits", search_hits_json(std::move(hits), extended)},
         });
     }
     return Json{
@@ -717,6 +859,10 @@ std::string analysis_json(const Engine &engine, const QueryResult &result) {
         for_each_analysis(result, [&](const auto &analysis) {
             using Analysis = std::remove_cvref_t<decltype(analysis)>;
             if constexpr (std::is_same_v<Analysis, AnalysisIR>) {
+                if (!legacy_projection_visible(
+                        analysis.assessment.whitaker_trim)) {
+                    return;
+                }
                 auto value = full_analysis(engine, result.surface, analysis);
                 ordered.emplace_back(analysis_order_key(engine.database(),
                                                         result.surface,
@@ -764,6 +910,76 @@ std::string analysis_json(const Engine &engine, const QueryResult &result) {
     return output.dump();
 }
 
+std::string analysis_json_v2(const Engine &engine,
+                             const QueryResult &result) {
+    if (!engine.owns(result)) {
+        throw std::logic_error{
+            "analysis result belongs to a different dataset"};
+    }
+    if (!engine.supports_full_analysis()) {
+        throw std::logic_error{
+            "analysis JSON requires a full WWDB with meanings"};
+    }
+    Json analyses = Json::array();
+    if (result.status == QueryStatus::analyzed) {
+        std::vector<std::pair<AnalysisOrderKey, Json>> ordered;
+        ordered.reserve(result.analyses.size() +
+                        result.compound_analyses.size() +
+                        result.artificial_analyses.size());
+        for_each_analysis(result, [&](const auto &analysis) {
+            using Analysis = std::remove_cvref_t<decltype(analysis)>;
+            if constexpr (std::is_same_v<Analysis, AnalysisIR>) {
+                auto value =
+                    full_analysis(engine, result.surface, analysis, true);
+                ordered.emplace_back(analysis_order_key(engine.database(),
+                                                        result.surface,
+                                                        analysis),
+                                     std::move(value));
+            } else if constexpr (std::is_same_v<Analysis,
+                                                CompoundAnalysisIR>) {
+                auto value =
+                    full_compound_analysis(engine, result, analysis, true);
+                ordered.emplace_back(
+                    analysis_order_key(engine.database(), analysis),
+                    std::move(value));
+            } else if constexpr (std::is_same_v<Analysis, RomanNumeralIR>) {
+                auto value =
+                    full_roman_analysis(engine.database(), result, analysis);
+                ordered.emplace_back(analysis_order_key(analysis),
+                                     std::move(value));
+            } else {
+                static_assert(sizeof(Analysis) == 0U,
+                              "new analysis requires JSON projection");
+            }
+        });
+        std::ranges::sort(ordered, {},
+                          &std::pair<AnalysisOrderKey, Json>::first);
+        for (auto &[key, value] : ordered) {
+            static_cast<void>(key);
+            analyses.push_back(std::move(value));
+        }
+    }
+
+    Json diagnostics = Json::array();
+    for (const auto &diagnostic : result.diagnostics) {
+        diagnostics.push_back(diagnostic_json(diagnostic));
+    }
+    Json output{
+        {"schema", "whitakers-words.analysis"},
+        {"schemaVersion", 2},
+        {"query", query_json(result)},
+        {"options", analysis_options_json(result.options)},
+        {"status", status_name(result.status)},
+        {"analyses", std::move(analyses)},
+        {"diagnostics", std::move(diagnostics)},
+    };
+    if (result.two_word_suggestion) {
+        output["suggestions"] = Json::array({full_two_word_suggestion(
+            engine, *result.two_word_suggestion, true)});
+    }
+    return output.dump();
+}
+
 std::string search_json(const Engine &engine, const QueryResult &result) {
     if (!engine.owns(result)) {
         throw std::logic_error{
@@ -774,12 +990,17 @@ std::string search_json(const Engine &engine, const QueryResult &result) {
         ordered_hits.reserve(result.analyses.size() +
                              result.compound_analyses.size());
         for (const auto &analysis : result.analyses) {
+            if (!legacy_projection_visible(
+                    analysis.assessment.whitaker_trim)) {
+                continue;
+            }
             append_search_hit(ordered_hits, analysis.lexeme, analysis.rule,
-                              analysis.derivation);
+                              analysis.derivation, analysis.assessment);
         }
         for (const auto &analysis : result.compound_analyses) {
             append_search_hit(ordered_hits, analysis.lexeme,
                               analysis.source_rule, analysis.source_derivation,
+                              analysis.assessment,
                               analysis.kind, analysis.auxiliary);
         }
     }
@@ -817,6 +1038,111 @@ std::string search_json(const Engine &engine, const QueryResult &result) {
     if (result.two_word_suggestion) {
         output["suggestions"] = Json::array(
             {search_two_word_suggestion(*result.two_word_suggestion)});
+    }
+    return output.dump();
+}
+
+std::string search_json_v2(const Engine &engine, const QueryResult &result) {
+    if (!engine.owns(result)) {
+        throw std::logic_error{
+            "analysis result belongs to a different dataset"};
+    }
+    Json hits = Json::array();
+    if (result.status == QueryStatus::analyzed) {
+        std::vector<const AnalysisIR *> ordered;
+        ordered.reserve(result.analyses.size());
+        for (const auto &analysis : result.analyses) {
+            ordered.push_back(&analysis);
+        }
+        std::ranges::sort(ordered, [&](const AnalysisIR *left,
+                                      const AnalysisIR *right) {
+            return analysis_order_key(engine.database(), result.surface,
+                                      *left) <
+                   analysis_order_key(engine.database(), result.surface,
+                                      *right);
+        });
+        for (const auto *analysis : ordered) {
+            Json addon_ids = Json::array();
+            for (const auto id : analysis->derivation.steps()) {
+                addon_ids.push_back(id.value());
+            }
+            Json hit{
+                {"lexemeId", analysis->lexeme.value()},
+                {"ruleId", analysis->rule
+                               ? Json(analysis->rule->value())
+                               : Json(nullptr)},
+                {"addonIds", std::move(addon_ids)},
+                {"scoreFlags", 0},
+                {"assessment",
+                 morphological_assessment_json(analysis->assessment)},
+            };
+            if (analysis->derivation.rewritten_form) {
+                Json rewrite_ids = Json::array();
+                for (const auto id :
+                     analysis->derivation.rewritten_form->steps()) {
+                    rewrite_ids.push_back(id.value());
+                }
+                hit["rewriteIds"] = std::move(rewrite_ids);
+            }
+            hits.push_back(std::move(hit));
+        }
+        for (const auto &analysis : result.compound_analyses) {
+            Json addon_ids = Json::array();
+            for (const auto id : analysis.source_derivation.steps()) {
+                addon_ids.push_back(id.value());
+            }
+            hits.push_back(Json{
+                {"lexemeId", analysis.lexeme.value()},
+                {"ruleId", analysis.source_rule
+                               ? Json(analysis.source_rule->value())
+                               : Json(nullptr)},
+                {"addonIds", std::move(addon_ids)},
+                {"scoreFlags", 0},
+                {"compound",
+                 Json{{"construction", compound_kind_name(analysis.kind)},
+                      {"auxiliary", analysis.auxiliary}}},
+                {"assessment",
+                 morphological_assessment_json(analysis.assessment)},
+            });
+        }
+    }
+    for (const auto &artificial : result.artificial_analyses) {
+        std::visit(
+            [&](const auto &analysis) {
+                Json addon_ids = Json::array();
+                for (const auto id : analysis.derivation.steps()) {
+                    addon_ids.push_back(id.value());
+                }
+                hits.push_back(Json{
+                    {"lexemeId", nullptr},
+                    {"ruleId", nullptr},
+                    {"addonIds", std::move(addon_ids)},
+                    {"scoreFlags", 0},
+                    {"artificial",
+                     Json{{"method", roman_dictionary_name},
+                          {"value", analysis.value},
+                          {"wellFormed", analysis.well_formed}}},
+                });
+            },
+            artificial);
+    }
+    Json diagnostics = Json::array();
+    for (const auto &diagnostic : result.diagnostics) {
+        diagnostics.push_back(diagnostic_json(diagnostic));
+    }
+    Json output{
+        {"schema", "whitakers-words.search"},
+        {"schemaVersion", 2},
+        {"datasetId", engine.dataset_id()},
+        {"query", query_json(result)},
+        {"options", analysis_options_json(result.options)},
+        {"status", status_name(result.status)},
+        {"hits", std::move(hits)},
+        {"diagnostics", std::move(diagnostics)},
+    };
+    if (result.two_word_suggestion) {
+        output["suggestions"] = Json::array(
+            {search_two_word_suggestion(*result.two_word_suggestion, true)});
     }
     return output.dump();
 }

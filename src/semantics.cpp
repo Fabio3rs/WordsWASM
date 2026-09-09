@@ -273,6 +273,60 @@ std::string_view rewrite_kind_name(const RewriteKind value) noexcept {
     return enum_token(value, values);
 }
 
+std::string_view rewrite_scope_name(const RewriteScope value) noexcept {
+    constexpr std::array<std::string_view, 4> values{"", "initial",
+                                                     "internal", "final"};
+    return enum_token(value, values);
+}
+
+std::string_view
+rewrite_operation_name(const RewriteOperation value) noexcept {
+    constexpr std::array<std::string_view, 4> values{
+        "", "literal", "slur", "double-consonant"};
+    return enum_token(value, values);
+}
+
+std::string_view rewrite_stage_name(const RewriteStage value) noexcept {
+    constexpr std::array<std::string_view, 4> values{"", "main", "early",
+                                                     "fallback"};
+    return enum_token(value, values);
+}
+
+std::string_view
+whitaker_trim_reason_name(const WhitakerTrimReason value) noexcept {
+    constexpr std::array<std::string_view, 6> values{
+        "unsupported-short-imperative",
+        "invalid-imperative-person",
+        "impersonal-non-third-person",
+        "deponent-active-form",
+        "semideponent-passive-present-system",
+        "semideponent-active-perfect-system",
+    };
+    return enum_token(value, values);
+}
+
+std::string_view
+morphological_notice_name(const MorphologicalNotice value) noexcept {
+    constexpr std::array<std::string_view, 3> values{
+        "related-passive-usage-attested",
+        "source-disagreement",
+        "manual-review-recommended",
+    };
+    return enum_token(value, values);
+}
+
+std::string_view
+whitaker_trim_mode_name(const WhitakerTrimMode value) noexcept {
+    constexpr std::array<std::string_view, 2> values{"annotate", "filter"};
+    return enum_token(value, values);
+}
+
+std::string_view orthography_mode_name(const OrthographyMode value) noexcept {
+    constexpr std::array<std::string_view, 3> values{
+        "disabled", "classical-only", "classical-and-medieval"};
+    return enum_token(value, values);
+}
+
 std::string_view quantity_match_name(const QuantityMatch value) noexcept {
     constexpr std::array<std::string_view, 3> values{"unspecified", "exact",
                                                      "unknown"};

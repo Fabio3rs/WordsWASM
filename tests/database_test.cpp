@@ -851,4 +851,21 @@ TEST(DatabaseTest, RejectsPayloadCorruption) {
     EXPECT_EQ(database.error().code, "checksum-mismatch");
 }
 
+TEST(DatabaseTest, WhitakerImperativeRulesUseOnlyLicensedPersons) {
+    std::size_t imperative_count{};
+    for (const auto &rule : test::engine().database().rules()) {
+        if (rule.mood != Mood::imperative) {
+            continue;
+        }
+        ++imperative_count;
+        EXPECT_TRUE(
+            (rule.tense == Tense::present && rule.person == Person::second) ||
+            (rule.tense == Tense::future &&
+             (rule.person == Person::second ||
+              rule.person == Person::third)))
+            << rule.id.value();
+    }
+    EXPECT_EQ(imperative_count, 93U);
+}
+
 } // namespace words

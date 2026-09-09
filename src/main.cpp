@@ -21,7 +21,7 @@ struct Options final {
     std::string dataset_id;
     std::string format;
     std::string word;
-    words::TwoWordsMode two_words{words::TwoWordsMode::disabled};
+    words::AnalysisOptions analysis;
     bool batch_json_lines{false};
 };
 
@@ -59,11 +59,47 @@ parse_options(const int argc, char *const argv[]) {
             }
             options.format = *value;
         } else if (argument == "--two-words=legacy") {
-            options.two_words = words::TwoWordsMode::legacy_first_match;
+            options.analysis.two_words =
+                words::TwoWordsMode::legacy_first_match;
+        } else if (argument == "--whitaker-trim=annotate") {
+            options.analysis.whitaker_trim =
+                words::WhitakerTrimMode::annotate;
+        } else if (argument == "--whitaker-trim=filter") {
+            options.analysis.whitaker_trim = words::WhitakerTrimMode::filter;
+        } else if (argument == "--orthography=disabled") {
+            options.analysis.orthography = words::OrthographyMode::disabled;
+        } else if (argument == "--orthography=classical") {
+            options.analysis.orthography =
+                words::OrthographyMode::classical_only;
+        } else if (argument == "--orthography=medieval") {
+            options.analysis.orthography =
+                words::OrthographyMode::classical_and_medieval;
+        } else if (argument == "--no-prefixes") {
+            options.analysis.mechanisms.prefixes = false;
+        } else if (argument == "--no-fixes") {
+            options.analysis.mechanisms.productive_derivations = false;
+        } else if (argument == "--no-suffixes") {
+            options.analysis.mechanisms.suffixes = false;
+        } else if (argument == "--no-tickons") {
+            options.analysis.mechanisms.tickons = false;
+        } else if (argument == "--no-tackons") {
+            options.analysis.mechanisms.tackons = false;
+        } else if (argument == "--no-packons") {
+            options.analysis.mechanisms.packons = false;
+        } else if (argument == "--no-syncope") {
+            options.analysis.mechanisms.syncope = false;
+        } else if (argument == "--no-verbal-compounds") {
+            options.analysis.mechanisms.verbal_compounds = false;
         } else if (argument == "--batch-json-lines") {
             options.batch_json_lines = true;
         } else if (argument.starts_with("--two-words=")) {
             return std::unexpected("two-words mode must be legacy");
+        } else if (argument.starts_with("--whitaker-trim=")) {
+            return std::unexpected(
+                "whitaker-trim mode must be annotate or filter");
+        } else if (argument.starts_with("--orthography=")) {
+            return std::unexpected(
+                "orthography mode must be disabled, classical, or medieval");
         } else if (argument.starts_with('-')) {
             return std::unexpected("unknown option: " + std::string{argument});
         } else {
@@ -84,8 +120,10 @@ parse_options(const int argc, char *const argv[]) {
         return std::unexpected(
             "batch-json-lines reads queries from stdin and accepts no word");
     }
-    if (options.format != "analysis" && options.format != "search") {
-        return std::unexpected("format must be analysis or search");
+    if (options.format != "analysis" && options.format != "search" &&
+        options.format != "analysis-v2" && options.format != "search-v2") {
+        return std::unexpected(
+            "format must be analysis, search, analysis-v2, or search-v2");
     }
     return options;
 }
@@ -120,7 +158,13 @@ read_file(const std::filesystem::path &path) {
 
 void usage() {
     std::cerr << "usage: words_cli --database FILE --dataset-id sha256:... "
-                 "--format analysis|search [--two-words=legacy] "
+                 "--format analysis|search|analysis-v2|search-v2 "
+                 "[--two-words=legacy] "
+                 "[--whitaker-trim=annotate|filter] "
+                 "[--orthography=disabled|classical|medieval] "
+                 "[--no-fixes] [--no-prefixes] [--no-suffixes] [--no-tickons] "
+                 "[--no-tackons] [--no-packons] [--no-syncope] "
+                 "[--no-verbal-compounds] "
                  "[--batch-json-lines | LATIN_TEXT ...]\n";
 }
 
@@ -128,6 +172,10 @@ void write_result(const words::Engine &engine, const words::QueryResult &result,
                   const std::string_view format) {
     if (format == "analysis") {
         std::cout << words::analysis_json(engine, result) << '\n';
+    } else if (format == "analysis-v2") {
+        std::cout << words::analysis_json_v2(engine, result) << '\n';
+    } else if (format == "search-v2") {
+        std::cout << words::search_json_v2(engine, result) << '\n';
     } else {
         std::cout << words::search_json(engine, result) << '\n';
     }
@@ -170,13 +218,15 @@ int main(const int argc, char *argv[]) try {
                   << engine.error().message << '\n';
         return 3;
     }
-    if (options->format == "analysis" && !(*engine)->supports_full_analysis()) {
+    if ((options->format == "analysis" ||
+         options->format == "analysis-v2") &&
+        !(*engine)->supports_full_analysis()) {
         std::cerr << "words_cli: unsupported-output: analysis format requires "
                      "a full WWDB with meanings\n";
         return 3;
     }
 
-    const words::AnalysisOptions analysis_options{options->two_words};
+    const auto analysis_options = options->analysis;
     if (options->batch_json_lines) {
         // WHY: corpus acceptance should exercise one long-lived immutable
         // snapshot instead of measuring thousands of process startups.

@@ -8,7 +8,7 @@ const datasetId = `sha256:${"a".repeat(64)}`;
 function fakeResult(schema, text, twoWords) {
   return {
     schema,
-    schemaVersion: 3,
+    schemaVersion: 4,
     datasetId,
     query: {text, normalized: text, mode: "latin"},
     status: "analyzed",
@@ -231,6 +231,118 @@ function fakeVector(items, deletions, name) {
   };
 }
 
+test("copies typed morphology assessments and concrete rewrite provenance", async () => {
+  const deletions = [];
+  const rewrite = {
+    kind: "rewrite",
+    target: "form",
+    id: 17,
+    type: "orthographic",
+    rule: "t -> th",
+    before: "t",
+    after: "th",
+    category: "medieval",
+    scope: "initial",
+    operation: "literal",
+    stage: "main",
+    position: 0,
+    removeCount: 1,
+    observed: "t",
+    replacement: "th",
+    hasMeaning: false,
+    meaning: "",
+  };
+  const rawHit = {
+    kind: "lexical",
+    lexemeId: 7,
+    lemma: "theologia",
+    hasMeaning: false,
+    meaning: "",
+    partOfSpeech: "conjunction",
+    form: {
+      stem: "theologia",
+      hasStemKey: false,
+      stemKey: 0,
+      ending: "",
+      recognized: "theologia",
+    },
+    morphology: {kind: "conjunction"},
+    derivation: {
+      method: "orthographic",
+      steps: fakeVector([rewrite], deletions, "steps"),
+    },
+    assessment: {
+      generatedByWhitaker: true,
+      whitakerTrimCompatible: false,
+      whitakerTrimReasons: fakeVector(
+        ["semideponent-passive-present-system"], deletions, "reasons",
+      ),
+      notices: fakeVector(
+        ["source-disagreement"], deletions, "notices",
+      ),
+    },
+    lexical: {
+      dictionary: "general",
+      entryId: 8,
+      partOfSpeech: "conjunction",
+      age: "",
+      subject: "",
+      geography: "",
+      frequency: "",
+      source: "",
+    },
+    rule: {present: false},
+    ruleId: 0,
+    quantityMatch: "unspecified",
+  };
+  const moduleFactory = async () => ({
+    AnalysisEngine: class {
+      loadDatabase() { return {ok: true, code: "", message: ""}; }
+      datasetId() { return datasetId; }
+      databaseBytes() { return 1; }
+      databaseKind() { return "full"; }
+      search() {
+        return {
+          schema: "whitakers-words.browser-search",
+          schemaVersion: 4,
+          datasetId,
+          query: {text: "teologia", normalized: "teologia", mode: "latin"},
+          status: "analyzed",
+          hits: fakeVector([rawHit], deletions, "hits"),
+          diagnostics: fakeVector([], deletions, "diagnostics"),
+          suggestions: fakeVector([], deletions, "suggestions"),
+        };
+      }
+      delete() {}
+    },
+  });
+  const engine = await createWordsAnalysisEngine({
+    datasetId,
+    databaseBytes: new Uint8Array([1]),
+    moduleFactory,
+  });
+  const hit = engine.search("teologia").hits[0];
+  assert.deepEqual(hit.assessment, {
+    generatedByWhitaker: true,
+    whitakerTrim: {
+      compatible: false,
+      reasons: ["semideponent-passive-present-system"],
+    },
+    notices: ["source-disagreement"],
+  });
+  assert.deepEqual(hit.derivation.steps[0].application, {
+    position: 0,
+    removeCount: 1,
+    observed: "t",
+    replacement: "th",
+  });
+  assert.equal(hit.derivation.steps[0].category, "medieval");
+  assert.deepEqual(deletions.sort(), [
+    "diagnostics", "hits", "notices", "reasons", "steps", "suggestions",
+  ]);
+  engine.dispose();
+});
+
 test("releases every direct result handle when hit copying throws", async () => {
   const deletions = [];
   const log = [];
@@ -243,7 +355,7 @@ test("releases every direct result handle when hit copying throws", async () => 
       search() {
         return {
           schema: "whitakers-words.browser-search",
-          schemaVersion: 3,
+          schemaVersion: 4,
           datasetId,
           query: {text: "x", normalized: "x", mode: "latin"},
           status: "analyzed",
@@ -281,7 +393,7 @@ test("releases the line and nested handles when result copying throws", async ()
       searchLine() {
         const result = {
           schema: "whitakers-words.browser-search",
-          schemaVersion: 3,
+          schemaVersion: 4,
           datasetId,
           query: {text: "x", normalized: "x", mode: "latin"},
           status: "analyzed",
@@ -333,7 +445,7 @@ test("releases nested derivation handles when their copy throws", async () => {
       search() {
         return {
           schema: "whitakers-words.browser-search",
-          schemaVersion: 3,
+          schemaVersion: 4,
           datasetId,
           query: {text: "x", normalized: "x", mode: "latin"},
           status: "analyzed",

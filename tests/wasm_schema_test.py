@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate real high-level WASM documents against the browser v3 schemas."""
+"""Validate real high-level WASM documents against the browser v4 schemas."""
 
 from __future__ import annotations
 
@@ -20,8 +20,8 @@ def main() -> None:
     args = parser.parse_args()
 
     root = args.root.resolve()
-    search_path = (root / "schemas/browser-search-v3.schema.json").resolve()
-    analysis_path = (root / "schemas/browser-analysis-v3.schema.json").resolve()
+    search_path = (root / "schemas/browser-search-v4.schema.json").resolve()
+    analysis_path = (root / "schemas/browser-analysis-v4.schema.json").resolve()
     search_schema = json.loads(search_path.read_text(encoding="utf-8"))
     analysis_schema = json.loads(analysis_path.read_text(encoding="utf-8"))
     jsonschema.Draft202012Validator.check_schema(search_schema)
@@ -40,8 +40,23 @@ def main() -> None:
         text=True,
     )
     documents = json.loads(completed.stdout)
-    store = {search_path.as_uri(): search_schema}
-    search_validator = jsonschema.Draft202012Validator(search_schema)
+    schema_paths = (
+        search_path,
+        analysis_path,
+        (root / "schemas/browser-search-v3.schema.json").resolve(),
+    )
+    store = {
+        path.as_uri(): json.loads(path.read_text(encoding="utf-8"))
+        for path in schema_paths
+    }
+    search_validator = jsonschema.Draft202012Validator(
+        search_schema,
+        resolver=jsonschema.RefResolver(
+            base_uri=search_path.as_uri(),
+            referrer=search_schema,
+            store=store,
+        ),
+    )
     analysis_validator = jsonschema.Draft202012Validator(
         analysis_schema,
         resolver=jsonschema.RefResolver(

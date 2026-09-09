@@ -38,6 +38,13 @@ if(NOT EMSCRIPTEN)
                 --cpp "$<TARGET_FILE:words_cli>"
         )
         add_test(
+            NAME words_configured_oracle
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/configured_oracle_test.py"
+                --root "${CMAKE_SOURCE_DIR}"
+                --cpp "$<TARGET_FILE:words_cli>"
+        )
+        add_test(
             NAME words_aeneid_corpus
             COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/corpus_differential_test.py"

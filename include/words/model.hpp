@@ -392,6 +392,112 @@ enum class TwoWordsMode : std::uint8_t {
     legacy_first_match,
 };
 
+// The historical List_Sweep routine couples these grammatical checks to the
+// presentation-oriented Trim_Output switch.  Keep the compatibility policy
+// explicit and neutral: a rejected candidate is not necessarily invalid
+// Latin, only one that the configured Whitaker trim would remove.
+enum class WhitakerTrimMode : std::uint8_t {
+    annotate,
+    filter,
+};
+
+enum class WhitakerTrimReason : std::uint8_t {
+    unsupported_short_imperative,
+    invalid_imperative_person,
+    impersonal_non_third_person,
+    deponent_active_form,
+    semideponent_passive_present_system,
+    semideponent_active_perfect_system,
+};
+
+// Curated evidence is deliberately separate from the mechanical trim result.
+// A candidate may be rejected by Whitaker's presentation policy and still be
+// supported by grammatical or corpus evidence.
+enum class MorphologicalNotice : std::uint8_t {
+    related_passive_usage_attested,
+    source_disagreement,
+    manual_review_recommended,
+};
+
+enum class OrthographyMode : std::uint8_t {
+    disabled,
+    classical_only,
+    classical_and_medieval,
+};
+
+struct MorphologicalMechanisms final {
+    bool productive_derivations{true};
+    bool prefixes{true};
+    bool suffixes{true};
+    bool tickons{true};
+    bool tackons{true};
+    bool packons{true};
+    bool syncope{true};
+    bool verbal_compounds{true};
+    auto operator<=>(const MorphologicalMechanisms &) const = default;
+};
+
+struct AnalysisOptions final {
+    // Keep this first for source compatibility with the former one-field
+    // aggregate initialization used by native callers.
+    TwoWordsMode two_words{TwoWordsMode::disabled};
+    WhitakerTrimMode whitaker_trim{WhitakerTrimMode::annotate};
+    OrthographyMode orthography{OrthographyMode::classical_and_medieval};
+    MorphologicalMechanisms mechanisms{};
+    auto operator<=>(const AnalysisOptions &) const = default;
+};
+
+inline constexpr std::size_t whitaker_trim_reason_count{6U};
+
+struct WhitakerTrimAssessment final {
+    std::array<WhitakerTrimReason, whitaker_trim_reason_count> reasons{};
+    std::uint8_t count{};
+    auto operator<=>(const WhitakerTrimAssessment &) const = default;
+
+    [[nodiscard]] bool accepted() const noexcept { return count == 0U; }
+
+    [[nodiscard]] std::span<const WhitakerTrimReason> values() const noexcept {
+        return std::span<const WhitakerTrimReason>{reasons}.first(
+            std::min<std::size_t>(count, reasons.size()));
+    }
+
+    void add(const WhitakerTrimReason reason) noexcept {
+        const auto current = values();
+        if (std::ranges::find(current, reason) != current.end() ||
+            count >= reasons.size()) {
+            return;
+        }
+        reasons.at(count++) = reason;
+    }
+};
+
+inline constexpr std::size_t morphological_notice_count{3U};
+
+struct MorphologicalAssessmentIR final {
+    // Every AnalysisIR candidate originates in Whitaker data/rules, including
+    // UNIQUES and typed derivational/rewrite paths.
+    bool generated_by_whitaker{true};
+    WhitakerTrimAssessment whitaker_trim;
+    std::array<MorphologicalNotice, morphological_notice_count> notices{};
+    std::uint8_t notice_count{};
+    auto operator<=>(const MorphologicalAssessmentIR &) const = default;
+
+    [[nodiscard]] std::span<const MorphologicalNotice>
+    notice_values() const noexcept {
+        return std::span<const MorphologicalNotice>{notices}.first(
+            std::min<std::size_t>(notice_count, notices.size()));
+    }
+
+    void add_notice(const MorphologicalNotice notice) noexcept {
+        const auto current = notice_values();
+        if (std::ranges::find(current, notice) != current.end() ||
+            notice_count >= notices.size()) {
+            return;
+        }
+        notices.at(notice_count++) = notice;
+    }
+};
+
 enum class CompoundKind : std::uint8_t {
     unknown = 0,
     finite_sum = 1,
@@ -520,6 +626,10 @@ struct RewrittenFormIR final {
     // Ada pipeline never recursively schedules arbitrary rewrites, so two IDs
     // express the real bound without a per-analysis vector allocation.
     std::array<RewriteId, 2> rules{};
+    std::array<std::uint32_t, 2> positions{};
+    std::array<std::uint32_t, 2> remove_counts{};
+    std::array<std::string, 2> observed{};
+    std::array<std::string, 2> replacements{};
     std::uint8_t count{};
     std::uint8_t leading_addon_count{};
     std::string stem;
@@ -557,6 +667,7 @@ struct AnalysisIR final {
     Morphology morphology;
     QuantityMatch quantity_match{QuantityMatch::unspecified};
     DerivationIR derivation;
+    MorphologicalAssessmentIR assessment;
 };
 
 struct CompoundAnalysisIR final {
@@ -572,6 +683,7 @@ struct CompoundAnalysisIR final {
     Tense source_tense{Tense::unknown};
     Voice source_voice{Voice::unknown};
     std::string auxiliary;
+    MorphologicalAssessmentIR assessment;
 };
 
 struct WordSegmentIR final {
@@ -617,6 +729,7 @@ struct QueryResult final {
         : origin{std::move(result_origin)} {}
 
     DatasetIdentity origin;
+    AnalysisOptions options;
     SurfaceForm surface;
     // Single-word analysis continues to use SurfaceForm directly.  Only the
     // bounded two-token API allocates these strings, keeping ranges in the IR

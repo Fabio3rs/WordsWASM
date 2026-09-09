@@ -224,7 +224,7 @@ TEST(EngineTest, PreservesEveryVerbKindRepresentedByARealLexeme) {
     }
 }
 
-TEST(EngineTest, RequiresPassiveMorphologyForDeponentVerbs) {
+TEST(EngineTest, AnnotatesAndOptionallyFiltersActiveDeponentForms) {
     constexpr std::uint32_t reor_entry = 32909U;
     const auto is_reor = [](const Engine &engine, const AnalysisIR &analysis) {
         const auto &lexeme = engine.database().lexeme(analysis.lexeme);
@@ -254,13 +254,191 @@ TEST(EngineTest, RequiresPassiveMorphologyForDeponentVerbs) {
     for (const auto *engine : engines) {
         const auto res = engine->analyze("res");
         ASSERT_EQ(res.status, QueryStatus::analyzed);
-        EXPECT_TRUE(
-            std::ranges::none_of(res.analyses, [&](const AnalysisIR &analysis) {
+        EXPECT_TRUE(std::ranges::any_of(
+            res.analyses, [&](const AnalysisIR &analysis) {
+                return is_reor(*engine, analysis) &&
+                       std::ranges::contains(
+                           analysis.assessment.whitaker_trim.values(),
+                           WhitakerTrimReason::deponent_active_form);
+            }));
+
+        auto filter = AnalysisOptions{};
+        filter.whitaker_trim = WhitakerTrimMode::filter;
+        const auto filtered = engine->analyze("res", filter);
+        EXPECT_TRUE(std::ranges::none_of(
+            filtered.analyses, [&](const AnalysisIR &analysis) {
                 return is_reor(*engine, analysis);
             }));
         EXPECT_TRUE(expects_person(*engine, "reor", Person::first));
         EXPECT_TRUE(expects_person(*engine, "reris", Person::second));
     }
+}
+
+TEST(EngineTest, ReproducesWhitakerTrimAsAnExplainablePolicy) {
+    const auto has_reason = [](const AnalysisIR &analysis,
+                               const WhitakerTrimReason reason) {
+        return std::ranges::contains(
+            analysis.assessment.whitaker_trim.values(), reason);
+    };
+
+    const auto short_imperative = test::engine().analyze("reg");
+    ASSERT_EQ(short_imperative.analyses.size(), 1U);
+    EXPECT_TRUE(has_reason(
+        short_imperative.analyses.front(),
+        WhitakerTrimReason::unsupported_short_imperative));
+    for (const auto *const licensed : {"dic", "duc", "fac"}) {
+        const auto result = test::engine().analyze(licensed);
+        EXPECT_TRUE(std::ranges::none_of(
+            result.analyses, [&](const AnalysisIR &analysis) {
+                return has_reason(
+                    analysis,
+                    WhitakerTrimReason::unsupported_short_imperative);
+            })) << licensed;
+    }
+
+    const auto impersonal = test::engine().analyze("liceo");
+    EXPECT_TRUE(std::ranges::any_of(
+        impersonal.analyses, [&](const AnalysisIR &analysis) {
+            return has_reason(
+                analysis,
+                WhitakerTrimReason::impersonal_non_third_person);
+        }));
+
+    const auto active_perfect = test::engine().analyze("ausi");
+    EXPECT_TRUE(std::ranges::any_of(
+        active_perfect.analyses, [&](const AnalysisIR &analysis) {
+            return has_reason(
+                analysis,
+                WhitakerTrimReason::semideponent_active_perfect_system);
+        }));
+
+    auto filter = AnalysisOptions{};
+    filter.whitaker_trim = WhitakerTrimMode::filter;
+    EXPECT_EQ(test::engine().analyze("reg", filter).status,
+              QueryStatus::unknown);
+    EXPECT_TRUE(std::ranges::none_of(
+        test::engine().analyze("liceo", filter).analyses,
+        [&](const AnalysisIR &analysis) {
+            return !analysis.assessment.whitaker_trim.accepted();
+        }));
+    EXPECT_TRUE(std::ranges::none_of(
+        test::engine().analyze("ausi", filter).analyses,
+        [&](const AnalysisIR &analysis) {
+            return has_reason(
+                analysis,
+                WhitakerTrimReason::semideponent_active_perfect_system);
+        }));
+}
+
+TEST(EngineTest, PreservesAttestedAudeoPassiveWithDisagreementNotices) {
+    const auto result = test::engine().analyze("audetur");
+    ASSERT_EQ(result.status, QueryStatus::analyzed);
+    ASSERT_EQ(result.analyses.size(), 1U);
+    const auto &assessment = result.analyses.front().assessment;
+    EXPECT_FALSE(assessment.whitaker_trim.accepted());
+    EXPECT_TRUE(std::ranges::contains(
+        assessment.whitaker_trim.values(),
+        WhitakerTrimReason::semideponent_passive_present_system));
+    EXPECT_TRUE(std::ranges::contains(
+        assessment.notice_values(),
+        MorphologicalNotice::related_passive_usage_attested));
+    EXPECT_TRUE(std::ranges::contains(
+        assessment.notice_values(),
+        MorphologicalNotice::source_disagreement));
+    EXPECT_TRUE(std::ranges::contains(
+        assessment.notice_values(),
+        MorphologicalNotice::manual_review_recommended));
+
+    const auto json = Json::parse(analysis_json_v2(test::engine(), result));
+    const auto &serialized = json.at("analyses").front().at("assessment");
+    EXPECT_FALSE(serialized.at("whitakerTrim").at("compatible"));
+    EXPECT_EQ(serialized.at("notices").size(), 3U);
+    const auto search = Json::parse(search_json_v2(test::engine(), result));
+    const auto &search_assessment =
+        search.at("hits").front().at("assessment");
+    EXPECT_FALSE(search_assessment.at("whitakerTrim").at("compatible"));
+    EXPECT_EQ(search_assessment.at("notices").size(), 3U);
+
+    auto filter = AnalysisOptions{};
+    filter.whitaker_trim = WhitakerTrimMode::filter;
+    EXPECT_EQ(test::engine().analyze("audetur", filter).status,
+              QueryStatus::unknown);
+}
+
+TEST(EngineTest, ControlsOrthographyEraWithoutLosingRewriteProvenance) {
+    auto classical = AnalysisOptions{};
+    classical.orthography = OrthographyMode::classical_only;
+    EXPECT_EQ(test::engine().analyze("pretor", classical).status,
+              QueryStatus::analyzed);
+    EXPECT_EQ(test::engine().analyze("teologia", classical).status,
+              QueryStatus::unknown);
+
+    auto disabled = classical;
+    disabled.orthography = OrthographyMode::disabled;
+    EXPECT_EQ(test::engine().analyze("pretor", disabled).status,
+              QueryStatus::unknown);
+
+    const auto medieval = test::engine().analyze("teologia");
+    const auto json = Json::parse(analysis_json_v2(test::engine(), medieval));
+    const auto &step =
+        json.at("analyses").front().at("derivation").at("steps").front();
+    EXPECT_EQ(step.at("category"), "medieval");
+    EXPECT_EQ(step.at("application").at("observed"), "t");
+    EXPECT_EQ(step.at("application").at("replacement"), "th");
+    EXPECT_EQ(json.at("analyses")
+                  .front()
+                  .at("derivation")
+                  .at("recognizedForm"),
+              "theologia");
+}
+
+TEST(EngineTest, IndependentlyControlsMorphologicalMechanisms) {
+    struct Fixture final {
+        std::string_view surface;
+        bool MorphologicalMechanisms::*mechanism;
+    };
+    constexpr std::array fixtures{
+        Fixture{.surface = "archipuella",
+                .mechanism = &MorphologicalMechanisms::prefixes},
+        Fixture{.surface = "anaticulus",
+                .mechanism = &MorphologicalMechanisms::suffixes},
+        Fixture{.surface = "ecquidam",
+                .mechanism = &MorphologicalMechanisms::tickons},
+        Fixture{.surface = "puellaque",
+                .mechanism = &MorphologicalMechanisms::tackons},
+        Fixture{.surface = "quispiam",
+                .mechanism = &MorphologicalMechanisms::packons},
+    };
+    for (const auto &fixture : fixtures) {
+        ASSERT_EQ(test::engine().analyze(fixture.surface).status,
+                  QueryStatus::analyzed)
+            << fixture.surface;
+        auto options = AnalysisOptions{};
+        options.mechanisms.*(fixture.mechanism) = false;
+        EXPECT_EQ(test::engine().analyze(fixture.surface, options).status,
+                  QueryStatus::unknown)
+            << fixture.surface;
+    }
+
+    auto no_fixes = AnalysisOptions{};
+    no_fixes.mechanisms.productive_derivations = false;
+    EXPECT_EQ(test::engine().analyze("archipuella", no_fixes).status,
+              QueryStatus::unknown);
+    EXPECT_EQ(test::engine().analyze("anaticulus", no_fixes).status,
+              QueryStatus::unknown);
+
+    auto no_syncope = AnalysisOptions{};
+    no_syncope.mechanisms.syncope = false;
+    const auto unsyncopated = test::engine().analyze("amasti", no_syncope);
+    EXPECT_TRUE(std::ranges::none_of(
+        unsyncopated.analyses, [](const AnalysisIR &analysis) {
+            return analysis.derivation.rewritten_form.has_value();
+        }));
+
+    auto no_compounds = AnalysisOptions{};
+    no_compounds.mechanisms.verbal_compounds = false;
+    EXPECT_EQ(test::engine().analyze_text("amata est", no_compounds).status,
+              QueryStatus::error);
 }
 
 TEST(EngineTest, EmitsTypedRemainingMorphologies) {

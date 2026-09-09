@@ -18,10 +18,6 @@ struct EngineConfig final {
     std::string dataset_id;
 };
 
-struct AnalysisOptions final {
-    TwoWordsMode two_words{TwoWordsMode::disabled};
-};
-
 class Engine final {
   public:
     [[nodiscard]] static std::expected<std::unique_ptr<const Engine>, LoadError>

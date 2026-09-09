@@ -182,6 +182,33 @@ export interface RewriteStepBase {
   rule: string;
   before?: string;
   after?: string;
+  category: "classical" | "medieval" | "syncope";
+  scope: "initial" | "internal" | "final";
+  operation: "literal" | "slur" | "double-consonant";
+  stage: "main" | "early" | "fallback";
+  application: {
+    position: number;
+    removeCount: number;
+    observed: string;
+    replacement: string;
+  };
+}
+
+export type WhitakerTrimReason = "unsupported-short-imperative" |
+  "invalid-imperative-person" | "impersonal-non-third-person" |
+  "deponent-active-form" | "semideponent-passive-present-system" |
+  "semideponent-active-perfect-system";
+
+export type MorphologicalNotice = "related-passive-usage-attested" |
+  "source-disagreement" | "manual-review-recommended";
+
+export interface MorphologicalAssessment {
+  generatedByWhitaker: boolean;
+  whitakerTrim: {
+    compatible: boolean;
+    reasons: WhitakerTrimReason[];
+  };
+  notices: MorphologicalNotice[];
 }
 
 export type SearchDerivationStep =
@@ -217,6 +244,7 @@ interface LexicalBase<D extends SearchDerivation | AnalysisDerivation>
   lexical: LexicalFlags;
   rule: RuleFlags | null;
   quantityMatch: QuantityMatch;
+  assessment: MorphologicalAssessment;
 }
 
 interface CompoundBase<D extends SearchDerivation | AnalysisDerivation>
@@ -226,6 +254,7 @@ interface CompoundBase<D extends SearchDerivation | AnalysisDerivation>
   lemma: string;
   lexical: LexicalFlags;
   rule: RuleFlags | null;
+  assessment: MorphologicalAssessment;
   compound: {
     construction: "finite-sum" | "esse" | "fuisse" | "iri";
     auxiliary: string;
@@ -265,7 +294,7 @@ export interface SearchSuggestion<H extends SearchLexicalHit | AnalysisLexicalHi
 }
 
 interface DocumentBase {
-  schemaVersion: 3;
+  schemaVersion: 4;
   datasetId: string;
   query: QueryIdentity;
   status: QueryStatus;

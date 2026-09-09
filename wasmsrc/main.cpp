@@ -121,9 +121,25 @@ struct BrowserDerivationStep final {
     std::string rule;
     std::string before;
     std::string after;
+    std::string category;
+    std::string scope;
+    std::string operation;
+    std::string stage;
+    std::uint32_t position{};
+    std::uint32_t remove_count{};
+    std::string observed;
+    std::string replacement;
     bool has_meaning{};
     std::string meaning;
     bool operator==(const BrowserDerivationStep &) const = default;
+};
+
+struct BrowserMorphologicalAssessment final {
+    bool generated_by_whitaker{true};
+    bool whitaker_trim_compatible{true};
+    std::vector<std::string> whitaker_trim_reasons;
+    std::vector<std::string> notices;
+    bool operator==(const BrowserMorphologicalAssessment &) const = default;
 };
 
 struct BrowserDerivation final {
@@ -148,6 +164,7 @@ struct BrowserSearchHit final {
     BrowserLexicalFlags lexical;
     BrowserRuleFlags rule;
     BrowserDerivation derivation;
+    BrowserMorphologicalAssessment assessment;
     bool compound{};
     std::string compound_construction;
     std::string compound_auxiliary;
@@ -175,7 +192,7 @@ struct BrowserSearchSuggestion final {
 
 struct BrowserSearchResult final {
     std::string schema{"whitakers-words.browser-search"};
-    std::uint32_t schema_version{3U};
+    std::uint32_t schema_version{4U};
     std::string dataset_id;
     BrowserQuery query;
     std::string status;
@@ -196,6 +213,7 @@ using words::geography_name;
 using words::lexical_frequency_name;
 using words::lexical_part_name;
 using words::mood_name;
+using words::morphological_notice_name;
 using words::normalized_meaning;
 using words::noun_kind_name;
 using words::number_name;
@@ -203,11 +221,15 @@ using words::numeral_type_name;
 using words::pronoun_kind_name;
 using words::quantity_match_name;
 using words::rewrite_kind_name;
+using words::rewrite_operation_name;
+using words::rewrite_scope_name;
+using words::rewrite_stage_name;
 using words::rule_frequency_name;
 using words::source_name;
 using words::status_name;
 using words::subject_name;
 using words::tense_name;
+using words::whitaker_trim_reason_name;
 using words::verb_kind_name;
 using words::voice_name;
 
@@ -401,6 +423,8 @@ browser_addon_step(const words::Database &database, const words::AddonId id,
 
 [[nodiscard]] BrowserDerivationStep
 browser_rewrite_step(const words::Database &database, const words::RewriteId id,
+                     const words::RewrittenFormIR &application,
+                     const std::size_t application_index,
                      const bool include_meaning,
                      const std::string_view target) {
     const auto &rewrite = database.rewrite(id);
@@ -412,6 +436,16 @@ browser_rewrite_step(const words::Database &database, const words::RewriteId id,
     step.rule = database.rewrite_string(rewrite.name);
     step.before = database.rewrite_string(rewrite.before);
     step.after = database.rewrite_string(rewrite.after);
+    step.category = rewrite.kind == words::RewriteKind::syncope
+                        ? "syncope"
+                        : (rewrite.medieval ? "medieval" : "classical");
+    step.scope = rewrite_scope_name(rewrite.scope);
+    step.operation = rewrite_operation_name(rewrite.operation);
+    step.stage = rewrite_stage_name(rewrite.stage);
+    step.position = application.positions.at(application_index);
+    step.remove_count = application.remove_counts.at(application_index);
+    step.observed = application.observed.at(application_index);
+    step.replacement = application.replacements.at(application_index);
     if (include_meaning) {
         step.has_meaning = true;
         step.meaning = database.rewrite_meaning(rewrite.meaning);
@@ -440,9 +474,13 @@ browser_rewrite_step(const words::Database &database, const words::RewriteId id,
             browser_addon_step(database, id, include_meaning, target));
     }
     if (derivation.rewritten_form) {
+        std::size_t rewrite_index{};
         for (const auto id : derivation.rewritten_form->steps()) {
             output.steps.push_back(
-                browser_rewrite_step(database, id, include_meaning, target));
+                browser_rewrite_step(database, id,
+                                     *derivation.rewritten_form,
+                                     rewrite_index, include_meaning, target));
+            ++rewrite_index;
         }
     }
     for (const auto id : addons.subspan(leading)) {
@@ -461,6 +499,29 @@ browser_rewrite_step(const words::Database &database, const words::RewriteId id,
     } else {
         output.method = derivation.count == 0U ? "regular" : "derived";
     }
+    return output;
+}
+
+[[nodiscard]] BrowserMorphologicalAssessment browser_assessment(
+    const words::MorphologicalAssessmentIR &assessment) {
+    BrowserMorphologicalAssessment output;
+    output.generated_by_whitaker = assessment.generated_by_whitaker;
+    output.whitaker_trim_compatible =
+        assessment.whitaker_trim.accepted();
+    output.whitaker_trim_reasons.reserve(
+        assessment.whitaker_trim.values().size());
+    std::ranges::transform(
+        assessment.whitaker_trim.values(),
+        std::back_inserter(output.whitaker_trim_reasons),
+        [](const words::WhitakerTrimReason reason) {
+            return std::string{whitaker_trim_reason_name(reason)};
+        });
+    output.notices.reserve(assessment.notice_values().size());
+    std::ranges::transform(
+        assessment.notice_values(), std::back_inserter(output.notices),
+        [](const words::MorphologicalNotice notice) {
+            return std::string{morphological_notice_name(notice)};
+        });
     return output;
 }
 
@@ -508,6 +569,7 @@ browser_rewrite_step(const words::Database &database, const words::RewriteId id,
     hit.lexical = browser_lexical_flags(lexeme);
     hit.derivation = browser_derivation(database, analysis.derivation,
                                         lexeme.dictionary, include_meaning);
+    hit.assessment = browser_assessment(analysis.assessment);
     hit.order_key = words::analysis_order_key(database, surface, analysis);
     return hit;
 }
@@ -552,6 +614,7 @@ browser_hit(const words::Database &database, const words::SurfaceForm &surface,
         hit.derivation.steps.end(),
         std::make_move_iterator(auxiliary_derivation.steps.begin()),
         std::make_move_iterator(auxiliary_derivation.steps.end()));
+    hit.assessment = browser_assessment(analysis.assessment);
     hit.compound = true;
     hit.compound_construction = compound_kind_name(analysis.kind);
     hit.compound_auxiliary = analysis.auxiliary;
@@ -608,6 +671,7 @@ browser_search_result(const words::Engine &engine,
                 BrowserSearchHit hit;
                 hit.has_lexeme = false;
                 hit.kind = "artificial";
+                hit.assessment.generated_by_whitaker = false;
                 const auto morphology = words::roman_numeral_morphology();
                 hit.part_of_speech =
                     words::morphology_part_name(words::Morphology{morphology},
@@ -921,6 +985,14 @@ EMSCRIPTEN_BINDINGS(words_analysis_engine) {
         .field("rule", &BrowserDerivationStep::rule)
         .field("before", &BrowserDerivationStep::before)
         .field("after", &BrowserDerivationStep::after)
+        .field("category", &BrowserDerivationStep::category)
+        .field("scope", &BrowserDerivationStep::scope)
+        .field("operation", &BrowserDerivationStep::operation)
+        .field("stage", &BrowserDerivationStep::stage)
+        .field("position", &BrowserDerivationStep::position)
+        .field("removeCount", &BrowserDerivationStep::remove_count)
+        .field("observed", &BrowserDerivationStep::observed)
+        .field("replacement", &BrowserDerivationStep::replacement)
         .field("hasMeaning", &BrowserDerivationStep::has_meaning)
         .field("meaning", &BrowserDerivationStep::meaning);
     emscripten::register_vector<BrowserDerivationStep>(
@@ -929,6 +1001,16 @@ EMSCRIPTEN_BINDINGS(words_analysis_engine) {
     emscripten::value_object<BrowserDerivation>("SearchDerivation")
         .field("method", &BrowserDerivation::method)
         .field("steps", &BrowserDerivation::steps);
+
+    emscripten::value_object<BrowserMorphologicalAssessment>(
+        "MorphologicalAssessment")
+        .field("generatedByWhitaker",
+               &BrowserMorphologicalAssessment::generated_by_whitaker)
+        .field("whitakerTrimCompatible",
+               &BrowserMorphologicalAssessment::whitaker_trim_compatible)
+        .field("whitakerTrimReasons",
+               &BrowserMorphologicalAssessment::whitaker_trim_reasons)
+        .field("notices", &BrowserMorphologicalAssessment::notices);
 
     emscripten::value_object<BrowserSearchHit>("ResolvedSearchHit")
         .field("hasLexeme", &BrowserSearchHit::has_lexeme)
@@ -946,6 +1028,7 @@ EMSCRIPTEN_BINDINGS(words_analysis_engine) {
         .field("lexical", &BrowserSearchHit::lexical)
         .field("rule", &BrowserSearchHit::rule)
         .field("derivation", &BrowserSearchHit::derivation)
+        .field("assessment", &BrowserSearchHit::assessment)
         .field("compound", &BrowserSearchHit::compound)
         .field("compoundConstruction", &BrowserSearchHit::compound_construction)
         .field("compoundAuxiliary", &BrowserSearchHit::compound_auxiliary)

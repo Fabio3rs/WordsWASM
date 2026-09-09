@@ -10,5 +10,9 @@ namespace words {
                                         const QueryResult &result);
 [[nodiscard]] std::string search_json(const Engine &engine,
                                       const QueryResult &result);
+[[nodiscard]] std::string analysis_json_v2(const Engine &engine,
+                                           const QueryResult &result);
+[[nodiscard]] std::string search_json_v2(const Engine &engine,
+                                         const QueryResult &result);
 
 } // namespace words

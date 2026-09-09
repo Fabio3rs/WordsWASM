@@ -223,10 +223,31 @@ function copyDerivation(raw) {
         output.rule = step.rule;
         if (step.before !== "") output.before = step.before;
         if (step.after !== "") output.after = step.after;
+        output.category = step.category;
+        output.scope = step.scope;
+        output.operation = step.operation;
+        output.stage = step.stage;
+        output.application = {
+          position: step.position,
+          removeCount: step.removeCount,
+          observed: step.observed,
+          replacement: step.replacement,
+        };
       }
       if (step.hasMeaning) output.meaning = step.meaning;
       return output;
     }),
+  };
+}
+
+function copyAssessment(raw) {
+  return {
+    generatedByWhitaker: raw.generatedByWhitaker,
+    whitakerTrim: {
+      compatible: raw.whitakerTrimCompatible,
+      reasons: copyOwnedVector(raw.whitakerTrimReasons),
+    },
+    notices: copyOwnedVector(raw.notices),
   };
 }
 
@@ -248,6 +269,7 @@ function copyHit(raw) {
   }
 
   hit.lexemeId = raw.lexemeId;
+  hit.assessment = copyAssessment(raw.assessment);
   hit.lemma = raw.lemma;
   hit.lexical = copyLexical(raw.lexical);
   hit.rule = raw.rule.present ? {
