@@ -498,10 +498,17 @@ TEST(EngineTest, PreservesParticipleAndSupineInAnalysisOutput) {
         const auto full = Json::parse(analysis_json(test::engine(), result));
         const auto found = std::ranges::find_if(
             full.at("analyses"), [&](const Json &analysis) {
-                return analysis.at("partOfSpeech") == expected;
+                const auto &part_of_speech =
+                    analysis.at("partOfSpeech")
+                        .get_ref<const Json::string_t &>();
+                return std::string_view{part_of_speech} == expected;
             });
         ASSERT_NE(found, full.at("analyses").end()) << word;
-        EXPECT_EQ(found->at("lexeme").at("partOfSpeech"), "verb") << word;
+        EXPECT_EQ(found->at("lexeme")
+                      .at("partOfSpeech")
+                      .get_ref<const Json::string_t &>(),
+                  "verb")
+            << word;
     };
 
     expect_part("amans", "participle");
