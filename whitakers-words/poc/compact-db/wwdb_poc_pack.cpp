@@ -555,7 +555,7 @@ std::uint8_t enum_value(std::string_view value,
             return lower(first) == lower(second);
         });
     };
-    const auto *const found =
+    const auto found =
         std::ranges::find_if(names, [&](const std::string_view name) {
             return ascii_equal(name, value);
         });
@@ -582,7 +582,7 @@ std::uint8_t part_of_speech(std::string_view value,
                             std::string_view source = "ADDONS.LAT") {
     constexpr std::array<std::string_view, 8> names{
         "X", "N", "PRON", "PACK", "ADJ", "NUM", "ADV", "V"};
-    const auto *const found = std::ranges::find(names, value);
+    const auto found = std::ranges::find(names, value);
     if (found == names.end()) {
         fail("invalid part of speech in " + std::string(source) + ": " +
              std::string(value));
