@@ -2,6 +2,7 @@
 #include "parser.hpp"
 
 #include "words/engine.hpp"
+#include "words/semantics.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -76,6 +77,27 @@ struct ScoredCandidate final {
     double score{};
     parsers::dependency_markov::Diagnostics diagnostics;
 };
+
+[[nodiscard]] Json
+analysis_profile_json(const words::AnalysisOptions &options) {
+    const auto &mechanisms = options.mechanisms;
+    return {
+        {"whitakerTrim", words::whitaker_trim_mode_name(options.whitaker_trim)},
+        {"orthography", words::orthography_mode_name(options.orthography)},
+        {"twoWords",
+         options.two_words == words::TwoWordsMode::legacy_first_match
+             ? "legacy-first-match"
+             : "disabled"},
+        {"mechanisms",
+         {{"productiveDerivations", mechanisms.productive_derivations},
+          {"prefixes", mechanisms.prefixes},
+          {"suffixes", mechanisms.suffixes},
+          {"tickons", mechanisms.tickons},
+          {"tackons", mechanisms.tackons},
+          {"packons", mechanisms.packons},
+          {"syncope", mechanisms.syncope},
+          {"verbalCompounds", mechanisms.verbal_compounds}}}};
+}
 
 [[nodiscard]] std::expected<std::uint64_t, std::string>
 parse_unsigned(const std::string_view value) {
@@ -575,7 +597,7 @@ int main(const int argc, char *argv[]) try {
     }
     const Json output{
         {"schema", "words-parser-dependency-markov-investigation"},
-        {"schemaVersion", 1},
+        {"schemaVersion", 2},
         {"datasetId", options->dataset_id},
         {"sourceCommit", PARSERS_INVESTIGATION_GIT_COMMIT},
         {"compiler", PARSERS_INVESTIGATION_COMPILER},
@@ -607,6 +629,8 @@ int main(const int argc, char *argv[]) try {
         {"alpha", options->alpha},
         {"backoffStrength", options->backoff_strength},
         {"maxProduct", options->max_product},
+        {"analysisProfile",
+         analysis_profile_json(parsed.front().parser_output.analysis_options)},
         {"configurations", std::move(configurations)},
     };
     std::cout << output.dump(2) << '\n';

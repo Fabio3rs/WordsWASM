@@ -1,10 +1,18 @@
 # Gate D0 schemas
 
 The experiment emits NDJSON records with schema
-`words-parser-investigation`, version 2. Fixtures use
+`words-parser-investigation`, version 3. Fixtures use
 `words-parser-fixtures`, version 2.
 
-Version 2 establishes these measurement rules:
+Version 3 adds the exact `analysisProfile` passed to the core, aggregate
+assessment/compound counts, and per-candidate derivation, Whitaker-trim
+assessment, notices and multi-token span role. Verbal compounds keep one node
+per surface token: a `compound-head` is coupled to exactly one
+`compound-auxiliary` by H012, and the auxiliary attaches with `aux`. Artificial
+Roman numerals are retained as explicitly non-Whitaker candidates. Version 2
+remains frozen in `result-v2.schema.json` for historical artifacts.
+
+The measurement rules established in version 2 remain in force:
 
 - morphology, propagation, enumeration, parser, and forest metrics have
   separate namespaces;
@@ -51,7 +59,7 @@ and soft features may rank it as more or less plausible. Version 2 aggregates
 rejection counts by constraint ID, but does not yet expose per-analysis scope
 and evidence. `bestScore` and `scoreReasons` are auditable, uncalibrated scores,
 not probabilities. A future probability field requires an explicit candidate
-universe, normalization/calibration method, and held-out validation. Schema v2
+universe, normalization/calibration method, and held-out validation. Schema v3
 does not make that claim.
 
 `morphology.surfaceTokens` is the immutable token sequence shown by the
@@ -129,7 +137,7 @@ must also belong to the exact oracle set.
 
 See `result-v1.md` for the frozen interpretation of historical fields.
 
-`markov-result-v2.schema.json` validates the separate JSON document emitted by
+`markov-result-v3.schema.json` validates the separate JSON document emitted by
 `markov_parser_ranker`. It records `leave-one-fixture-out`, `in-sample` or an
 `exposure-curve`, the evaluation tier, state projection, smoothing,
 surface/parser-canonical mixture, target exposure, negative-control seed, tie
@@ -138,7 +146,8 @@ Markov-only and Markov-then-manual metrics separately. Training provenance separ
 didactic gold, attested morphology gold, controlled synthetic gold,
 Latin Dependency Treebank morphology gold, preferred-lemma silver and
 synthetic relinearizations, each with an explicit weight. It does not add a
-probability field to parser result v2.
+probability field to parser result v3. Version 3 also pins the core analysis
+profile used to construct the candidate lattice.
 
 The Markov report additionally records the full evaluation denominator and
 per-model diagnostics for unknown states and contexts. Its canonical encoding
@@ -147,7 +156,7 @@ token-index dependence and preserving subtree boundaries. Additive smoothing
 remains the default baseline; `hierarchical-backoff` is an optional ablation,
 not a selected production architecture.
 
-`dependency-markov-result-v1.schema.json` validates the separate structural
+`dependency-markov-result-v2.schema.json` validates the separate structural
 experiment emitted by `dependency_markov_ranker`. It records the exact tree
 candidate policy, verbal-root convention, leave-one-fixture-out policy and
 three factor families: root, labeled local arc, and an optional joint
@@ -155,3 +164,5 @@ predicate-dependent profile. Orders 1 and 2 mean local head and
 grandparent+incoming-relation+head respectively; they do not refer to surface
 token adjacency. The report keeps model-only, model-then-manual and manual-only
 ablations, plus root accuracy, UAS, LAS, exact-tree ranks and backoff coverage.
+Version 2 pins the same core analysis profile as the parser and sequential
+reranker artifacts.

@@ -38,6 +38,7 @@ struct Token final {
     std::string lookup;
     std::size_t byte_begin{};
     std::size_t byte_end{};
+    words::TextBoundary boundary_after{};
 };
 
 struct LookupOverride final {
@@ -163,6 +164,13 @@ struct AnalysisChoice final {
     std::string part;
     std::string morphology;
     MorphologyFeatures features;
+    std::string derivation;
+    bool generated_by_whitaker{};
+    bool whitaker_trim_compatible{};
+    std::vector<std::string> whitaker_trim_reasons;
+    std::vector<std::string> morphological_notices;
+    std::string span_role{"single"};
+    std::optional<std::size_t> span_partner;
 };
 
 struct RankedMorphologyAnalysis final {
@@ -214,11 +222,12 @@ struct RelationCandidateChoice final {
     std::string compatibility;
 };
 
-// Schema v2 keeps unlike units separate. The counters below are internal
+// Schema v3 keeps unlike units separate and records the core analysis profile
+// plus candidate provenance/assessment. The counters below are internal
 // storage for those namespaces; to_json() is the normative wire contract.
 struct Result final {
     std::string schema{"words-parser-investigation"};
-    std::uint32_t schema_version{2};
+    std::uint32_t schema_version{3};
     std::string fixture_id;
     std::string text;
     Strategy strategy{Strategy::morphology};
@@ -229,6 +238,7 @@ struct Result final {
     std::string compiler_version;
     std::string build_type;
     std::uint64_t max_product{};
+    words::AnalysisOptions analysis_options{};
     std::string status{"ok"};
     std::string phenomenon;
     std::vector<std::string> surface_tokens;
@@ -238,6 +248,10 @@ struct Result final {
     std::size_t token_count{};
     std::vector<std::size_t> candidate_counts;
     std::string raw_product;
+    std::uint64_t trim_incompatible_candidates{};
+    std::uint64_t candidates_with_notices{};
+    std::uint64_t compound_head_candidates{};
+    std::uint64_t compound_auxiliary_candidates{};
 
     std::vector<std::size_t> domains_after_propagation;
     std::string pruned_product;
@@ -347,7 +361,8 @@ load_corpus(const std::filesystem::path &path);
 
 class Experiment final {
   public:
-    Experiment(const words::Engine &engine, std::uint64_t max_product);
+    Experiment(const words::Engine &engine, std::uint64_t max_product,
+               words::AnalysisOptions analysis_options = {});
 
     [[nodiscard]] Result run(const Fixture &fixture, Strategy strategy) const;
     [[nodiscard]] bool self_test(const std::vector<Fixture> &fixtures,
@@ -356,6 +371,7 @@ class Experiment final {
   private:
     const words::Engine &engine_;
     std::uint64_t max_product_{};
+    words::AnalysisOptions analysis_options_{};
 };
 
 [[nodiscard]] std::string to_json(const Result &result,

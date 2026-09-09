@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the Gate D0 Markdown report from schema-v2 NDJSON."""
+"""Generate the Gate D0 Markdown report from schema-v3 NDJSON."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import json
 import math
 import pathlib
 import statistics
+import sys
 from collections import defaultdict
 from typing import Any
 
@@ -43,10 +44,10 @@ def elapsed_summary(items: list[dict[str, Any]]) -> tuple[int, int]:
 def markdown(records: list[dict[str, Any]]) -> str:
     if any(
         record.get("schema") != "words-parser-investigation"
-        or record.get("schemaVersion") != 2
+        or record.get("schemaVersion") != 3
         for record in records
     ):
-        raise ValueError("the report generator accepts only result schema v2")
+        raise ValueError("the report generator accepts only result schema v3")
 
     by_strategy: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_fixture: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
@@ -58,6 +59,9 @@ def markdown(records: list[dict[str, Any]]) -> str:
         raise ValueError(f"missing strategies: {', '.join(sorted(missing))}")
 
     first = records[0]
+    profile = first["analysisProfile"]
+    if any(record["analysisProfile"] != profile for record in records):
+        raise ValueError("records were produced with different analysis profiles")
     annotated = [
         strategies["morphology"]
         for strategies in by_fixture.values()
@@ -89,7 +93,7 @@ def markdown(records: list[dict[str, Any]]) -> str:
         "## Resultado",
         "",
         (
-            f"O contrato v2 foi executado em {len(by_fixture)} frases de "
+            f"O contrato v3 foi executado em {len(by_fixture)} frases de "
             "S0. O relatório separa morfologia, busca, attachments, árvores, "
             "recognizers e projeção; nenhuma soma combina essas unidades."
         ),
@@ -98,13 +102,20 @@ def markdown(records: list[dict[str, Any]]) -> str:
         f"- Commit configurado: `{first['sourceCommit']}`",
         f"- Compilador: `{first['compiler']} {first['compilerVersion']}` (`{first['buildType']}`)",
         f"- Orçamento de enumeração: `{first['maxProduct']}` atribuições",
+        (
+            "- Perfil do core: "
+            f"`whitakerTrim={profile['whitakerTrim']}`, "
+            f"`orthography={profile['orthography']}`, "
+            f"`twoWords={profile['twoWords']}`; mecanismos="
+            f"`{json.dumps(profile['mechanisms'], sort_keys=True, separators=(',', ':'))}`."
+        ),
         f"- Fixtures com proveniência didática verificada: {len(annotated)}/{len(by_fixture)}",
         "- Tempos: uma observação por frase, adequados apenas para diagnóstico.",
         "- Memória: estimativa das estruturas próprias, não RSS.",
         "",
         "## Semântica da decisão",
         "",
-        "Uma hard constraint pode eliminar uma análise como **impossível**; toda análise restante é apenas **possível**, e as features brandas ordenam esse conjunto por plausibilidade. `bestScore` e `scoreReasons` são scores manuais decomponíveis, não probabilidades calibradas. O v2 ainda agrega rejeições por ID de constraint, sem evidência individual por análise, e não expõe o N-best completo nem um campo de probabilidade; esses são requisitos do próximo ciclo, não propriedades retroativas destes números.",
+        "Uma hard constraint pode eliminar uma análise como **impossível**; toda análise restante é apenas **possível**, e as features brandas ordenam esse conjunto por plausibilidade. `bestScore` e `scoreReasons` são scores manuais decomponíveis, não probabilidades calibradas. O v3 agrega rejeições por ID de constraint e expõe, sob `--include-nbest`, o N-best completo com proveniência e assessment por candidato; ele não atribui probabilidades.",
         "",
         "## Corpus e gold",
         "",
@@ -133,6 +144,48 @@ def markdown(records: list[dict[str, Any]]) -> str:
             f"{tree['treeSearch']['nonprojectiveTrees']} | "
             f"{morph_rank} | {dep_rank} |"
         )
+
+    morphology_items = by_strategy["morphology"]
+    trim_incompatible = sum(
+        item["morphology"]["assessment"]["trimIncompatibleCandidates"]
+        for item in morphology_items
+    )
+    noticed = sum(
+        item["morphology"]["assessment"]["candidatesWithNotices"]
+        for item in morphology_items
+    )
+    compound_heads = sum(
+        item["morphology"]["compounds"]["headCandidates"]
+        for item in morphology_items
+    )
+    trim_label = (
+        "1 candidato incompatível"
+        if trim_incompatible == 1
+        else f"{trim_incompatible} candidatos incompatíveis"
+    )
+    notice_label = (
+        "1 candidato com notice"
+        if noticed == 1
+        else f"{noticed} candidatos com notices"
+    )
+    lines.extend([
+        "",
+        "## Integração com o core morfológico",
+        "",
+        (
+            f"O lattice contém {trim_label} com o "
+            "trim histórico, mantidos porque o perfil usa `annotate`, e "
+            f"{notice_label} editoriais. Esses sinais agora são "
+            "publicados por análise e não são confundidos com hard constraints do parser."
+        ),
+        "",
+        (
+            f"O corpus S0 acionou {compound_heads} candidatos de composto verbal. "
+            "Quando presentes, H012 acopla o predicado composto ao token auxiliar e a "
+            "projeção mantém ambos os nós, emitindo `aux`. Numerais romanos artificiais "
+            "também entram no lattice com proveniência não-Whitaker explícita."
+        ),
+    ])
 
     if annotated:
         didactic_ids = {item["fixtureId"] for item in annotated}
@@ -582,11 +635,11 @@ def markdown(records: list[dict[str, Any]]) -> str:
         "- H006 não exige a presença global de um complemento: `Placet.` preserva `placeo`. Quando uma aresta argumento–predicado é escolhida, o caso incompatível é rejeitado na relação sem apagar a análise morfológica como possível adjunto.",
         f"- O catálogo didático tem {len(annotated)}/33 frases promovidas a gold estrutural; as outras {33 - len(annotated)} continuam `candidate-unverified`.",
         "- A auditoria reencontrou 33/33 frases nos 15 blocos declarados e validou reciprocamente as 10 promoções. O censo lexical bruto continua em 29/33: `intelligentior` requer os overrides explícitos nas duas fixtures; `Catilina` e `Pyrrho` ainda não existem na WWDB.",
-        f"- O self-test passou nas {len(by_fixture)} fixtures com WWDB full e search-only; o corpus e os {len(records)} registros passaram nos schemas v2; a suíte geral passou em 94/94 testes; ASan/UBSan também passou (LeakSanitizer desativado sob `ptrace`).",
+        f"- O self-test passou nas {len(by_fixture)} fixtures com a WWDB full atual; os {len(records)} registros deste relatório usam o schema v3.",
         "",
         "## Decisão D0",
         "",
-        "O Gate D0 permanece satisfeito. Dez exemplos didáticos agora cobrem concordância e as duas construções do segundo termo da comparação. H011 torna o contraste observável sem apagar a grafia da fonte nem resolver artificialmente a categoria de `quam`. Eisner e Chu–Liu/Edmonds continuam iguais aos respectivos ótimos do oráculo. O próximo ciclo deve tornar explícito o N-best dos casos possíveis e só então ampliar comparação de inferioridade e ordem livre; ainda não há probabilidades calibradas nem evidência para escolher o decodificador padrão.",
+        "O Gate D0 permanece satisfeito. Dez exemplos didáticos cobrem concordância e as duas construções do segundo termo da comparação. H011 torna o contraste observável sem apagar a grafia da fonte nem resolver artificialmente a categoria de `quam`. Eisner e Chu–Liu/Edmonds continuam iguais aos respectivos ótimos do oráculo. O N-best e a proveniência morfológica agora são explícitos; ainda não há probabilidades calibradas nem evidência para escolher o decodificador padrão.",
         "",
         "## Reprodução",
         "",
@@ -595,8 +648,8 @@ def markdown(records: list[dict[str, Any]]) -> str:
         "  -DPARSERS_INVESTIGATION_CORPUS_PATH=$PWD/parsers_investigation/corpus/agreement_fixtures.json",
         "cmake --build build/parsers --target parsers_investigation",
         "build/parsers/parsers_investigation/parsers_investigation --self-test",
-        "build/parsers/parsers_investigation/parsers_investigation > /tmp/parsers-results-v2.ndjson",
-        "python3 parsers_investigation/generate_report.py /tmp/parsers-results-v2.ndjson --output parsers_investigation/REPORT.md",
+        "build/parsers/parsers_investigation/parsers_investigation > /tmp/parsers-results-v3.ndjson",
+        "python3 parsers_investigation/generate_report.py /tmp/parsers-results-v3.ndjson --output parsers_investigation/REPORT.md",
         "```",
         "",
     ])
@@ -605,12 +658,17 @@ def markdown(records: list[dict[str, Any]]) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("ndjson", type=pathlib.Path)
+    parser.add_argument("ndjson", help="NDJSON path, or - for stdin")
     parser.add_argument("--output", type=pathlib.Path)
     args = parser.parse_args()
+    raw = (
+        sys.stdin.read()
+        if args.ndjson == "-"
+        else pathlib.Path(args.ndjson).read_text(encoding="utf-8")
+    )
     records = [
         json.loads(line)
-        for line in args.ndjson.read_text(encoding="utf-8").splitlines()
+        for line in raw.splitlines()
         if line.strip()
     ]
     if not records:

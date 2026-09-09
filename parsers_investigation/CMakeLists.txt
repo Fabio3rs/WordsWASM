@@ -1,11 +1,11 @@
 set(PARSERS_INVESTIGATION_WWDB_PATH
-    "${PROJECT_SOURCE_DIR}/dist/words-web/words-full.wwdb"
+    "${PROJECT_SOURCE_DIR}/web/engine/words-full.wwdb"
     CACHE FILEPATH
     "Full WWDB image loaded by the native parsers investigation example"
 )
 
 set(PARSERS_INVESTIGATION_DATASET_ID
-    "sha256:99f23fa3d2a962d2e325b192f064454046c78954af0fb20b4856b0624a288d05"
+    "sha256:bb89d1c6a7305ecfaf828747018598e7cd97c321570a80da38249c433d131803"
     CACHE STRING
     "Dataset identifier reported by the parsers investigation example"
 )
@@ -37,6 +37,18 @@ execute_process(
 )
 if(NOT PARSERS_INVESTIGATION_GIT_COMMIT)
     set(PARSERS_INVESTIGATION_GIT_COMMIT "unknown")
+endif()
+
+# Reports generated from local study edits must not masquerade as artifacts
+# produced by the clean repository revision alone.
+execute_process(
+    COMMAND git diff --quiet HEAD -- parsers_investigation
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    RESULT_VARIABLE PARSERS_INVESTIGATION_DIRTY
+    ERROR_QUIET
+)
+if(PARSERS_INVESTIGATION_DIRTY)
+    string(APPEND PARSERS_INVESTIGATION_GIT_COMMIT "+parsers-dirty")
 endif()
 
 add_library(parsers_investigation_lib STATIC parser.cpp)

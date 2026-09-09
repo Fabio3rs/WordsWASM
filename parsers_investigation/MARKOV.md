@@ -9,6 +9,13 @@ registra licenças, hashes locais e transformações.
 Uma cadeia de Markov treinada com frases latinas conhecidas consegue ordenar
 as análises morfológicas que sobreviveram às hard constraints?
 
+Rodada regenerada em 2026-09-09 com dataset
+`sha256:bb89d1c6a7305ecfaf828747018598e7cd97c321570a80da38249c433d131803`,
+fonte `fb41bd5e639163f4ecc7d8ad17e97f3f441fe481+parsers-dirty` e perfil do core
+`whitakerTrim=annotate`, `orthography=classical-and-medieval`, `twoWords=disabled`,
+com todos os mecanismos morfológicos habilitados. Os resultados sequencial e
+estrutural usam, respectivamente, schemas v3 e v2.
+
 O experimento preserva a semântica central do diretório:
 
 ```text
@@ -36,13 +43,16 @@ elimina uma análise aceita pelo parser.
   suavização, pesos e pré-condições;
 - `parsers_investigation --include-nbest` publica opcionalmente o mesmo domínio,
   incluindo a árvore determinística de cada candidato, em `morphologyNBest` no
-  NDJSON v2.
+  NDJSON v3.
 
 `AnalysisChoice` preserva ainda uma projeção tipada de caso, número, gênero,
 grau, tempo, voz, modo e pessoa. Uma máscara compacta de aplicabilidade permite
 serializar `null` como “não aplicável”; o valor enum `unknown` continua
 significando “aplicável, mas desconhecido”. Um `static_assert` limita essa
-projeção a 16 bytes. Nenhum estimador fatorado é escolhido por essa mudança.
+projeção a 16 bytes. O v3 acrescenta método de derivação, assessment do trim,
+notices e papel em span composto; esses campos documentam a origem do candidato
+e ainda não entram no estado Markoviano. Nenhum estimador fatorado é escolhido
+por essa mudança.
 
 O código usa a configuração C++23 do projeto e seus tipos existentes. A demo
 isolada em [`../markov_demo/`](../markov_demo/) continua útil para visualizar
@@ -275,7 +285,7 @@ Isso demonstra capacidade de assimilação/memorização, não generalização.
 
 ### Controles contra efeito placebo
 
-O relatório v2 calcula três rankings sobre os mesmos candidatos:
+O relatório v3 calcula três rankings sobre os mesmos candidatos:
 
 1. `manualOnly`: apenas o score determinístico anterior;
 2. `markovOnly`: log-score Markoviano, com `assignment-id` somente para tornar
@@ -399,7 +409,7 @@ sintéticas entram no treino com peso 0,5. O corpus atestado apenas com
 morfologia e o mapeamento LDT ainda não entram, pois projetar dependências do
 parser nesses dados repetiria o erro que o experimento procura medir.
 
-Resultados da execução de 2026-09-06, com $\alpha=0{,}1$ e força de backoff 1:
+Resultados da execução de 2026-09-09, com $\alpha=0{,}1$ e força de backoff 1:
 
 | Estado | Ancestrais | Perfil conjunto | Árvore top-1 | Árvore top-3 | Raiz top-1 | UAS | LAS | Estrutural + manual top-1 |
 |---|---:|---|---:|---:|---:|---:|---:|---:|

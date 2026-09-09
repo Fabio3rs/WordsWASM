@@ -102,7 +102,14 @@ int main() {
                                            .lemma = lemma,
                                            .part = part,
                                            .morphology = morphology,
-                                           .features = {}};
+                                           .features = {},
+                                           .derivation = "regular",
+                                           .generated_by_whitaker = true,
+                                           .whitaker_trim_compatible = true,
+                                           .whitaker_trim_reasons = {},
+                                           .morphological_notices = {},
+                                           .span_role = "single",
+                                           .span_partner = std::nullopt};
         };
     const parsers::RankedMorphologyAnalysis svo{
         .assignment_id = "svo",

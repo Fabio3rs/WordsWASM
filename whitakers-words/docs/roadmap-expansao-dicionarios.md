@@ -103,6 +103,9 @@ Executar antes de compilar entradas novas em massa:
 
 - benchmark comparativo de `u24` packed, ID de 19 bits no registro de 24 bits e
   `u32` alinhado;
+- usar o corte reproduzível de `u16`/`u18`/`u19` documentado em
+  [`poc-apendice-ids-18-19.md`](poc-apendice-ids-18-19.md) como baseline de
+  tamanho e cardinalidade;
 - migrar `LexemeId`, referências de radical, boundaries/offsets e qualquer
   contador transitivamente limitado a 65.536;
 - versionar o formato, mantendo erro claro para leitores incompatíveis;

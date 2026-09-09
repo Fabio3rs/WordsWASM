@@ -17,7 +17,7 @@ Latin Macronizer, NLTK ou dos artigos abaixo foi copiado ou ligado ao binário.
 
 | Artefato | Origem e identidade local | Licença/proveniência | Uso efetivo |
 |---|---|---|---|
-| `dist/words-web/words-full.wwdb` | build versionado do banco Whitaker/WordsWASM; o relatório registra `datasetId` | termos do próprio projeto/dados Whitaker | lexer e lattice morfológico; |
+| `web/engine/words-full.wwdb` | build corrente do banco Whitaker/WordsWASM; o relatório registra `datasetId` e o perfil completo de análise | termos do próprio projeto/dados Whitaker | tokenizer oficial, lattice morfológico, assessments, análises artificiais e compostos; |
 | `corpus/agreement_fixtures.json` | fixtures do projeto; SHA-256 `8087427b1f54f83701df2c187e5fbbf37cd4ea08e55f6a33de8e50fc6491c41a` no início desta fase | cada fixture contém `annotation.source`, commit, bloco, alegação e adições editoriais | treino gold didático, treino sintético e avaliação; |
 | `corpus/common_phrases.tsv` | lista editorial local; SHA-256 `306fe1ce7b258b907f093da6d575a4efaf5a01bbb424002d715cfc96073c109d` | não é apresentada como corpus gold nem como edição citável | treino *silver*: escolhe apenas o melhor empate manual compatível com lemas preferidos; |
 | `corpus/attested_gold_fixtures.json`, itens `verified-attested` | texto conferido no espelho local de The Latin Library; cada item registra obra, locus, texto-fonte e revisão | o espelho não contém uma licença global identificada; usam-se somente frases curtas como evidência de ocorrência, sem redistribuição do corpus | cinco textos atestados; morfologia e dependências são adições editoriais explicitadas; |

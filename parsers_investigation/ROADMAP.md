@@ -49,7 +49,7 @@ oficial está documentada em
 
 O executável aceita `--text`, fixtures JSON v2 ou o TSV legado, tokeniza
 preservando posição, roda sem meanings inclusive sobre a WWDB search-only e
-emite NDJSON versionado. Os nomes v2 descrevem exatamente os protótipos:
+emite NDJSON versionado. Os nomes abaixo descrevem exatamente os protótipos:
 
 | Estratégia | Papel no experimento |
 |---|---|
@@ -90,6 +90,21 @@ comparativos, ACI, infinitivos, passiva, relativas, duplo dativo e ablativo
 absoluto. Dez exemplos de concordância e comparação foram promovidos a gold
 estrutural com proveniência e entram nas métricas; os outros 23 permanecem
 `candidate-unverified`.
+
+## Sincronização com o core WWDB 1.9
+
+O contrato de resultado v3 registra o `AnalysisOptions` completo usado na
+execução. A tokenização passou a usar `TextTokenCursor`, inclusive seu contexto
+de boundary, e o lattice consome analyses regulares, numerais romanos
+artificiais e compostos verbais do core. Cada escolha publicada conserva o
+tipo de derivação, a avaliação do trim histórico e notices morfológicos.
+
+Compostos não colapsam a frase em um único nó: o predicado calculado ocupa o
+primeiro token e uma escolha auxiliar acoplada ocupa o segundo. H012 exige que
+as duas escolhas ocorram juntas; a projeção e os decodificadores ligam o
+auxiliar ao predicado por `aux`. O `--self-test` exerce esse contrato com
+`amatus est`. O dataset padrão do estudo é a imagem corrente em
+`web/engine/words-full.wwdb`.
 
 ## Gate D0 — validade da medição
 
@@ -194,13 +209,13 @@ ambiguidade explícita.
 Findings atuais:
 
 - as seis buscas preservam exatamente o conjunto do cartesiano nas 17
-  fixtures e nas 1.062 atribuições aceitas;
+  fixtures e nas 1.084 atribuições aceitas;
 - a GAC remove oito valores, contra seis do scan de ponto fixo;
 - em `In urbe manet`, o produto cai de 12 para 2, contra 12 para 6 no scan;
-- essa poda mais forte custa 1.160 checks semânticos de suporte, contra 264 do
-  scan; com resíduos, cai para 1.088 checks semânticos (−6,2%), acrescidos de 56
+- essa poda mais forte custa 1.161 checks semânticos de suporte, contra 264 do
+  scan; com resíduos, cai para 1.089 checks semânticos (−6,2%), acrescidos de 56
   verificações baratas de presença no domínio;
-- foram observados 30 hits e 237 misses de resíduo. Nenhum testemunho foi
+- foram observados 30 hits e 238 misses de resíduo. Nenhum testemunho foi
   invalidado neste S0, portanto ainda falta uma fixture com poda em cascata e
   não há conclusão sobre comportamento amortizado;
 - H006 como “todo verbo regente exige algum nominal no caso regido” era
@@ -209,36 +224,36 @@ Findings atuais:
   de complemento;
 - a projeção agora classifica o acusativo regido por preposição como `obl`, não
   como objeto verbal apenas por causa do caso;
-- nas 17 fixtures, a lattice H005/H006/H007/H011 contém 213 arestas: 157
+- nas 17 fixtures, a lattice H005/H006/H007/H011 contém 216 arestas: 160
   argumento–verbo, 42 padrões de comparação, oito complemento–preposição e
   seis de coordenação. Dezessete são formalmente compatíveis, 41 incompatíveis
-  e 155 indeterminadas;
+  e 158 indeterminadas;
 - `Accredo amico.` exerce regência dativa concreta: a projeção seleciona H006,
   emite `iobj` e registra S008. A alternativa ablativa não é eliminada como
   morfologia, e `Placet.` continua aceito sem complemento;
 - a projeção top-1 seleciona oito arestas explícitas no corpus, incluindo H011
   nos quatro comparativos;
-- a busca exata de attachments preserva as mesmas 1.062 atribuições
-  morfológicas e enumera 1.091 análises relacionais;
-- as 1.062 projeções determinísticas testadas pertencem aos respectivos
+- a busca exata de attachments preserva as mesmas 1.084 atribuições
+  morfológicas e enumera 1.113 análises relacionais;
+- as 1.084 projeções determinísticas testadas pertencem aos respectivos
   conjuntos exatos. Isso valida a projeção como membro do domínio
   H005/H006/H007/H011, não como árvore ótima nem como melhor análise
   relacional;
-- o domínio completo materializa 5.275 arcos e o oráculo enumera 6.944 árvores:
-  2.525 projetivas e 4.419 não projetivas. Foram podados 1.776 fechamentos de
-  ciclo e 74 escolhas incompatíveis com raiz única;
-- todas as 1.062 projeções também pertencem ao conjunto exato de árvores. O gold
+- o domínio completo materializa 5.412 arcos e o oráculo enumera 7.041 árvores:
+  2.598 projetivas e 4.443 não projetivas. Foram podados 1.806 fechamentos de
+  ciclo e 100 escolhas incompatíveis com raiz única;
+- todas as 1.084 projeções também pertencem ao conjunto exato de árvores. O gold
   completo fica no rank 1 em 16/17 fixtures e empata no melhor score em 17/17;
   os scores T001 ainda são heurísticas não treinadas;
 - a fixture controlada de quatro tokens contribui 127 árvores não projetivas.
-  As outras 4.292 surgem de análises morfológicas alternativas e de arcos que
+  As outras 4.316 surgem de análises morfológicas alternativas e de arcos que
   atravessam a raiz artificial; não constituem exemplos linguísticos
   independentes. S0 não estima a frequência de não projetividade no latim real;
-- Eisner e Chu–Liu/Edmonds produzem uma árvore para cada uma das 1.062
-  atribuições e igualam todos os ótimos do oráculo. Eisner visita 9.871
-  combinações de chart/split; o MST examina 3.967 arestas e contrai um ciclo —
+- Eisner e Chu–Liu/Edmonds produzem uma árvore para cada uma das 1.084
+  atribuições e igualam todos os ótimos do oráculo. Eisner visita 10.282
+  combinações de chart/split; o MST examina 4.157 arestas e contrai dois ciclos —
   unidades que não devem ser comparadas diretamente;
-- o ótimo irrestrito supera o projetivo em 70/1.062 atribuições. O MST escolhe 70
+- o ótimo irrestrito supera o projetivo em 70/1.084 atribuições. O MST escolhe 70
   árvores não projetivas; Eisner escolhe zero;
 - no hipérbato controlado, Eisner não pode preservar o gold cruzado, enquanto
   Chu–Liu/Edmonds o recupera em rank 1. Nos demais 16 casos ambos mantêm o gold
@@ -249,10 +264,13 @@ Findings atuais:
 - os quatro comparativos ficam em rank 1. As duas fixtures com `intelligentior`
   preservam a forma de superfície e tornam explícito o lookup
   `intellegentior`; nas duas com `quam`, o gold aceita advérbio ou conjunção;
+- toda a diferença de cardinalidade em relação à rodada anterior vem de
+  `Bella sunt aspera`: `whitakerTrim=annotate` preserva uma análise ativa do
+  deponente `bellor`, marcada como incompatível pelo motivo
+  `deponent-active-form`, sem alterar os ranks gold;
 - no fechamento desta execução, o self-test passou nas 17 fixtures com as
-  WWDBs full e search-only; corpus e 238 registros das 14 estratégias passaram
-  nos schemas v2; a suíte geral passou em 94/94 testes; ASan/UBSan também
-  passou, com LeakSanitizer desativado devido à limitação sob `ptrace`.
+  WWDB full atual; os 238 registros das 14 estratégias passaram no schema v3,
+  e os relatórios Markov sequencial/estrutural passaram nos schemas v3/v2.
 
 ## Perguntas de pesquisa
 
@@ -474,6 +492,7 @@ são somados na mesma coluna.
 | H009 | Features ausentes e features `unknown` não são tratadas como fatos positivos. |
 | H010 | Um estado compartilhado conserva o ambiente completo de features e exigências ainda abertas. |
 | H011 | Se uma aresta candidata liga um comparativo ao segundo termo, este fica no ablativo sem `quam`; com um marcador `quam` selecionado, conserva o caso do primeiro termo. |
+| H012 | Uma escolha de composto verbal e sua escolha auxiliar ocupam tokens adjacentes e só podem sobreviver como o mesmo par acoplado. |
 
 ### Brandas
 

@@ -144,6 +144,22 @@ radicais gerados contra `INFLECTS.SEC` e as formas do banco Latim–Alemão. A
 opção `--draft-output` grava apenas estruturas corroboradas; sentidos e demais
 campos editoriais continuam pendentes e impedem importação automática.
 
+[`build_u16_appendix_poc.py`](build_u16_appendix_poc.py) continua essa
+auditoria em dois experimentos não editoriais: máxima cardinalidade com um
+radical por verbete e reconstrução morfológica relaxada por maioria. Ambos
+preenchem exatamente a folga do contador de referências `u16`, preservam um
+sidecar com as fontes selecionadas e marcam a saída como imprópria para
+publicação. As medições do corte estão em
+[`docs/poc-apendice-u16.md`](../../docs/poc-apendice-u16.md).
+
+[`build_variable_width_appendix_poc.py`](build_variable_width_appendix_poc.py)
+aplica a política Lewis & Short/Gaffiot/Faria ao conjunto estruturalmente
+ausente e gera apêndices experimentais byte-alinhados com IDs `u16`, `u18` e
+`u19`. O Latim–Alemão e o Collatinus são apenas auxiliares morfológicos; o
+contêiner omite definições, inclui manifesto e valida a própria integridade.
+Layout, proveniência e medições estão em
+[`docs/poc-apendice-ids-18-19.md`](../../docs/poc-apendice-ids-18-19.md).
+
 [`dump_lexical_comparison.py`](dump_lexical_comparison.py) é a extração
 exaustiva anterior à decisão editorial. Ele consulta diretamente Lewis &
 Short, Gaffiot, Faria v3 e Latim–Alemão com SQLite `immutable=1`, mantém cada

@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wordswasm.local/schemas/parser-result-v3.json",
+  "title": "WordsWASM parser experiment result v3",
+  "type": "object",
+  "required": [
+    "schema", "schemaVersion", "fixtureId", "strategy", "datasetId",
+    "sourceCommit", "analysisProfile", "status", "grammarMode", "morphology",
+    "propagation", "enumeration", "relationCandidates", "attachmentSearch",
+    "treeSearch", "decoder", "parser", "forest", "acceptance", "gold",
+    "bestAnalysis", "bestRelations"
+  ],
+  "properties": {
+    "schema": {"const": "words-parser-investigation"},
+    "schemaVersion": {"const": 3},
+    "fixtureId": {"type": "string"},
+    "strategy": {
+      "enum": [
+        "morphology", "cartesian-leaf-check", "incremental-dfs",
+        "dfs-mrv-forward-checking", "worklist-prefilter", "gac-propagation",
+        "gac-residue-cache", "dependency-projection",
+        "dependency-attachment-search", "dependency-tree-oracle",
+        "dependency-eisner", "dependency-mst",
+        "earley-fixed-point-recognizer", "gslr-stackset-recognizer"
+      ]
+    },
+    "datasetId": {"type": "string", "minLength": 1},
+    "sourceCommit": {"type": "string", "minLength": 1},
+    "analysisProfile": {"$ref": "#/$defs/analysisProfile"},
+    "status": {"enum": ["ok", "no-analysis", "no-parse", "experiment-budget-exceeded"]},
+    "grammarMode": {"enum": ["complete-clause", "fragment"]},
+    "morphology": {
+      "type": "object",
+      "required": [
+        "tokenCount", "surfaceTokens", "lookupTokens", "lookupOverrides",
+        "candidateCounts", "rawProduct", "assessment", "compounds"
+      ],
+      "properties": {
+        "tokenCount": {"type": "integer", "minimum": 0},
+        "surfaceTokens": {"type": "array", "items": {"type": "string"}},
+        "lookupTokens": {"type": "array", "items": {"type": "string"}},
+        "candidateCounts": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+        "rawProduct": {"type": "string", "pattern": "^[0-9]+$"},
+        "assessment": {
+          "type": "object",
+          "required": ["trimIncompatibleCandidates", "candidatesWithNotices"],
+          "properties": {
+            "trimIncompatibleCandidates": {"type": "integer", "minimum": 0},
+            "candidatesWithNotices": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": false
+        },
+        "compounds": {
+          "type": "object",
+          "required": ["headCandidates", "auxiliaryCandidates"],
+          "properties": {
+            "headCandidates": {"type": "integer", "minimum": 0},
+            "auxiliaryCandidates": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "propagation": {"type": "object"},
+    "enumeration": {"type": "object"},
+    "relationCandidates": {"type": "object"},
+    "attachmentSearch": {"type": "object"},
+    "treeSearch": {"type": "object"},
+    "decoder": {"type": "object"},
+    "parser": {"type": "object"},
+    "forest": {"type": "object"},
+    "acceptance": {"type": "object"},
+    "gold": {"type": "object"},
+    "bestAnalysis": {"type": "array", "items": {"$ref": "#/$defs/analysisChoice"}},
+    "morphologyNBest": {"type": "object"},
+    "treeNBest": {"type": "object"},
+    "bestRelations": {"type": "array"}
+  },
+  "$defs": {
+    "analysisProfile": {
+      "type": "object",
+      "required": ["whitakerTrim", "orthography", "twoWords", "mechanisms"],
+      "properties": {
+        "whitakerTrim": {"enum": ["annotate", "filter"]},
+        "orthography": {"enum": ["disabled", "classical-only", "classical-and-medieval"]},
+        "twoWords": {"enum": ["disabled", "legacy-first-match"]},
+        "mechanisms": {
+          "type": "object",
+          "required": ["productiveDerivations", "prefixes", "suffixes", "tickons", "tackons", "packons", "syncope", "verbalCompounds"],
+          "additionalProperties": {"type": "boolean"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "analysisChoice": {
+      "type": "object",
+      "required": ["token", "candidate", "lemma", "part", "morphology", "features", "derivation", "assessment", "span"],
+      "properties": {
+        "token": {"type": "integer", "minimum": 0},
+        "candidate": {"type": "integer", "minimum": 0},
+        "lemma": {"type": "string"},
+        "part": {"type": "string", "minLength": 1},
+        "morphology": {"type": "string", "minLength": 1},
+        "features": {"type": "object"},
+        "derivation": {"enum": ["regular", "unique", "productive-derivation", "orthographic-rewrite", "syncope", "artificial-roman-numeral", "verbal-compound", "compound-auxiliary"]},
+        "assessment": {
+          "type": "object",
+          "required": ["generatedByWhitaker", "whitakerTrimCompatible", "whitakerTrimReasons", "notices"]
+        },
+        "span": {
+          "type": "object",
+          "required": ["role", "partner"],
+          "properties": {
+            "role": {"enum": ["single", "compound-head", "compound-auxiliary"]},
+            "partner": {"type": ["integer", "null"], "minimum": 0}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

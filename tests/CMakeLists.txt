@@ -71,6 +71,16 @@ if(NOT EMSCRIPTEN)
                 "${CMAKE_CURRENT_SOURCE_DIR}/lexical_expansion_test.py"
         )
         add_test(
+            NAME words_u16_appendix_poc
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/u16_appendix_poc_test.py"
+        )
+        add_test(
+            NAME words_variable_width_appendix_poc
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/variable_width_appendix_poc_test.py"
+        )
+        add_test(
             NAME words_lexeme_review
             COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/lexeme_review_test.py"

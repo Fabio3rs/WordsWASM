@@ -9,7 +9,6 @@
 #include <array>
 #include <bitset>
 #include <boost/multiprecision/cpp_int.hpp>
-#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -147,6 +146,16 @@ struct Candidate final {
     words::RuleFrequency rule_frequency{words::RuleFrequency::unknown};
     bool has_rule{};
     bool enclitic_que{};
+    std::string derivation{"regular"};
+    words::MorphologicalAssessmentIR assessment;
+    enum class SpanRole : std::uint8_t {
+        single,
+        compound_head,
+        compound_auxiliary
+    };
+    SpanRole span_role{SpanRole::single};
+    std::optional<std::size_t> span_partner;
+    std::optional<std::size_t> compound_pair;
 };
 
 struct Lattice final {
@@ -199,15 +208,6 @@ struct NominalFeatures final {
     words::GrammaticalNumber number{words::GrammaticalNumber::unknown};
     words::Gender gender{words::Gender::unknown};
 };
-
-[[nodiscard]] bool ascii_separator(const unsigned char value) noexcept {
-    if (value >= 0x80U) {
-        return false;
-    }
-    return std::isspace(static_cast<int>(value)) != 0 ||
-           std::string_view{",.;:!?()[]{}\"'/-"}.find(
-               static_cast<char>(value)) != std::string_view::npos;
-}
 
 [[nodiscard]] std::vector<std::string> split(const std::string_view value,
                                              const char delimiter) {
@@ -534,9 +534,46 @@ morphology_features(const Candidate &candidate) noexcept {
         candidate.morphology);
 }
 
+[[nodiscard]] AnalysisChoice analysis_choice(const std::size_t token,
+                                             const Candidate &candidate) {
+    AnalysisChoice result{
+        .token = token,
+        .candidate = candidate.source_index,
+        .lemma = candidate.lemma,
+        .part = candidate.span_role == Candidate::SpanRole::compound_auxiliary
+                    ? "auxiliary"
+                    : std::string{surface_part_name(candidate.part)},
+        .morphology = morphology_name(candidate),
+        .features = morphology_features(candidate),
+        .derivation = candidate.derivation,
+        .generated_by_whitaker = candidate.assessment.generated_by_whitaker,
+        .whitaker_trim_compatible =
+            candidate.assessment.whitaker_trim.accepted(),
+        .whitaker_trim_reasons = {},
+        .morphological_notices = {},
+        .span_role = "single",
+        .span_partner = candidate.span_partner,
+    };
+    for (const auto reason : candidate.assessment.whitaker_trim.values()) {
+        result.whitaker_trim_reasons.emplace_back(
+            words::whitaker_trim_reason_name(reason));
+    }
+    for (const auto notice : candidate.assessment.notice_values()) {
+        result.morphological_notices.emplace_back(
+            words::morphological_notice_name(notice));
+    }
+    if (candidate.span_role == Candidate::SpanRole::compound_head) {
+        result.span_role = "compound-head";
+    } else if (candidate.span_role == Candidate::SpanRole::compound_auxiliary) {
+        result.span_role = "compound-auxiliary";
+    }
+    return result;
+}
+
 [[nodiscard]] Lattice
 build_lattice(const words::Engine &engine, const std::string_view text,
-              const std::vector<LookupOverride> &overrides) {
+              const std::vector<LookupOverride> &overrides,
+              const words::AnalysisOptions &analysis_options) {
     Lattice lattice;
     lattice.tokens = tokenize(text);
     std::vector<bool> overridden(lattice.tokens.size());
@@ -552,8 +589,38 @@ build_lattice(const words::Engine &engine, const std::string_view text,
     }
     lattice.candidates.reserve(lattice.tokens.size());
     const auto &database = engine.database();
-    for (const auto &token : lattice.tokens) {
-        const auto query = engine.analyze(token.lookup);
+    const auto derivation_name =
+        [&database](const words::AnalysisIR &analysis) {
+            if (analysis.derivation.rewritten_form) {
+                for (const auto rewrite_id :
+                     analysis.derivation.rewritten_form->steps()) {
+                    if (database.rewrite(rewrite_id).kind ==
+                        words::RewriteKind::syncope) {
+                        return std::string{"syncope"};
+                    }
+                }
+                return std::string{"orthographic-rewrite"};
+            }
+            if (analysis.derivation.count != 0U) {
+                return std::string{"productive-derivation"};
+            }
+            if (!analysis.rule) {
+                return std::string{"unique"};
+            }
+            return std::string{"regular"};
+        };
+    for (std::size_t token_index = 0; token_index < lattice.tokens.size();
+         ++token_index) {
+        const auto &token = lattice.tokens[token_index];
+        const auto query =
+            overridden[token_index]
+                ? engine.analyze(token.lookup, analysis_options)
+                : engine.analyze(
+                      words::TextToken{.text = token.surface,
+                                       .byte_begin = token.byte_begin,
+                                       .byte_end = token.byte_end,
+                                       .boundary_after = token.boundary_after},
+                      analysis_options);
         std::vector<Candidate> candidates;
         candidates.reserve(query.analyses.size());
         for (std::size_t index = 0; index < query.analyses.size(); ++index) {
@@ -587,9 +654,100 @@ build_lattice(const words::Engine &engine, const std::string_view text,
                 .rule_frequency = rule_frequency,
                 .has_rule = analysis.rule.has_value(),
                 .enclitic_que = enclitic_que,
+                .derivation = derivation_name(analysis),
+                .assessment = analysis.assessment,
+                .span_role = Candidate::SpanRole::single,
+                .span_partner = std::nullopt,
+                .compound_pair = std::nullopt,
             });
         }
+        for (const auto &artificial : query.artificial_analyses) {
+            std::visit(
+                [&](const auto &analysis) {
+                    using Artificial = std::remove_cvref_t<decltype(analysis)>;
+                    if constexpr (std::is_same_v<Artificial,
+                                                 words::RomanNumeralIR>) {
+                        words::MorphologicalAssessmentIR assessment;
+                        assessment.generated_by_whitaker = false;
+                        candidates.push_back(Candidate{
+                            .source_index = candidates.size(),
+                            .lemma = token.lookup,
+                            .part = words::PartOfSpeech::numeral,
+                            .morphology = words::InvariableMorphology{},
+                            .verb_kind = words::VerbKind::unknown,
+                            .lexical_frequency =
+                                words::LexicalFrequency::unknown,
+                            .rule_frequency = words::RuleFrequency::unknown,
+                            .has_rule = false,
+                            .enclitic_que = false,
+                            .derivation = "artificial-roman-numeral",
+                            .assessment = assessment,
+                            .span_role = Candidate::SpanRole::single,
+                            .span_partner = std::nullopt,
+                            .compound_pair = std::nullopt,
+                        });
+                    }
+                },
+                artificial);
+        }
         lattice.candidates.push_back(std::move(candidates));
+    }
+
+    // A verbal compound consumes two lexical tokens in the core. Preserve
+    // both surface nodes for dependency parsing by adding a coupled head/aux
+    // candidate pair instead of collapsing the token sequence.
+    std::size_t compound_pair{};
+    for (std::size_t token = 0; token + 1U < lattice.tokens.size(); ++token) {
+        if (overridden[token] || overridden[token + 1U]) {
+            continue;
+        }
+        const auto begin = lattice.tokens[token].byte_begin;
+        const auto end = lattice.tokens[token + 1U].byte_end;
+        const auto query = engine.analyze_text(text.substr(begin, end - begin),
+                                               analysis_options);
+        for (const auto &analysis : query.compound_analyses) {
+            const auto &lexeme = database.lexeme(analysis.lexeme);
+            auto rule_frequency = words::RuleFrequency::unknown;
+            if (analysis.source_rule) {
+                rule_frequency = database.rule(*analysis.source_rule).frequency;
+            }
+            const auto pair = compound_pair++;
+            const auto head_index = lattice.candidates[token].size();
+            const auto auxiliary_index = lattice.candidates[token + 1U].size();
+            lattice.candidates[token].push_back(Candidate{
+                .source_index = head_index,
+                .lemma = words::citation_lemma(database, lexeme,
+                                               lattice.tokens[token].lookup),
+                .part = words::PartOfSpeech::verb,
+                .morphology = analysis.morphology,
+                .verb_kind = lexeme.verb_kind,
+                .lexical_frequency = lexeme.frequency,
+                .rule_frequency = rule_frequency,
+                .has_rule = analysis.source_rule.has_value(),
+                .enclitic_que = false,
+                .derivation = "verbal-compound",
+                .assessment = analysis.assessment,
+                .span_role = Candidate::SpanRole::compound_head,
+                .span_partner = token + 1U,
+                .compound_pair = pair,
+            });
+            lattice.candidates[token + 1U].push_back(Candidate{
+                .source_index = auxiliary_index,
+                .lemma = "sum",
+                .part = words::PartOfSpeech::verb,
+                .morphology = words::InvariableMorphology{},
+                .verb_kind = words::VerbKind::to_be,
+                .lexical_frequency = words::LexicalFrequency::unknown,
+                .rule_frequency = words::RuleFrequency::unknown,
+                .has_rule = false,
+                .enclitic_que = false,
+                .derivation = "compound-auxiliary",
+                .assessment = analysis.assessment,
+                .span_role = Candidate::SpanRole::compound_auxiliary,
+                .span_partner = token,
+                .compound_pair = pair,
+            });
+        }
     }
     return lattice;
 }
@@ -921,6 +1079,27 @@ first_violation(const Lattice &lattice, const RelationLattice &relations,
                 const Assignment &assignment, const bool fragment,
                 std::uint64_t &checks) {
     const auto choice = resolve(lattice, assignment);
+    for (std::size_t token = 0; token < choice.size(); ++token) {
+        const auto &candidate = *choice[token];
+        if (candidate.span_role == Candidate::SpanRole::single) {
+            continue;
+        }
+        ++checks;
+        if (!candidate.span_partner || !candidate.compound_pair ||
+            *candidate.span_partner >= choice.size()) {
+            return "H012";
+        }
+        const auto &partner = *choice[*candidate.span_partner];
+        const auto expected =
+            candidate.span_role == Candidate::SpanRole::compound_head
+                ? Candidate::SpanRole::compound_auxiliary
+                : Candidate::SpanRole::compound_head;
+        if (partner.span_role != expected ||
+            partner.compound_pair != candidate.compound_pair ||
+            partner.span_partner != std::optional<std::size_t>{token}) {
+            return "H012";
+        }
+    }
     ++checks;
     if (!fragment &&
         std::ranges::none_of(choice, [](const Candidate *candidate) {
@@ -2263,6 +2442,13 @@ relation_candidate_choice(const Lattice &lattice,
             continue;
         }
         const auto &candidate = *choice[token];
+        if (candidate.span_role == Candidate::SpanRole::compound_auxiliary &&
+            candidate.span_partner) {
+            relations.push_back(Relation{.dependent = token,
+                                         .head = candidate.span_partner,
+                                         .label = "aux"});
+            continue;
+        }
         if (is_finite(candidate)) {
             relations.push_back(
                 Relation{.dependent = token, .head = root, .label = "conj"});
@@ -2645,6 +2831,12 @@ build_dependency_arc_domains(const Lattice &lattice,
     for (std::size_t dependent = 0; dependent < choice.size(); ++dependent) {
         const auto &candidate = *choice[dependent];
         auto &domain = domains[dependent];
+        if (candidate.span_role == Candidate::SpanRole::compound_auxiliary &&
+            candidate.span_partner) {
+            add_dependency_arc(domain, dependent, candidate.span_partner, "aux",
+                               10.0, "verbal-compound-auxiliary");
+            continue;
+        }
         if (is_finite(candidate)) {
             add_dependency_arc(domain, dependent, std::nullopt, "root", 10.0,
                                "finite-root");
@@ -3890,14 +4082,7 @@ void populate_best(Result &result, const Lattice &lattice,
                                          &result.score_reasons);
     for (std::size_t token = 0; token < best.size(); ++token) {
         const auto &candidate = lattice.candidates[token][best[token]];
-        result.best_analysis.push_back(AnalysisChoice{
-            .token = token,
-            .candidate = candidate.source_index,
-            .lemma = candidate.lemma,
-            .part = std::string{surface_part_name(candidate.part)},
-            .morphology = morphology_name(candidate),
-            .features = morphology_features(candidate),
-        });
+        result.best_analysis.push_back(analysis_choice(token, candidate));
     }
     const bool dependency_strategy =
         result.strategy == Strategy::dependency_projection ||
@@ -3936,14 +4121,7 @@ void populate_best(Result &result, const Lattice &lattice,
         for (std::size_t token = 0; token < assignment.size(); ++token) {
             const auto &candidate =
                 lattice.candidates[token][assignment[token]];
-            ranked.analysis.push_back(AnalysisChoice{
-                .token = token,
-                .candidate = candidate.source_index,
-                .lemma = candidate.lemma,
-                .part = std::string{surface_part_name(candidate.part)},
-                .morphology = morphology_name(candidate),
-                .features = morphology_features(candidate),
-            });
+            ranked.analysis.push_back(analysis_choice(token, candidate));
         }
         if (dependency_strategy) {
             ranked.relations =
@@ -4020,14 +4198,7 @@ void populate_tree_best(Result &result, const Lattice &lattice,
     for (std::size_t token = 0; token < best.assignment.size(); ++token) {
         const auto &candidate =
             lattice.candidates[token][best.assignment[token]];
-        result.best_analysis.push_back(AnalysisChoice{
-            .token = token,
-            .candidate = candidate.source_index,
-            .lemma = candidate.lemma,
-            .part = std::string{surface_part_name(candidate.part)},
-            .morphology = morphology_name(candidate),
-            .features = morphology_features(candidate),
-        });
+        result.best_analysis.push_back(analysis_choice(token, candidate));
     }
     for (const auto &arc : best.arcs) {
         result.best_relations.push_back(arc.relation);
@@ -4123,14 +4294,7 @@ void populate_tree_best(Result &result, const Lattice &lattice,
         for (std::size_t token = 0; token < tree.assignment.size(); ++token) {
             const auto &candidate =
                 lattice.candidates[token][tree.assignment[token]];
-            ranked.analysis.push_back(AnalysisChoice{
-                .token = token,
-                .candidate = candidate.source_index,
-                .lemma = candidate.lemma,
-                .part = std::string{surface_part_name(candidate.part)},
-                .morphology = morphology_name(candidate),
-                .features = morphology_features(candidate),
-            });
+            ranked.analysis.push_back(analysis_choice(token, candidate));
         }
         ranked.relations.reserve(tree.arcs.size());
         for (const auto &arc : tree.arcs) {
@@ -4261,26 +4425,15 @@ std::string_view grammar_mode_name(const GrammarMode mode) noexcept {
 
 std::vector<Token> tokenize(const std::string_view text) {
     std::vector<Token> result;
-    std::size_t begin{};
-    while (begin < text.size()) {
-        while (begin < text.size() &&
-               ascii_separator(static_cast<unsigned char>(text[begin]))) {
-            ++begin;
-        }
-        if (begin == text.size()) {
-            break;
-        }
-        std::size_t end = begin;
-        while (end < text.size() &&
-               !ascii_separator(static_cast<unsigned char>(text[end]))) {
-            ++end;
-        }
-        const auto surface = std::string{text.substr(begin, end - begin)};
-        result.push_back(Token{.surface = surface,
-                               .lookup = surface,
-                               .byte_begin = begin,
-                               .byte_end = end});
-        begin = end;
+    words::TextTokenCursor cursor{text};
+    while (const auto token = cursor.next()) {
+        result.push_back(Token{
+            .surface = std::string{token->text},
+            .lookup = std::string{token->text},
+            .byte_begin = token->byte_begin,
+            .byte_end = token->byte_end,
+            .boundary_after = token->boundary_after,
+        });
     }
     return result;
 }
@@ -4493,8 +4646,10 @@ std::vector<Fixture> load_corpus(const std::filesystem::path &path) {
 }
 
 Experiment::Experiment(const words::Engine &engine,
-                       const std::uint64_t max_product)
-    : engine_{engine}, max_product_{max_product} {}
+                       const std::uint64_t max_product,
+                       const words::AnalysisOptions analysis_options)
+    : engine_{engine}, max_product_{max_product},
+      analysis_options_{analysis_options} {}
 
 Result Experiment::run(const Fixture &fixture, const Strategy strategy) const {
     const auto started = Clock::now();
@@ -4508,6 +4663,7 @@ Result Experiment::run(const Fixture &fixture, const Strategy strategy) const {
     result.compiler_version = PARSERS_INVESTIGATION_COMPILER_VERSION;
     result.build_type = PARSERS_INVESTIGATION_BUILD_TYPE;
     result.max_product = max_product_;
+    result.analysis_options = analysis_options_;
     result.phenomenon = fixture.phenomenon;
     result.grammar_mode = fixture.mode;
     result.fixture_annotation = fixture.annotation;
@@ -4525,8 +4681,8 @@ Result Experiment::run(const Fixture &fixture, const Strategy strategy) const {
         result.dependency_gold_survives = false;
     }
 
-    const auto lattice =
-        build_lattice(engine_, fixture.text, fixture.lookup_overrides);
+    const auto lattice = build_lattice(
+        engine_, fixture.text, fixture.lookup_overrides, analysis_options_);
     result.token_count = lattice.tokens.size();
     result.lookup_overrides = fixture.lookup_overrides;
     result.surface_tokens.reserve(lattice.tokens.size());
@@ -4540,6 +4696,20 @@ Result Experiment::run(const Fixture &fixture, const Strategy strategy) const {
     for (std::size_t token = 0; token < lattice.candidates.size(); ++token) {
         const auto count = lattice.candidates[token].size();
         result.candidate_counts.push_back(count);
+        for (const auto &candidate : lattice.candidates[token]) {
+            if (!candidate.assessment.whitaker_trim.accepted()) {
+                ++result.trim_incompatible_candidates;
+            }
+            if (!candidate.assessment.notice_values().empty()) {
+                ++result.candidates_with_notices;
+            }
+            if (candidate.span_role == Candidate::SpanRole::compound_head) {
+                ++result.compound_head_candidates;
+            } else if (candidate.span_role ==
+                       Candidate::SpanRole::compound_auxiliary) {
+                ++result.compound_auxiliary_candidates;
+            }
+        }
         if (count == 0U) {
             contains_empty_domain = true;
             result.diagnostics.push_back("unknown-token:" +
@@ -4917,7 +5087,7 @@ bool Experiment::self_test(const std::vector<Fixture> &fixtures,
                                      .lookup_overrides = {},
                                      .annotation = std::nullopt,
                                      .gold = std::nullopt};
-        const Experiment tiny_budget{engine_, 4U};
+        const Experiment tiny_budget{engine_, 4U, analysis_options_};
         const auto cartesian =
             tiny_budget.run(budget_fixture, Strategy::cartesian_leaf_check);
         const auto worklist =
@@ -4938,6 +5108,41 @@ bool Experiment::self_test(const std::vector<Fixture> &fixtures,
             cached.propagation_support_checks >=
                 gac.propagation_support_checks) {
             failure = "GAC residue cache did not reuse the finite support";
+            return false;
+        }
+    }
+    if (analysis_options_.mechanisms.verbal_compounds) {
+        const Fixture compound_fixture{
+            .id = "compound-contract",
+            .text = "amatus est",
+            .phenomenon = "core-verbal-compound",
+            .preferred_lemmas = {},
+            .mode = GrammarMode::complete_clause,
+            .lookup_overrides = {},
+            .annotation = std::nullopt,
+            .gold = std::nullopt,
+        };
+        const auto compound =
+            run(compound_fixture, Strategy::dependency_projection);
+        const auto paired = std::ranges::find_if(
+            compound.morphology_nbest,
+            [](const RankedMorphologyAnalysis &item) {
+                if (item.analysis.size() != 2U ||
+                    item.analysis[0].span_role != "compound-head" ||
+                    item.analysis[1].span_role != "compound-auxiliary") {
+                    return false;
+                }
+                return std::ranges::any_of(
+                    item.relations, [](const Relation &relation) {
+                        return relation.dependent == 1U &&
+                               relation.head == 0U && relation.label == "aux";
+                    });
+            });
+        if (compound.compound_head_candidates == 0U ||
+            compound.compound_head_candidates !=
+                compound.compound_auxiliary_candidates ||
+            paired == compound.morphology_nbest.end()) {
+            failure = "core verbal compound was not preserved as head+aux";
             return false;
         }
     }
@@ -5358,7 +5563,8 @@ bool Experiment::self_test(const std::vector<Fixture> &fixtures,
         // correct. This tests the evaluator rather than lexical coverage.
         if (fixture.gold && !dependency.best_analysis.empty()) {
             const auto lattice =
-                build_lattice(engine_, fixture.text, fixture.lookup_overrides);
+                build_lattice(engine_, fixture.text, fixture.lookup_overrides,
+                              analysis_options_);
             Assignment best(lattice.candidates.size());
             for (const auto &choice : dependency.best_analysis) {
                 best[choice.token] = choice.candidate;
@@ -5432,6 +5638,48 @@ std::string to_json(const Result &result, const bool include_morphology_nbest) {
                            : Json(nullptr)},
         };
     };
+    const auto analysis_profile_json =
+        [](const words::AnalysisOptions &options) {
+            const auto &mechanisms = options.mechanisms;
+            return Json{
+                {"whitakerTrim",
+                 words::whitaker_trim_mode_name(options.whitaker_trim)},
+                {"orthography",
+                 words::orthography_mode_name(options.orthography)},
+                {"twoWords",
+                 options.two_words == words::TwoWordsMode::legacy_first_match
+                     ? "legacy-first-match"
+                     : "disabled"},
+                {"mechanisms",
+                 {{"productiveDerivations", mechanisms.productive_derivations},
+                  {"prefixes", mechanisms.prefixes},
+                  {"suffixes", mechanisms.suffixes},
+                  {"tickons", mechanisms.tickons},
+                  {"tackons", mechanisms.tackons},
+                  {"packons", mechanisms.packons},
+                  {"syncope", mechanisms.syncope},
+                  {"verbalCompounds", mechanisms.verbal_compounds}}},
+            };
+        };
+    const auto choice_json = [&feature_json](const AnalysisChoice &choice) {
+        return Json{
+            {"token", choice.token},
+            {"candidate", choice.candidate},
+            {"lemma", choice.lemma},
+            {"part", choice.part},
+            {"morphology", choice.morphology},
+            {"features", feature_json(choice.features)},
+            {"derivation", choice.derivation},
+            {"assessment",
+             {{"generatedByWhitaker", choice.generated_by_whitaker},
+              {"whitakerTrimCompatible", choice.whitaker_trim_compatible},
+              {"whitakerTrimReasons", choice.whitaker_trim_reasons},
+              {"notices", choice.morphological_notices}}},
+            {"span",
+             {{"role", choice.span_role},
+              {"partner", choice.span_partner ? Json(*choice.span_partner)
+                                              : Json(nullptr)}}}};
+    };
     Json output{
         {"schema", result.schema},
         {"schemaVersion", result.schema_version},
@@ -5444,6 +5692,7 @@ std::string to_json(const Result &result, const bool include_morphology_nbest) {
         {"compilerVersion", result.compiler_version},
         {"buildType", result.build_type},
         {"maxProduct", result.max_product},
+        {"analysisProfile", analysis_profile_json(result.analysis_options)},
         {"status", result.status},
         {"phenomenon", result.phenomenon},
         {"grammarMode", grammar_mode_name(result.grammar_mode)},
@@ -5482,6 +5731,12 @@ std::string to_json(const Result &result, const bool include_morphology_nbest) {
         {"lookupOverrides", Json::array()},
         {"candidateCounts", result.candidate_counts},
         {"rawProduct", result.raw_product},
+        {"assessment",
+         {{"trimIncompatibleCandidates", result.trim_incompatible_candidates},
+          {"candidatesWithNotices", result.candidates_with_notices}}},
+        {"compounds",
+         {{"headCandidates", result.compound_head_candidates},
+          {"auxiliaryCandidates", result.compound_auxiliary_candidates}}},
     };
     for (const auto &override : result.lookup_overrides) {
         output["morphology"]["lookupOverrides"].push_back(
@@ -5666,13 +5921,7 @@ std::string to_json(const Result &result, const bool include_morphology_nbest) {
     }
     output["bestAnalysis"] = Json::array();
     for (const auto &choice : result.best_analysis) {
-        output["bestAnalysis"].push_back(
-            {{"token", choice.token},
-             {"candidate", choice.candidate},
-             {"lemma", choice.lemma},
-             {"part", choice.part},
-             {"morphology", choice.morphology},
-             {"features", feature_json(choice.features)}});
+        output["bestAnalysis"].push_back(choice_json(choice));
     }
     if (include_morphology_nbest) {
         output["morphologyNBest"] = {
@@ -5691,13 +5940,7 @@ std::string to_json(const Result &result, const bool include_morphology_nbest) {
                 {"relations", Json::array()},
             };
             for (const auto &choice : ranked.analysis) {
-                analysis["tokens"].push_back(
-                    {{"token", choice.token},
-                     {"candidate", choice.candidate},
-                     {"lemma", choice.lemma},
-                     {"part", choice.part},
-                     {"morphology", choice.morphology},
-                     {"features", feature_json(choice.features)}});
+                analysis["tokens"].push_back(choice_json(choice));
             }
             for (const auto &relation : ranked.relations) {
                 analysis["relations"].push_back(
@@ -5732,13 +5975,7 @@ std::string to_json(const Result &result, const bool include_morphology_nbest) {
                 {"relations", Json::array()},
             };
             for (const auto &choice : ranked.analysis) {
-                analysis["tokens"].push_back(
-                    {{"token", choice.token},
-                     {"candidate", choice.candidate},
-                     {"lemma", choice.lemma},
-                     {"part", choice.part},
-                     {"morphology", choice.morphology},
-                     {"features", feature_json(choice.features)}});
+                analysis["tokens"].push_back(choice_json(choice));
             }
             for (const auto &relation : ranked.relations) {
                 analysis["relations"].push_back(

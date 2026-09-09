@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wordswasm.local/schemas/parser-markov-result-v3.json",
+  "title": "WordsWASM parser Markov investigation result v3",
+  "type": "object",
+  "required": [
+    "schema", "schemaVersion", "datasetId", "sourceCommit", "compiler",
+    "compilerVersion", "buildType", "maxProduct", "analysisProfile",
+    "parserStrategy", "candidatePolicy", "structurePolicy", "trainingCorpus",
+    "trainingWeights", "evaluationPolicy", "evaluationTier", "evaluationCoverage",
+    "trainingControl", "configurations"
+  ],
+  "properties": {
+    "schema": {"const": "words-parser-markov-investigation"},
+    "schemaVersion": {"const": 3},
+    "datasetId": {"type": "string", "minLength": 1},
+    "sourceCommit": {"type": "string", "minLength": 1},
+    "analysisProfile": {"$ref": "#/$defs/analysisProfile"},
+    "parserStrategy": {"const": "dependency-projection"},
+    "evaluationPolicy": {"enum": ["leave-one-fixture-out", "in-sample", "exposure-curve"]},
+    "evaluationTier": {"enum": ["verified", "attested", "treebank", "all"]},
+    "configurations": {"type": "array", "minItems": 1, "items": {"type": "object"}}
+  },
+  "$defs": {
+    "analysisProfile": {
+      "type": "object",
+      "required": ["whitakerTrim", "orthography", "twoWords", "mechanisms"],
+      "properties": {
+        "whitakerTrim": {"enum": ["annotate", "filter"]},
+        "orthography": {"enum": ["disabled", "classical-only", "classical-and-medieval"]},
+        "twoWords": {"enum": ["disabled", "legacy-first-match"]},
+        "mechanisms": {
+          "type": "object",
+          "required": ["productiveDerivations", "prefixes", "suffixes", "tickons", "tackons", "packons", "syncope", "verbalCompounds"],
+          "additionalProperties": {"type": "boolean"}
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

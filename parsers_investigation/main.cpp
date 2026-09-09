@@ -40,6 +40,7 @@ struct Options final {
     std::optional<std::string> text;
     std::optional<parsers::Strategy> strategy;
     std::uint64_t max_product{1'000'000U};
+    words::AnalysisOptions analysis_options{};
     bool fragment{};
     bool self_test{};
     bool human{};
@@ -120,6 +121,66 @@ parse_options(const int argc, char *const argv[]) {
                 return std::unexpected(std::move(parsed.error()));
             }
             options.max_product = *parsed;
+        } else if (argument == "--whitaker-trim") {
+            auto value = require_value();
+            if (!value) {
+                return std::unexpected(std::move(value.error()));
+            }
+            if (*value == "annotate") {
+                options.analysis_options.whitaker_trim =
+                    words::WhitakerTrimMode::annotate;
+            } else if (*value == "filter") {
+                options.analysis_options.whitaker_trim =
+                    words::WhitakerTrimMode::filter;
+            } else {
+                return std::unexpected(
+                    "--whitaker-trim expects annotate or filter");
+            }
+        } else if (argument == "--orthography") {
+            auto value = require_value();
+            if (!value) {
+                return std::unexpected(std::move(value.error()));
+            }
+            if (*value == "disabled") {
+                options.analysis_options.orthography =
+                    words::OrthographyMode::disabled;
+            } else if (*value == "classical-only") {
+                options.analysis_options.orthography =
+                    words::OrthographyMode::classical_only;
+            } else if (*value == "classical-and-medieval") {
+                options.analysis_options.orthography =
+                    words::OrthographyMode::classical_and_medieval;
+            } else {
+                return std::unexpected(
+                    "--orthography expects disabled, classical-only, or "
+                    "classical-and-medieval");
+            }
+        } else if (argument == "--disable-mechanism") {
+            auto value = require_value();
+            if (!value) {
+                return std::unexpected(std::move(value.error()));
+            }
+            auto &mechanisms = options.analysis_options.mechanisms;
+            if (*value == "productive-derivations") {
+                mechanisms.productive_derivations = false;
+            } else if (*value == "prefixes") {
+                mechanisms.prefixes = false;
+            } else if (*value == "suffixes") {
+                mechanisms.suffixes = false;
+            } else if (*value == "tickons") {
+                mechanisms.tickons = false;
+            } else if (*value == "tackons") {
+                mechanisms.tackons = false;
+            } else if (*value == "packons") {
+                mechanisms.packons = false;
+            } else if (*value == "syncope") {
+                mechanisms.syncope = false;
+            } else if (*value == "verbal-compounds") {
+                mechanisms.verbal_compounds = false;
+            } else {
+                return std::unexpected("unknown morphological mechanism: " +
+                                       std::string{*value});
+            }
         } else if (argument == "--fragment") {
             options.fragment = true;
         } else if (argument == "--self-test") {
@@ -160,6 +221,11 @@ void usage(std::ostream &output) {
               "  --database FILE           load another full or search WWDB\n"
               "  --dataset-id ID           dataset identifier for the WWDB\n"
               "  --max-product N           exact-enumeration safety budget\n"
+              "  --whitaker-trim MODE      annotate (default) or filter\n"
+              "  --orthography MODE        disabled, classical-only, or "
+              "classical-and-medieval (default)\n"
+              "  --disable-mechanism NAME  disable one core mechanism; may "
+              "repeat\n"
               "  --human                   compact table instead of NDJSON\n"
               "  --include-nbest           include every possible morphology "
               "analysis in NDJSON\n"
@@ -236,7 +302,8 @@ int main(const int argc, char *argv[]) try {
                   << engine.error().message << '\n';
         return 3;
     }
-    const parsers::Experiment experiment{**engine, options->max_product};
+    const parsers::Experiment experiment{**engine, options->max_product,
+                                         options->analysis_options};
     auto fixtures = parsers::load_corpus(options->corpus);
     if (options->text) {
         fixtures = {parsers::Fixture{
