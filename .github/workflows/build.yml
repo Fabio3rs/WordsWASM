@@ -76,6 +76,303 @@ jobs:
             whitakers-words/poc/compact-db/output/words-poc-search-only.wwdb
           if-no-files-found: error
 
+  native-binaries:
+    name: Native CLI (${{ matrix.platform }} ${{ matrix.arch }})
+    needs: native
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            arch: x86_64
+            runner: ubuntu-24.04
+            executable: build/native-release/words_cli
+          - platform: windows
+            arch: x86_64
+            runner: windows-2025
+            executable: build/native-release/words_cli.exe
+          - platform: macos
+            arch: x86_64
+            runner: macos-15-intel
+            executable: build/native-release/words_cli
+          - platform: macos
+            arch: arm64
+            runner: macos-15
+            executable: build/native-release/words_cli
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download the validated datasets
+        uses: actions/download-artifact@v4
+        with:
+          name: validated-wwdb
+          path: whitakers-words/poc/compact-db/output
+
+      - name: Install Linux toolchain
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14 ninja-build binutils file
+
+      - name: Setup MinGW-w64 UCRT64
+        if: matrix.platform == 'windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-binutils
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-ninja
+
+      - name: Install macOS LLVM 19
+        if: matrix.platform == 'macos'
+        run: |
+          brew install llvm@19 ninja
+          llvm_prefix="$(brew --prefix llvm@19)"
+          echo "LLVM_PREFIX=${llvm_prefix}" >> "${GITHUB_ENV}"
+          echo "${llvm_prefix}/bin" >> "${GITHUB_PATH}"
+
+      - name: Configure and build Linux CLI
+        if: matrix.platform == 'linux'
+        run: |
+          cmake -S . -B build/native-release -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=gcc-14 \
+            -DCMAKE_CXX_COMPILER=g++-14 \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DENABLE_STATIC_CLI=ON \
+            -DENABLE_TESTS=OFF \
+            -DENABLE_SANITIZERS=OFF
+          cmake --build build/native-release --target words_cli --parallel
+          strip build/native-release/words_cli
+
+      - name: Configure and build Windows CLI
+        if: matrix.platform == 'windows'
+        shell: msys2 {0}
+        run: |
+          gcc_major="$(g++ -dumpfullversion -dumpversion | cut -d. -f1)"
+          if [ "${gcc_major}" -lt 14 ]; then
+            echo "WordsWASM requires MinGW-w64 GCC 14 or newer" >&2
+            exit 1
+          fi
+          cmake -S . -B build/native-release -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DENABLE_STATIC_CLI=ON \
+            -DENABLE_TESTS=OFF \
+            -DENABLE_SANITIZERS=OFF
+          cmake --build build/native-release --target words_cli --parallel
+          strip build/native-release/words_cli.exe
+
+      - name: Configure and build macOS CLI
+        if: matrix.platform == 'macos'
+        run: |
+          cmake -S . -B build/native-release -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER="${LLVM_PREFIX}/bin/clang" \
+            -DCMAKE_CXX_COMPILER="${LLVM_PREFIX}/bin/clang++" \
+            -DCMAKE_AR="${LLVM_PREFIX}/bin/llvm-ar" \
+            -DCMAKE_RANLIB="${LLVM_PREFIX}/bin/llvm-ranlib" \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DENABLE_STATIC_CLI=ON \
+            -DENABLE_TESTS=OFF \
+            -DENABLE_SANITIZERS=OFF
+          cmake --build build/native-release --target words_cli --parallel
+          "${LLVM_PREFIX}/bin/llvm-strip" -x build/native-release/words_cli
+
+      - name: Smoke-test Linux CLI and static linkage
+        if: matrix.platform == 'linux'
+        run: |
+          build/native-release/words_cli \
+            --database whitakers-words/poc/compact-db/output/words-poc-dense.wwdb \
+            --dataset-id sha256:ci-smoke \
+            --format analysis-v2 amo \
+            | python3 -c "import json,sys; assert json.load(sys.stdin)['schemaVersion'] == 2"
+          file build/native-release/words_cli | grep -F "statically linked"
+          if readelf -d build/native-release/words_cli 2>&1 | grep -F NEEDED; then
+            echo "Linux release binary has dynamic dependencies" >&2
+            exit 1
+          fi
+
+      - name: Smoke-test Windows CLI and static runtime linkage
+        if: matrix.platform == 'windows'
+        shell: msys2 {0}
+        run: |
+          build/native-release/words_cli.exe \
+            --database whitakers-words/poc/compact-db/output/words-poc-dense.wwdb \
+            --dataset-id sha256:ci-smoke \
+            --format analysis-v2 amo \
+            | grep -F '"schemaVersion":2'
+          objdump -p build/native-release/words_cli.exe \
+            | sed -n '/DLL Name/p' \
+            | tee build/native-release/dlls.txt
+          if grep -Eiq 'libgcc|libstdc\+\+|libwinpthread' \
+              build/native-release/dlls.txt; then
+            echo "Windows release binary depends on a MinGW runtime DLL" >&2
+            exit 1
+          fi
+
+      - name: Smoke-test macOS CLI and system linkage
+        if: matrix.platform == 'macos'
+        run: |
+          build/native-release/words_cli \
+            --database whitakers-words/poc/compact-db/output/words-poc-dense.wwdb \
+            --dataset-id sha256:ci-smoke \
+            --format analysis-v2 amo \
+            | python3 -c "import json,sys; assert json.load(sys.stdin)['schemaVersion'] == 2"
+          file build/native-release/words_cli | grep -F "${{ matrix.arch }}"
+          otool -L build/native-release/words_cli \
+            | tee build/native-release/dylibs.txt
+          if grep -Eq '/opt/homebrew|/usr/local' \
+              build/native-release/dylibs.txt; then
+            echo "macOS release binary depends on Homebrew libraries" >&2
+            exit 1
+          fi
+
+      - name: Upload native CLI
+        uses: actions/upload-artifact@v4
+        with:
+          name: words-cli-${{ matrix.platform }}-${{ matrix.arch }}
+          path: ${{ matrix.executable }}
+          if-no-files-found: error
+
+  sanitizer-tests:
+    name: Sanitizers (${{ matrix.toolchain }})
+    needs: native
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - toolchain: linux-gcc14
+            platform: linux
+            compiler: gcc
+            runner: ubuntu-24.04
+            build_type: Debug
+            asan_options: detect_leaks=1:halt_on_error=1
+          - toolchain: linux-clang19
+            platform: linux
+            compiler: clang
+            runner: ubuntu-24.04
+            build_type: Debug
+            asan_options: detect_leaks=1:halt_on_error=1
+          - toolchain: macos-clang19-arm64
+            platform: macos
+            compiler: clang
+            runner: macos-15
+            build_type: Debug
+            asan_options: detect_leaks=1:halt_on_error=1
+          - toolchain: windows-msvc
+            platform: windows
+            compiler: msvc
+            runner: windows-2025
+            build_type: RelWithDebInfo
+            asan_options: halt_on_error=1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download the validated datasets
+        uses: actions/download-artifact@v4
+        with:
+          name: validated-wwdb
+          path: whitakers-words/poc/compact-db/output
+
+      - name: Install GCC 14 sanitizer toolchain
+        if: matrix.platform == 'linux' && matrix.compiler == 'gcc'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-14 g++-14 ninja-build
+
+      - name: Install Clang 19 sanitizer toolchain
+        if: matrix.platform == 'linux' && matrix.compiler == 'clang'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-19 ninja-build
+
+      - name: Install macOS LLVM 19
+        if: matrix.platform == 'macos'
+        run: |
+          brew install llvm@19 ninja
+          llvm_prefix="$(brew --prefix llvm@19)"
+          echo "LLVM_PREFIX=${llvm_prefix}" >> "${GITHUB_ENV}"
+          echo "${llvm_prefix}/bin" >> "${GITHUB_PATH}"
+
+      - name: Install Ninja for MSVC
+        if: matrix.platform == 'windows'
+        run: choco install ninja -y
+
+      - name: Setup MSVC
+        if: matrix.platform == 'windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure GCC sanitizer build
+        if: matrix.platform == 'linux' && matrix.compiler == 'gcc'
+        run: |
+          cmake -S . -B build/sanitizers -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_C_COMPILER=gcc-14 \
+            -DCMAKE_CXX_COMPILER=g++-14 \
+            -DENABLE_TESTS=ON \
+            -DFETCH_GTEST=ON \
+            -DENABLE_SANITIZERS=ON \
+            -DENABLE_STATIC_CLI=OFF
+
+      - name: Configure Clang sanitizer build
+        if: matrix.platform == 'linux' && matrix.compiler == 'clang'
+        run: |
+          cmake -S . -B build/sanitizers -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_C_COMPILER=clang-19 \
+            -DCMAKE_CXX_COMPILER=clang++-19 \
+            -DENABLE_TESTS=ON \
+            -DFETCH_GTEST=ON \
+            -DENABLE_SANITIZERS=ON \
+            -DENABLE_STATIC_CLI=OFF
+
+      - name: Configure macOS sanitizer build
+        if: matrix.platform == 'macos'
+        run: |
+          cmake -S . -B build/sanitizers -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_C_COMPILER="${LLVM_PREFIX}/bin/clang" \
+            -DCMAKE_CXX_COMPILER="${LLVM_PREFIX}/bin/clang++" \
+            -DCMAKE_AR="${LLVM_PREFIX}/bin/llvm-ar" \
+            -DCMAKE_RANLIB="${LLVM_PREFIX}/bin/llvm-ranlib" \
+            -DENABLE_TESTS=ON \
+            -DFETCH_GTEST=ON \
+            -DENABLE_SANITIZERS=ON \
+            -DENABLE_STATIC_CLI=OFF
+
+      - name: Configure MSVC sanitizer build
+        if: matrix.platform == 'windows'
+        run: |
+          cmake -S . -B build/sanitizers -G Ninja `
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+            -DENABLE_TESTS=ON `
+            -DFETCH_GTEST=ON `
+            -DENABLE_SANITIZERS=ON `
+            -DENABLE_STATIC_CLI=OFF
+
+      - name: Build sanitizer tests
+        run: cmake --build build/sanitizers --target words_tests --parallel
+
+      - name: Run sanitizer tests
+        env:
+          ASAN_OPTIONS: ${{ matrix.asan_options }}
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build/sanitizers -L unit --output-on-failure
+
   wasm:
     name: Browser analysis engine
     needs: native
@@ -234,10 +531,77 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v5
 
+  package-native:
+    name: Package native CLIs
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: native-binaries
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout release documentation
+        uses: actions/checkout@v4
+
+      - name: Download native CLIs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: words-cli-*
+          path: release-native/raw
+
+      - name: Assemble native packages
+        run: |
+          mkdir -p release-native/packages release-native/stage
+
+          package_unix() {
+            platform="$1"
+            arch="$2"
+            source="release-native/raw/words-cli-${platform}-${arch}/words_cli"
+            package="words-cli-${GITHUB_REF_NAME}-${platform}-${arch}"
+            destination="release-native/stage/${package}"
+
+            mkdir -p "${destination}"
+            cp "${source}" "${destination}/words_cli"
+            cp LICENSE README.md "${destination}/"
+            chmod 755 "${destination}/words_cli"
+            tar --sort=name --mtime='UTC 1980-01-01' --owner=0 --group=0 \
+              -C release-native/stage \
+              -czf "release-native/packages/${package}.tar.gz" \
+              "${package}"
+          }
+
+          package_unix linux x86_64
+          package_unix macos x86_64
+          package_unix macos arm64
+
+          windows_package="words-cli-${GITHUB_REF_NAME}-windows-x86_64"
+          windows_destination="release-native/stage/${windows_package}"
+          mkdir -p "${windows_destination}"
+          cp \
+            release-native/raw/words-cli-windows-x86_64/words_cli.exe \
+            "${windows_destination}/words_cli.exe"
+          cp LICENSE README.md "${windows_destination}/"
+          find "${windows_destination}" -exec touch -t 198001010000 {} +
+          (
+            cd release-native/stage
+            zip -X -r "../packages/${windows_package}.zip" \
+              "${windows_package}"
+          )
+
+          cd release-native/packages
+          sha256sum ./*.tar.gz ./*.zip \
+            > "words-cli-${GITHUB_REF_NAME}.sha256"
+          sha256sum --check "words-cli-${GITHUB_REF_NAME}.sha256"
+
+      - name: Upload native release packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: words-cli-packages
+          path: release-native/packages/*
+          if-no-files-found: error
+
   publish-release:
     name: Publish tagged GitHub release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: wasm
+    needs: [wasm, package-native, sanitizer-tests]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -247,7 +611,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: words-web
-          path: release-downloads
+          path: release-downloads/web
+
+      - name: Download native packages
+        uses: actions/download-artifact@v4
+        with:
+          name: words-cli-packages
+          path: release-downloads/native
 
       - name: Publish assets
         env:
@@ -260,9 +630,13 @@ jobs:
               --generate-notes
           fi
 
-          mapfile -d '' release_files < <(
-            find release-downloads -path '*/packages/*' -type f -print0
+          mapfile -d '' web_files < <(
+            find release-downloads/web -path '*/packages/*' -type f -print0
           )
+          mapfile -d '' native_files < <(
+            find release-downloads/native -type f -print0
+          )
+          release_files=("${web_files[@]}" "${native_files[@]}")
           if [ "${#release_files[@]}" -eq 0 ]; then
             echo "No tagged release package was downloaded" >&2
             exit 1

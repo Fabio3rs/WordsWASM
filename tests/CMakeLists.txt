@@ -12,11 +12,15 @@ target_link_libraries(words_tests PRIVATE
     GTest::GTest
     GTest::Main
 )
+words_apply_project_options(words_tests)
 target_compile_definitions(words_tests PRIVATE
     WORDS_TEST_WWDB="${CMAKE_SOURCE_DIR}/whitakers-words/poc/compact-db/output/words-poc-dense.wwdb"
     WORDS_TEST_SEARCH_WWDB="${CMAKE_SOURCE_DIR}/whitakers-words/poc/compact-db/output/words-poc-search-only.wwdb"
 )
-gtest_discover_tests(words_tests)
+gtest_discover_tests(words_tests
+    DISCOVERY_MODE PRE_TEST
+    PROPERTIES LABELS unit
+)
 
 if(NOT EMSCRIPTEN)
     find_program(NODE_EXECUTABLE node)

@@ -128,6 +128,55 @@ cmake --build build/native --target words_cli -j"$(nproc)"
 This only builds the code. `words_cli` still needs a WWDB passed with
 `--database`; no deployable `.wwdb` is committed to the repository.
 
+For a static native CLI on Linux or MinGW, enable the distribution option as
+well:
+
+```sh
+cmake -S . -B build/static -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_SHARED_LIBS=OFF \
+  -DENABLE_STATIC_CLI=ON \
+  -DENABLE_TESTS=OFF \
+  -DENABLE_SANITIZERS=OFF
+cmake --build build/static --target words_cli
+```
+
+`ENABLE_STATIC_CLI` produces a fully static executable on Linux. On MinGW it
+statically links the project, libgcc, libstdc++, and winpthreads while retaining
+only Windows system/UCRT DLL dependencies. macOS does not support a fully
+static system executable, so the same option embeds the project and vendored
+libraries while retaining only Apple system-library dependencies. The release
+workflow verifies these properties before publishing each binary.
+
+The supported distribution compiler floors are GCC 14 and LLVM 19. Newer
+versions are supported; the CI exercises GCC 14 and LLVM 19 directly, while
+the Windows MinGW job rejects older GCC versions explicitly.
+
+### Sanitizer builds
+
+Sanitizers are test-only and are never enabled in published Release binaries.
+On Linux and macOS, `ENABLE_SANITIZERS=ON` enables AddressSanitizer and
+UndefinedBehaviorSanitizer (plus LeakSanitizer where available). On MSVC it
+enables AddressSanitizer with debug information and non-incremental linking.
+Sanitizers and `ENABLE_STATIC_CLI` must be built in separate build trees.
+
+GoogleTest remains optional and no dependency is downloaded by default. A CI
+or developer build may opt into the pinned fallback with `FETCH_GTEST=ON`:
+
+```sh
+cmake -S . -B build/sanitizers -G Ninja \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DENABLE_TESTS=ON \
+  -DFETCH_GTEST=ON \
+  -DENABLE_SANITIZERS=ON \
+  -DENABLE_STATIC_CLI=OFF
+cmake --build build/sanitizers --target words_tests
+ctest --test-dir build/sanitizers -L unit --output-on-failure
+```
+
+If GTest is neither installed nor explicitly fetched, configuration continues
+with a warning and disables the C++ test target.
+
 ### Complete native build and test suite
 
 For a clean checkout, use this order:

@@ -66,15 +66,29 @@ flowchart LR
     T[push/PR/tag] --> N[build Ada + gerar WWDB]
     N --> C[gerar full + search e rodar CTest]
     C --> W[build Emscripten]
+    C --> B[CLI Linux/Windows/macOS]
+    C --> Z[sanitizers Linux/macOS/MSVC]
     W --> S[smoke WASM real]
-    S --> P[pacote web + manifestos]
+    W --> P[pacote web + manifestos]
+    B --> NP[pacotes CLI nativos]
     P -->|tag v*| R[GitHub Release]
+    NP -->|tag v*| R
+    Z -->|gate da tag| R
 ```
 
 Em toda mudança, o job nativo reconstrói o oráculo Ada e os dados gerados,
 cria os WWDB `dense` e `search-only` e executa testes unitários, diferenciais, corpus e
 pipelines. O job WebAssembly recebe exatamente esse snapshot validado, gera os
 assets, executa o smoke test real e publica um artifact de CI.
+
+O mesmo snapshot validado alimenta os builds do CLI para Linux x86-64,
+Windows x86-64, macOS Intel e macOS ARM64. Linux é totalmente estático; no
+MinGW, libgcc, libstdc++ e winpthreads são estáticos e somente DLLs de sistema
+Windows/UCRT permanecem. No macOS, as bibliotecas do projeto são estáticas e
+apenas as bibliotecas de sistema Apple permanecem dinâmicas. Uma matriz
+separada executa os testes C++ com ASan/UBSan no Linux e macOS e com ASan no
+MSVC. Esses builds instrumentados nunca são publicados como binários de
+release.
 
 Os builds Ada/GPRBuild, C++ nativo e WebAssembly usam `-j"$(nproc)"` no
 runner. O Makefile Ada permanece serial na orquestração dos geradores por
@@ -98,6 +112,18 @@ completo:
 - `words-search-VERSAO.wwdb`, `.wwdb.br` e `.wwdb.gz`;
 - `dataset-manifest-VERSAO.json` e `words-web-manifest-VERSAO.json`;
 - `words-assets-VERSAO.sha256`, cobrindo os bancos, manifestos e pacote.
+
+Além dos assets web e dos bancos, a release anexa os executáveis nativos:
+
+- `words-cli-VERSAO-linux-x86_64.tar.gz`;
+- `words-cli-VERSAO-windows-x86_64.zip`;
+- `words-cli-VERSAO-macos-x86_64.tar.gz`;
+- `words-cli-VERSAO-macos-arm64.tar.gz`;
+- `words-cli-VERSAO.sha256`, cobrindo os quatro pacotes nativos.
+
+Cada pacote nativo contém o executável, o `README.md` e a licença do projeto.
+Os bancos não são duplicados dentro desses pacotes: o CLI deve receber um dos
+WWDB anexados à mesma release e o `datasetId` registrado no manifesto publicado.
 
 A tag faz parte do nome para permitir URLs e caches explícitos. A GitHub
 Release já fornece o escopo imutável da versão; `datasetId` identifica o

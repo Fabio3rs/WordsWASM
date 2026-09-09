@@ -44,6 +44,7 @@ target_link_libraries(parsers_investigation_lib PUBLIC
     words_core
     nlohmann_json::nlohmann_json
 )
+words_apply_project_options(parsers_investigation_lib)
 target_compile_definitions(parsers_investigation_lib PUBLIC
     PARSERS_INVESTIGATION_WWDB_PATH="${PARSERS_INVESTIGATION_WWDB_PATH}"
     PARSERS_INVESTIGATION_DATASET_ID="${PARSERS_INVESTIGATION_DATASET_ID}"
@@ -58,15 +59,19 @@ target_compile_definitions(parsers_investigation_lib PUBLIC
 
 add_executable(parsers_investigation main.cpp)
 target_link_libraries(parsers_investigation PRIVATE parsers_investigation_lib)
+words_apply_project_options(parsers_investigation)
 
 add_executable(markov_parser_ranker markov_ranker.cpp)
 target_link_libraries(markov_parser_ranker PRIVATE parsers_investigation_lib)
+words_apply_project_options(markov_parser_ranker)
 
 add_executable(dependency_markov_ranker dependency_markov_ranker.cpp)
 target_link_libraries(dependency_markov_ranker PRIVATE parsers_investigation_lib)
+words_apply_project_options(dependency_markov_ranker)
 
 add_executable(markov_model_test markov_model_test.cpp)
 target_link_libraries(markov_model_test PRIVATE parsers_investigation_lib)
+words_apply_project_options(markov_model_test)
 
 option(PARSERS_INVESTIGATION_REGISTER_TESTS
     "Register exploratory parser and Markov programs with CTest"

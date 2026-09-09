@@ -1,5 +1,13 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.14)
 project(WordsWASM C CXX)
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
+   CMAKE_CXX_COMPILER_VERSION VERSION_LESS 14)
+    message(FATAL_ERROR "WordsWASM requires GCC 14 or newer")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND
+       CMAKE_CXX_COMPILER_VERSION VERSION_LESS 19)
+    message(FATAL_ERROR "WordsWASM requires LLVM Clang 19 or newer")
+endif()
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_C_STANDARD 23)
@@ -21,12 +29,24 @@ endif()
 option(ENABLE_TESTS "Enable tests" ON)
 option(ENABLE_SANITIZERS "Enable sanitizers" ${SHOULD_ENABLE_SANITIZERS})
 option(ENABLE_WEB_COMPRESSION "Generate Brotli/Gzip compressed web assets when building with Emscripten" ON)
+option(ENABLE_STATIC_CLI "Statically link the native CLI where the platform supports it" OFF)
+option(FETCH_GTEST "Download GoogleTest when tests are enabled and it is not installed" OFF)
+
+if(ENABLE_STATIC_CLI AND ENABLE_SANITIZERS)
+    message(FATAL_ERROR
+        "ENABLE_STATIC_CLI and ENABLE_SANITIZERS require separate build trees"
+    )
+endif()
 
 # Alpine's GCC toolchain defines _FORTIFY_SOURCE by default. Undefine the
 # toolchain-provided value before selecting ours to avoid a redefinition
-# warning becoming an error under -Werror.
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    add_compile_options(-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3)
+# warning becoming an error under -Werror. Keep this Linux-only: neither
+# Apple platforms nor MinGW use glibc's fortify implementation.
+add_library(words_project_warnings INTERFACE)
+if(UNIX AND NOT APPLE AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(words_project_warnings INTERFACE
+        -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3
+    )
 endif()
 
 add_subdirectory(vendor/utf8proc SYSTEM)
@@ -34,21 +54,60 @@ if(NOT EMSCRIPTEN)
     add_subdirectory(vendor/json SYSTEM)
 endif()
 
-if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     message(STATUS "Setting G++ flags")
-    add_compile_options(-Wall -Werror -Wextra -Wformat-security -Wconversion -Wsign-conversion -Wno-gnu -Wno-gnu-statement-expression)
-elseif (${CMAKE_CXX_COMPILER_ID} STREQUAL "MSVC")
+    target_compile_options(words_project_warnings INTERFACE
+        -Wall -Werror -Wextra -Wformat-security -Wconversion -Wsign-conversion
+    )
+elseif(MSVC)
     message(STATUS "Setting MSVC flags")
-    add_compile_options(/W4 /WX)
-elseif (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
+    target_compile_options(words_project_warnings INTERFACE /W4 /WX)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     message(STATUS "Setting Clang flags")
-    add_compile_options(-Werror -Weverything -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-padded -Wno-global-constructors -Wno-exit-time-destructors -Wno-weak-vtables -Wno-documentation -Wno-documentation-unknown-command -Wno-unsafe-buffer-usage)
+    target_compile_options(words_project_warnings INTERFACE
+        -Werror -Weverything
+        -Wno-c++98-compat
+        -Wno-c++98-compat-pedantic
+        -Wno-padded
+        -Wno-global-constructors
+        -Wno-exit-time-destructors
+        -Wno-weak-vtables
+        -Wno-documentation
+        -Wno-documentation-unknown-command
+        -Wno-unsafe-buffer-usage
+    )
 endif()
 
 if(ENABLE_TESTS)
     include(CTest)
     enable_testing()
     find_package(GTest QUIET)
+
+    if(NOT GTest_FOUND AND FETCH_GTEST)
+        include(FetchContent)
+        if(MSVC)
+            # Keep GoogleTest on the same MSVC runtime selected by the parent.
+            set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+        endif()
+        FetchContent_Declare(
+            googletest
+            GIT_REPOSITORY https://github.com/google/googletest.git
+            GIT_TAG v1.17.0
+            GIT_SHALLOW TRUE
+        )
+        FetchContent_MakeAvailable(googletest)
+
+        if(TARGET gtest AND NOT TARGET GTest::GTest)
+            add_library(GTest::GTest ALIAS gtest)
+        endif()
+        if(TARGET gtest_main AND NOT TARGET GTest::Main)
+            add_library(GTest::Main ALIAS gtest_main)
+        endif()
+        if(TARGET GTest::GTest AND TARGET GTest::Main)
+            set(GTest_FOUND TRUE)
+        endif()
+    endif()
+
     if(GTest_FOUND)
         message(STATUS "GTest found, enabling tests")
         include(GoogleTest)
@@ -58,43 +117,49 @@ if(ENABLE_TESTS)
     endif()
 endif()
 
+add_library(words_project_sanitizers INTERFACE)
 if(ENABLE_SANITIZERS)
-    # Common sanitizer flags for better security and debugging
-    set(SANITIZER_FLAGS
-        -fno-omit-frame-pointer
-        -fsanitize=address
-        -fsanitize=alignment
-        -fsanitize=bool
-        -fsanitize=bounds
-        -fsanitize=enum
-        -fsanitize=float-cast-overflow
-        -fsanitize=float-divide-by-zero
-        -fsanitize=integer-divide-by-zero
-        -fsanitize=leak
-        -fsanitize=nonnull-attribute
-        -fsanitize=pointer-compare
-        -fsanitize=pointer-overflow
-        -fsanitize=pointer-subtract
-        -fsanitize=return
-        -fsanitize=returns-nonnull-attribute
-        -fsanitize=shift
-        -fsanitize=signed-integer-overflow
-        -fsanitize=undefined
-        -fsanitize=unreachable
-        -fsanitize=vla-bound
-        -fsanitize=vptr
-        -g
-    )
-
-    add_compile_options(${SANITIZER_FLAGS})
-    add_link_options(${SANITIZER_FLAGS})
-
-    if (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
-        message(STATUS "Setting Clang-specific sanitizer flags")
-        add_compile_options(-fsanitize=implicit-conversion -fsanitize=unsigned-integer-overflow)
-        add_link_options(-fsanitize=implicit-conversion -fsanitize=unsigned-integer-overflow)
+    if(MSVC)
+        target_compile_options(words_project_sanitizers INTERFACE
+            /fsanitize=address /Zi
+        )
+        target_link_options(words_project_sanitizers INTERFACE
+            /fsanitize=address /INCREMENTAL:NO
+        )
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT WIN32)
+        target_compile_options(words_project_sanitizers INTERFACE
+            -fno-omit-frame-pointer
+            -fsanitize=address,undefined,leak,float-divide-by-zero
+            -g
+        )
+        target_link_options(words_project_sanitizers INTERFACE
+            -fno-omit-frame-pointer
+            -fsanitize=address,undefined,leak,float-divide-by-zero
+        )
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        set(WORDS_CLANG_SANITIZERS
+            -fsanitize=address,undefined,implicit-conversion,unsigned-integer-overflow,float-divide-by-zero
+        )
+        target_compile_options(words_project_sanitizers INTERFACE
+            -fno-omit-frame-pointer ${WORDS_CLANG_SANITIZERS} -g
+        )
+        target_link_options(words_project_sanitizers INTERFACE
+            -fno-omit-frame-pointer ${WORDS_CLANG_SANITIZERS}
+        )
+    else()
+        message(WARNING
+            "Sanitizers are not configured for ${CMAKE_CXX_COMPILER_ID}; disabling them"
+        )
+        set(ENABLE_SANITIZERS OFF)
     endif()
 endif()
+
+function(words_apply_project_options target_name)
+    target_link_libraries(${target_name} PRIVATE words_project_warnings)
+    if(ENABLE_SANITIZERS)
+        target_link_libraries(${target_name} PRIVATE words_project_sanitizers)
+    endif()
+endfunction()
 
 add_library(words_core STATIC)
 target_sources(words_core PRIVATE
@@ -113,6 +178,7 @@ target_include_directories(words_core PUBLIC
 target_link_libraries(words_core
     PUBLIC utf8proc::utf8proc
 )
+words_apply_project_options(words_core)
 add_library(WordsWASM_lib ALIAS words_core)
 
 if(NOT EMSCRIPTEN)
@@ -123,6 +189,7 @@ if(NOT EMSCRIPTEN)
         PUBLIC words_core
         PRIVATE nlohmann_json::nlohmann_json
     )
+    words_apply_project_options(words_json)
 endif()
 if(NOT EMSCRIPTEN)
     # The packer is explicit because its output is a release/test fixture, not
@@ -134,6 +201,7 @@ if(NOT EMSCRIPTEN)
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
     )
     target_link_libraries(wwdb_poc_pack PRIVATE nlohmann_json::nlohmann_json)
+    words_apply_project_options(wwdb_poc_pack)
 endif()
 
 if(EMSCRIPTEN)
@@ -156,6 +224,7 @@ if(EMSCRIPTEN)
         PRIVATE words_core
         -lembind
     )
+    words_apply_project_options(WordsWASM)
     target_compile_options(WordsWASM PRIVATE
         -sDISABLE_EXCEPTION_CATCHING=0
     )
@@ -217,6 +286,34 @@ if(EMSCRIPTEN)
 else()
     add_executable(words_cli src/main.cpp)
     target_link_libraries(words_cli PRIVATE words_json)
+    words_apply_project_options(words_cli)
+
+    if(ENABLE_STATIC_CLI)
+        if(BUILD_SHARED_LIBS)
+            message(FATAL_ERROR
+                "ENABLE_STATIC_CLI requires BUILD_SHARED_LIBS=OFF"
+            )
+        elseif(APPLE)
+            message(STATUS
+                "macOS CLI uses static project libraries and dynamic system libraries"
+            )
+        elseif(MSVC)
+            message(FATAL_ERROR
+                "ENABLE_STATIC_CLI on Windows requires a MinGW toolchain"
+            )
+        elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+            target_link_options(words_cli PRIVATE -static)
+            if(WIN32)
+                target_link_options(words_cli PRIVATE
+                    -static-libgcc -static-libstdc++
+                )
+            endif()
+        else()
+            message(FATAL_ERROR
+                "ENABLE_STATIC_CLI is unsupported with ${CMAKE_CXX_COMPILER_ID}"
+            )
+        endif()
+    endif()
 
     add_subdirectory(parsers_investigation)
 endif()
