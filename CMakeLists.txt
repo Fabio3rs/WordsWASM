@@ -1,4 +1,10 @@
 cmake_minimum_required(VERSION 3.14)
+
+# Let targets select their warning level without CMake injecting MSVC /W3.
+if(POLICY CMP0092)
+    cmake_policy(SET CMP0092 NEW)
+endif()
+
 project(WordsWASM C CXX)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
@@ -61,7 +67,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     )
 elseif(MSVC)
     message(STATUS "Setting MSVC flags")
-    target_compile_options(words_project_warnings INTERFACE /W4 /WX)
+    target_compile_options(words_project_warnings INTERFACE /W4 /WX /utf-8)
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     message(STATUS "Setting Clang flags")
     target_compile_options(words_project_warnings INTERFACE
@@ -152,6 +158,18 @@ if(ENABLE_SANITIZERS)
         )
         set(ENABLE_SANITIZERS OFF)
     endif()
+endif()
+
+if(MSVC AND ENABLE_SANITIZERS)
+    # MSVC's annotated STL requires every object in the final executable to
+    # agree on ASan instrumentation. This includes fetched GoogleTest libs.
+    foreach(gtest_target IN ITEMS gtest gtest_main gmock gmock_main)
+        if(TARGET ${gtest_target})
+            target_link_libraries(${gtest_target}
+                PRIVATE words_project_sanitizers
+            )
+        endif()
+    endforeach()
 endif()
 
 function(words_apply_project_options target_name)

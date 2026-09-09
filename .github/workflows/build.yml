@@ -192,7 +192,7 @@ jobs:
         run: |
           build/native-release/words_cli \
             --database whitakers-words/poc/compact-db/output/words-poc-dense.wwdb \
-            --dataset-id sha256:ci-smoke \
+            --dataset-id sha256:0000000000000000000000000000000000000000000000000000000000000000 \
             --format analysis-v2 amo \
             | python3 -c "import json,sys; assert json.load(sys.stdin)['schemaVersion'] == 2"
           file build/native-release/words_cli | grep -F "statically linked"
@@ -207,7 +207,7 @@ jobs:
         run: |
           build/native-release/words_cli.exe \
             --database whitakers-words/poc/compact-db/output/words-poc-dense.wwdb \
-            --dataset-id sha256:ci-smoke \
+            --dataset-id sha256:0000000000000000000000000000000000000000000000000000000000000000 \
             --format analysis-v2 amo \
             | grep -F '"schemaVersion":2'
           objdump -p build/native-release/words_cli.exe \
@@ -224,7 +224,7 @@ jobs:
         run: |
           build/native-release/words_cli \
             --database whitakers-words/poc/compact-db/output/words-poc-dense.wwdb \
-            --dataset-id sha256:ci-smoke \
+            --dataset-id sha256:0000000000000000000000000000000000000000000000000000000000000000 \
             --format analysis-v2 amo \
             | python3 -c "import json,sys; assert json.load(sys.stdin)['schemaVersion'] == 2"
           file build/native-release/words_cli | grep -F "${{ matrix.arch }}"
@@ -366,6 +366,12 @@ jobs:
 
       - name: Build sanitizer tests
         run: cmake --build build/sanitizers --target words_tests --parallel
+
+      - name: Suppress the macOS Objective-C runtime allocation
+        if: matrix.platform == 'macos'
+        run: |
+          echo "LSAN_OPTIONS=suppressions=${GITHUB_WORKSPACE}/.github/lsan-macos.supp:print_suppressions=1" \
+            >> "${GITHUB_ENV}"
 
       - name: Run sanitizer tests
         env:

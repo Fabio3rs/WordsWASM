@@ -1,0 +1,3 @@
+# macOS arm64 initializes Objective-C/XPC state before main and intentionally
+# retains this per-process class-initialization list until process shutdown.
+leak:_fetchInitializingClassList
