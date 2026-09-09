@@ -57,13 +57,13 @@ let expectedSearchLine;
 try {
   const macron = engine.analyze("mālum");
   assert.equal(macron.schema, "whitakers-words.browser-analysis");
-  assert.equal(macron.schemaVersion, 3);
+  assert.equal(macron.schemaVersion, 4);
   assert.equal(macron.query.normalized, "mālum");
   assert.ok(macron.hits.some((hit) => typeof hit.meaning === "string"));
 
   const diminutive = engine.search("anaticulus");
   assert.equal(diminutive.schema, "whitakers-words.browser-search");
-  assert.equal(diminutive.schemaVersion, 3);
+  assert.equal(diminutive.schemaVersion, 4);
   assert.equal(diminutive.status, "analyzed");
   assert.ok(diminutive.hits.every((hit) => hit.meaning === undefined));
   assert.ok(diminutive.hits.some((hit) =>
@@ -89,7 +89,13 @@ try {
 
   const resDocument = engine.search("res");
   expectedSearches.set("res", resDocument);
-  assert.ok(resDocument.hits.every((hit) => hit.lemma !== "reor"));
+  const activeReor = resDocument.hits.find((hit) =>
+    hit.kind === "lexical" && hit.lemma === "reor"
+  );
+  assert.ok(activeReor);
+  assert.equal(activeReor.assessment.whitakerTrim.compatible, false);
+  assert.deepEqual(activeReor.assessment.whitakerTrim.reasons,
+    ["deponent-active-form"]);
 
   for (const [surface, person] of [["reor", 1], ["reris", 2]]) {
     const document = engine.search(surface);
@@ -101,6 +107,37 @@ try {
       hit.morphology.person === person
     ));
   }
+
+  const relatedPassiveNotices = [
+    "related-passive-usage-attested",
+    "source-disagreement",
+    "manual-review-recommended",
+  ];
+  for (const surface of ["audetur", "diffideretur"]) {
+    const document = engine.search(surface);
+    expectedSearches.set(surface, document);
+    const exceptional = document.hits.find((hit) =>
+      hit.kind === "lexical" &&
+      hit.assessment.whitakerTrim.reasons.includes(
+        "semideponent-passive-present-system",
+      )
+    );
+    assert.ok(exceptional);
+    assert.deepEqual(exceptional.assessment.notices, relatedPassiveNotices);
+  }
+
+  const ausimDocument = engine.search("ausim");
+  expectedSearches.set("ausim", ausimDocument);
+  const activePerfect = ausimDocument.hits.find((hit) =>
+    hit.kind === "lexical" && hit.morphology.kind === "verb" &&
+    hit.morphology.tense === "perfect" &&
+    hit.morphology.voice === "active"
+  );
+  assert.ok(activePerfect);
+  assert.deepEqual(activePerfect.assessment.notices, [
+    "source-disagreement",
+    "manual-review-recommended",
+  ]);
 
   const studies = engine.search("studiisque");
   expectedSearches.set("studiisque", studies);

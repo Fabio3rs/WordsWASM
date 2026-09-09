@@ -330,7 +330,7 @@ TEST(EngineTest, ReproducesWhitakerTrimAsAnExplainablePolicy) {
         }));
 }
 
-TEST(EngineTest, PreservesAttestedAudeoPassiveWithDisagreementNotices) {
+TEST(EngineTest, PreservesAudeoPassiveWithRelatedEvidenceNotices) {
     const auto result = test::engine().analyze("audetur");
     ASSERT_EQ(result.status, QueryStatus::analyzed);
     ASSERT_EQ(result.analyses.size(), 1U);
@@ -363,6 +363,38 @@ TEST(EngineTest, PreservesAttestedAudeoPassiveWithDisagreementNotices) {
     filter.whitaker_trim = WhitakerTrimMode::filter;
     EXPECT_EQ(test::engine().analyze("audetur", filter).status,
               QueryStatus::unknown);
+}
+
+TEST(EngineTest, QualifiesDocumentedSemideponentExceptionsByAnalysis) {
+    const auto has_notice = [](const AnalysisIR &analysis,
+                               const MorphologicalNotice notice) {
+        return std::ranges::contains(analysis.assessment.notice_values(),
+                                     notice);
+    };
+
+    const auto ausim = test::engine().analyze("ausim");
+    const auto exceptional_perfect = std::ranges::find_if(
+        ausim.analyses, [](const AnalysisIR &analysis) {
+            const auto *verb =
+                std::get_if<VerbMorphology>(&analysis.morphology);
+            return verb != nullptr && verb->tense == Tense::perfect &&
+                   verb->voice == Voice::active;
+        });
+    ASSERT_NE(exceptional_perfect, ausim.analyses.end());
+    EXPECT_TRUE(has_notice(*exceptional_perfect,
+                           MorphologicalNotice::source_disagreement));
+    EXPECT_TRUE(has_notice(*exceptional_perfect,
+                           MorphologicalNotice::manual_review_recommended));
+
+    const auto diffideretur = test::engine().analyze("diffideretur");
+    ASSERT_EQ(diffideretur.analyses.size(), 1U);
+    EXPECT_TRUE(has_notice(
+        diffideretur.analyses.front(),
+        MorphologicalNotice::related_passive_usage_attested));
+    EXPECT_TRUE(has_notice(diffideretur.analyses.front(),
+                           MorphologicalNotice::source_disagreement));
+    EXPECT_TRUE(has_notice(diffideretur.analyses.front(),
+                           MorphologicalNotice::manual_review_recommended));
 }
 
 TEST(EngineTest, ControlsOrthographyEraWithoutLosingRewriteProvenance) {

@@ -1,6 +1,6 @@
 # Estado atual da implementação
 
-Data do snapshot: 2026-08-29.
+Data do snapshot: 2026-09-08.
 
 Este documento é o índice operacional do projeto. Ele registra o que já está
 implementado e testado, o que existe apenas no pipeline de preparação dos
@@ -22,7 +22,7 @@ navegador e o procedimento de publicação estão em
 As regras de versionamento, artefatos regeneráveis e publicação por tag estão
 em [`repositorio-e-releases.md`](repositorio-e-releases.md).
 
-Os bancos atuais são duas projeções WWDB PoC 1.8 dos mesmos dados legados:
+Os bancos atuais são duas projeções WWDB PoC 1.9 dos mesmos dados legados:
 `words-full.wwdb`, com significados, e `words-search.wwdb`, sem textos
 editoriais. A arquitetura de
 revisão para enriquecimento lexical já existe — auditoria, fila, schemas e
@@ -34,7 +34,7 @@ deliberadamente ausente nesse caso.
 
 ```mermaid
 flowchart LR
-    A[fontes Ada e dados humanos] --> P[packer WWDB PoC 1.8]
+    A[fontes Ada e dados humanos] --> P[packer WWDB PoC 1.9]
     P --> F[words-full.wwdb]
     P --> SDB[words-search.wwdb]
     F --> E[engine C++23]
@@ -90,7 +90,7 @@ O loader implementado confere magic, versão, perfil, tamanhos, CRC32,
 diretório de seções, strides, cobertura, sobreposição, IDs, enums, bits
 reservados, pools e ordenação dos índices. Ele mantém compatibilidade com o
 perfil denso por linha WWDB 1.6/1.7, aceita `dense` e `search-only` no WWDB
-1.8 e rejeita explicitamente os demais perfis. O perfil enxuto não possui
+1.8/1.9 e rejeita explicitamente os demais perfis. O perfil enxuto não possui
 pools de significados e, por isso, só autoriza busca tipada ou sua apresentação
 CLI `search-v1`.
 
@@ -177,7 +177,7 @@ para medição: `simple`, `dense`, `columnar` e `search-only`. O runtime atual l
 `dense` por linhas e `search-only` diretamente em colunas, sem reconstruir um
 array intermediário de registros.
 
-O WWDB PoC 1.8 full possui 23 seções e inclui:
+O WWDB PoC 1.9 full possui 24 seções e inclui:
 
 - 39.339 registros lexicais legados;
 - 62.086 referências de radical;
@@ -187,15 +187,21 @@ O WWDB PoC 1.8 full possui 23 seções e inclui:
 - 29 tackons, dos quais 11 são packons;
 - 76 análises diretas de `UNIQUES.LAT`;
 - 170 regras tipadas de reescrita: 11 de síncope e 159 ortográficas;
-- quantidade para as flexões e uma tabela esparsa por lexema/slot.
+- quantidade para as flexões e uma tabela esparsa por lexema/slot;
+- cinco registros compactos de notices morfológicos curados, sem strings.
 
 A versão 1.8 também grava no payload lexical PACK a identidade tipada do
 packon requerido. A engine não precisa mais inferir `-cum`, `-cumque`,
 `-que` etc. do texto inglês; isso torna o banco search independente dos
-significados. A projeção search conserva os mesmos IDs, regras, índices e
-quantidades em 18 seções, omitindo os cinco pools/IDs editoriais.
+significados. A versão 1.9 acrescenta
+`lexeme_id:u16 | trigger:3 | notice_flags:3 | reserved:2`; a projeção search
+conserva os mesmos IDs, regras, índices, quantidades e notices em 19 seções,
+omitindo os cinco pools/IDs editoriais. Essa seção esparsa permanece row-major;
+as seções quentes de lexemas, referências e flexões continuam colunares no
+search.
 
-Tamanhos medidos no snapshot atual:
+Tamanhos abaixo medidos no snapshot 1.8, antes do delta atual de 47 bytes do
+1.9 (32 bytes de diretório e 15 bytes de payload):
 
 | Perfil | RAW | gzip -9 | zstd -19 |
 | --- | ---: | ---: | ---: |

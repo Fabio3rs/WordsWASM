@@ -34,6 +34,20 @@ constexpr std::string_view orthographic_method_name{"orthographic"};
 constexpr std::string_view regular_method_name{"regular"};
 constexpr std::string_view derived_method_name{"derived"};
 constexpr std::string_view compound_method_name{"compound"};
+constexpr std::string_view related_passive_notice_text{
+    "Related passive uses of this lexeme are attested; this does not claim "
+    "that the exact queried surface is attested."};
+constexpr std::string_view related_passive_notice_documentation{
+    "docs/morphological-assessment.md#reviewed-semideponent-exceptions"};
+constexpr std::string_view source_disagreement_notice_text{
+    "Whitaker's trim policy and external grammatical or lexical evidence "
+    "do not support the same early rejection."};
+constexpr std::string_view source_disagreement_notice_documentation{
+    "docs/morphological-assessment.md#source-disagreement"};
+constexpr std::string_view manual_review_notice_text{
+    "Keep this candidate available for contextual ranking or manual review."};
+constexpr std::string_view manual_review_notice_documentation{
+    "docs/morphological-assessment.md#review-policy"};
 
 [[nodiscard]] bool legacy_projection_visible(
     const WhitakerTrimAssessment &assessment) noexcept {
@@ -439,24 +453,15 @@ derivation_json(const Database &database, const DerivationIR &derivation,
 morphological_notice_json(const MorphologicalNotice notice) {
     Json output{{"code", morphological_notice_name(notice)}};
     if (notice == MorphologicalNotice::related_passive_usage_attested) {
-        output["note"] =
-            "Related passive uses of audeo are attested; this does not claim "
-            "that the exact queried surface is attested.";
-        output["documentation"] =
-            "docs/morphological-assessment.md#audeo-passive";
+        output["note"] = related_passive_notice_text;
+        output["documentation"] = related_passive_notice_documentation;
     } else if (notice == MorphologicalNotice::source_disagreement) {
-        output["note"] =
-            "Whitaker's trim policy and external grammatical or lexical "
-            "evidence do not support the same early rejection.";
-        output["documentation"] =
-            "docs/morphological-assessment.md#source-disagreement";
+        output["note"] = source_disagreement_notice_text;
+        output["documentation"] = source_disagreement_notice_documentation;
     } else if (notice ==
                MorphologicalNotice::manual_review_recommended) {
-        output["note"] =
-            "Keep this candidate available for contextual ranking or manual "
-            "review.";
-        output["documentation"] =
-            "docs/morphological-assessment.md#review-policy";
+        output["note"] = manual_review_notice_text;
+        output["documentation"] = manual_review_notice_documentation;
     }
     return output;
 }

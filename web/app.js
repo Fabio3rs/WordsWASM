@@ -98,6 +98,28 @@ const translations = Object.freeze({
       tackon: "tackon", packon: "packon", syncope: "syncope",
       orthographic: "orthographic change",
     },
+    trimReason: {
+      "unsupported-short-imperative":
+        "short present imperative not licensed by Whitaker's historical rule",
+      "invalid-imperative-person":
+        "person not licensed for this imperative tense",
+      "impersonal-non-third-person":
+        "non-third-person form of a lexically impersonal verb",
+      "deponent-active-form":
+        "active finite or infinitive form of a deponent verb",
+      "semideponent-passive-present-system":
+        "passive form in a semideponent verb's present system",
+      "semideponent-active-perfect-system":
+        "active form in a semideponent verb's perfect system",
+    },
+    morphologicalNotice: {
+      "related-passive-usage-attested":
+        "Related passive uses of this lexeme are attested; this does not attest the exact queried form.",
+      "source-disagreement":
+        "Whitaker's trim and external grammatical or lexical evidence disagree about this early rejection.",
+      "manual-review-recommended":
+        "Keep this analysis available for contextual ranking or manual review.",
+    },
     messages: {
       preparing: "Preparing the engine…",
       readingManifest: "Reading the manifest…",
@@ -128,6 +150,9 @@ const translations = Object.freeze({
       dictionary: "Dictionary", verbClass: "Verb class", age: "Age",
       subject: "Subject", geography: "Region", frequency: "Frequency",
       source: "Source", derivationSteps: "Derivation and transformations",
+      assessmentTitle: "Unusual morphological analysis",
+      trimConflictLead: "Whitaker trim compatibility",
+      evidenceNotesLead: "Evidence and review notes",
       enclitic: (text) => `enclitic -${text}`,
       recognizedFormLead: "Recognized form: ",
       compound: (construction, auxiliary) =>
@@ -230,6 +255,28 @@ const translations = Object.freeze({
       tackon: "acréscimo final", packon: "acréscimo combinatório",
       syncope: "síncope", orthographic: "alteração ortográfica",
     },
+    trimReason: {
+      "unsupported-short-imperative":
+        "imperativo presente curto não licenciado pela regra histórica do Whitaker",
+      "invalid-imperative-person":
+        "pessoa não licenciada para este tempo do imperativo",
+      "impersonal-non-third-person":
+        "forma não terceira pessoa de verbo lexicalmente impessoal",
+      "deponent-active-form":
+        "forma ativa finita ou infinitiva de verbo depoente",
+      "semideponent-passive-present-system":
+        "forma passiva no sistema do presente de verbo semidepoente",
+      "semideponent-active-perfect-system":
+        "forma ativa no sistema do perfeito de verbo semidepoente",
+    },
+    morphologicalNotice: {
+      "related-passive-usage-attested":
+        "Há usos passivos relacionados atestados para este lexema; isso não atesta a forma exata consultada.",
+      "source-disagreement":
+        "O trim do Whitaker e a evidência gramatical ou lexical externa divergem sobre este descarte precoce.",
+      "manual-review-recommended":
+        "Conserve esta análise para ranking contextual ou revisão manual.",
+    },
     messages: {
       preparing: "Preparando a engine…",
       readingManifest: "Lendo o manifesto…",
@@ -261,6 +308,9 @@ const translations = Object.freeze({
       dictionary: "Dicionário", verbClass: "Classe verbal", age: "Época",
       subject: "Área", geography: "Região", frequency: "Frequência",
       source: "Fonte", derivationSteps: "Derivação e transformações",
+      assessmentTitle: "Análise morfológica incomum",
+      trimConflictLead: "Compatibilidade com o trim do Whitaker",
+      evidenceNotesLead: "Notas de evidência e revisão",
       enclitic: (text) => `enclítico -${text}`,
       recognizedFormLead: "Forma reconhecida: ",
       compound: (construction, auxiliary) =>
@@ -363,6 +413,28 @@ const translations = Object.freeze({
       tackon: "additamentum finale", packon: "additamentum compositum",
       syncope: "syncope", orthographic: "mutatio orthographica",
     },
+    trimReason: {
+      "unsupported-short-imperative":
+        "imperativus praesens brevis a regula historica Whitaker non admissus",
+      "invalid-imperative-person":
+        "persona huic tempori imperativo non admissa",
+      "impersonal-non-third-person":
+        "forma non tertiae personae verbi lexicaliter impersonalis",
+      "deponent-active-form":
+        "forma activa finita vel infinitiva verbi deponentis",
+      "semideponent-passive-present-system":
+        "forma passiva in systemate praesentis verbi semideponentis",
+      "semideponent-active-perfect-system":
+        "forma activa in systemate perfecti verbi semideponentis",
+    },
+    morphologicalNotice: {
+      "related-passive-usage-attested":
+        "Usus passivi cognati huius lexematis testantur; forma ipsa consulta non necessario testatur.",
+      "source-disagreement":
+        "Excisio Whitaker et testimonia grammatica vel lexicalia externa de hac re dissentiunt.",
+      "manual-review-recommended":
+        "Haec analysis ad ordinationem contextualem vel recognitionem manualem servetur.",
+    },
     messages: {
       preparing: "Machina paratur…",
       readingManifest: "Manifestum legitur…",
@@ -394,6 +466,9 @@ const translations = Object.freeze({
       verbClass: "Genus verbi", age: "Aetas", subject: "Materia",
       geography: "Regio", frequency: "Frequentia", source: "Fons",
       derivationSteps: "Derivatio et mutationes",
+      assessmentTitle: "Analysis morphologica insolita",
+      trimConflictLead: "Convenientia cum excisione Whitaker",
+      evidenceNotesLead: "Notae testimonii et recognitionis",
       enclitic: (text) => `encliticum -${text}`,
       recognizedFormLead: "Forma agnita: ",
       compound: (construction, auxiliary) =>
@@ -681,6 +756,38 @@ function renderTraits(hit, container) {
   container.append(list);
 }
 
+function renderAssessment(hit, container) {
+  const assessment = hit.assessment;
+  if (!assessment) return;
+  const reasons = assessment.whitakerTrim?.reasons ?? [];
+  const notices = assessment.notices ?? [];
+  if (reasons.length === 0 && notices.length === 0) return;
+
+  const panel = element("aside", "morphological-assessment");
+  panel.append(element("strong", "morphological-assessment__title",
+    message("assessmentTitle")));
+  if (reasons.length > 0) {
+    panel.append(element("p", "morphological-assessment__lead",
+      message("trimConflictLead")));
+    const list = element("ul", "morphological-assessment__items");
+    for (const reason of reasons) {
+      list.append(element("li", "", translated("trimReason", reason)));
+    }
+    panel.append(list);
+  }
+  if (notices.length > 0) {
+    panel.append(element("p", "morphological-assessment__lead",
+      message("evidenceNotesLead")));
+    const list = element("ul", "morphological-assessment__items");
+    for (const notice of notices) {
+      list.append(element("li", "",
+        translated("morphologicalNotice", notice)));
+    }
+    panel.append(list);
+  }
+  container.append(panel);
+}
+
 function addDefinitionList(details, entries) {
   const list = element("dl");
   for (const [term, value] of entries) {
@@ -821,6 +928,7 @@ function renderReading(hit, index, groupSize, hasCommonForm,
 
   renderVoice(hit, reading);
   renderTraits(hit, reading);
+  renderAssessment(hit, reading);
   if (!hasCommonForm) renderForm(hit, reading);
 
   if (hit.kind === "compound") {

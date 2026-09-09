@@ -150,7 +150,7 @@ O diretório contém:
 `words-full.wwdb` é o perfil denso atual renomeado pela finalidade e pode
 produzir análise completa ou busca resolvida. `words-search.wwdb` é a projeção
 física `search-only`, sem significados, para clientes que resolvem lema e
-morfologia sem carregar definições. O loader lê suas colunas diretamente. Os dois bancos WWDB 1.8
+morfologia sem carregar definições. O loader lê suas colunas diretamente. Os dois bancos WWDB 1.9
 compartilham IDs e regras; metadados tipados de PACKON evitam qualquer
 dependência indireta dos textos omitidos.
 
@@ -177,8 +177,10 @@ packer, não o hash de `words-full.wwdb`. Assim `words-full.wwdb`,
 `words-search.wwdb` e o índice externo compartilham o mesmo espaço de
 IDs. Quando a projeção editorial opcional `LEXEMES.LAT` existe, seu hash passa
 a integrar esse manifesto; uma base enriquecida não pode reutilizar a
-identidade do snapshot legado. Cada arquivo também tem seu SHA-256 físico em
-`manifest.json`.
+identidade do snapshot legado. O ledger obrigatório
+`MORPHOLOGICAL_NOTICES.LAT` também integra o cálculo, de modo que alterar uma
+ressalva morfológica muda o `datasetId`. Cada arquivo também tem seu SHA-256
+físico em `manifest.json`.
 
 O módulo foi gerado para `web`, `worker` e `node`. Análises isoladas podem ser
 feitas na thread principal; uma interface interativa com lotes deve hospedar

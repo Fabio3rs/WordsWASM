@@ -22,8 +22,8 @@ Este diretório materializa a aproximação descrita em
 
 No perfil colunar, IDs densos são posições nos vetores e cada coluna pode ser
 acessada diretamente; não é necessário reconstruir um array de structs. Ainda
-assim, este não é o formato final. A versão PoC 1.8 carrega 23 seções no
-perfil full e 18 no search. Nove
+assim, este não é o formato final. A versão PoC 1.9 carrega 24 seções no
+perfil full e 19 no search. Nove
 delas representam todos os registros de formação de `ADDONS.LAT`: 135 prefixos
 (incluindo seis tickons), 179 sufixos e 29 tackons, dos quais 11 são packons.
 Cada família tem
@@ -83,6 +83,15 @@ de alta confiabilidade; Faria v3 como OCR revisado por LLM; migrações antigas
 como auxiliares. Somente observações `confirmed` de fonte não auxiliar são
 promovidas. Conflito entre confirmações é fatal; `probable` e `needs_review`
 aparecem no relatório JSON do importador, mas não chegam ao WWDB.
+
+A seção esparsa `morphological_notices` compila o ledger humano
+`MORPHOLOGICAL_NOTICES.LAT`. Cada registro ocupa três bytes:
+`lexeme_id:u16 | trigger:3 | notice_flags:3 | reserved:2`. O ledger mantém
+uma linha por afirmação revisável; o packer agrupa as linhas de mesmo
+`(lexeme, trigger)` em uma única máscara. A seção contém cinco registros e 15
+bytes de payload neste corte. Ela permanece row-major tanto no full denso
+quanto no `search-only`: é pequena e fria, ao contrário das seções grandes de
+lexemas, referências e flexões que são colunares no perfil de busca.
 
 [`suggest_quantity_evidence.py`](suggest_quantity_evidence.py) prepara a fila
 editorial sem alterar esse manifesto. Ele abre o SuperDB em modo SQLite

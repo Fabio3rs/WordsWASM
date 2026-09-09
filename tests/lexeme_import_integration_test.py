@@ -26,6 +26,7 @@ LEGACY_INPUTS = (
     "UNIQUES.LAT",
     "REWRITES.LAT",
     "QUANTITIES.LAT",
+    "MORPHOLOGICAL_NOTICES.LAT",
 )
 
 
@@ -136,6 +137,50 @@ def main() -> None:
             hit["lexemeId"] == 39339 for hit in search["hits"]
         ):
             raise AssertionError("search WWDB does not preserve the imported lexeme ID")
+
+        notice_queries = {
+            "audetur": {
+                "related-passive-usage-attested",
+                "source-disagreement",
+                "manual-review-recommended",
+            },
+            "diffideretur": {
+                "related-passive-usage-attested",
+                "source-disagreement",
+                "manual-review-recommended",
+            },
+            "ausim": {
+                "source-disagreement",
+                "manual-review-recommended",
+            },
+        }
+        for database, output_format, collection in (
+            (full_database, "analysis-v2", "analyses"),
+            (search_database, "search-v2", "hits"),
+        ):
+            for surface, expected_notices in notice_queries.items():
+                document = run_json(
+                    [
+                        str(arguments.cli),
+                        "--database",
+                        str(database),
+                        "--dataset-id",
+                        DATASET_ID,
+                        "--format",
+                        output_format,
+                        surface,
+                    ]
+                )
+                actual_notices = {
+                    notice["code"]
+                    for item in document[collection]
+                    for notice in item["assessment"]["notices"]
+                }
+                if actual_notices != expected_notices:
+                    raise AssertionError(
+                        f"{output_format} lost packed notices for {surface}: "
+                        f"{actual_notices}"
+                    )
 
         collision = dict(COMPILE.compile_decision(accepted))
         collision.update(

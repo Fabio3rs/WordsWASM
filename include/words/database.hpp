@@ -200,6 +200,9 @@ class Database final {
     [[nodiscard]] QuantityMask inflection_quantity(RuleId id) const noexcept;
     [[nodiscard]] QuantityMask
     stem_quantity(LexemeId id, std::uint8_t lexical_slot) const noexcept;
+    [[nodiscard]] MorphologicalNoticeSet
+    lookup_morphological_notices(
+        LexemeId id, WhitakerTrimReason trigger) const noexcept;
     [[nodiscard]] const SuffixRule &
     suffix(AddonId id) const WORDS_LIFETIMEBOUND;
     [[nodiscard]] const PrefixRule &
@@ -293,6 +296,11 @@ class Database final {
         QuantityMask quantity;
     };
 
+    struct MorphologicalNoticeRecord final {
+        std::uint32_t key{};
+        MorphologicalNoticeSet notices{};
+    };
+
     explicit Database(std::vector<std::byte> image, DatabaseContent content)
         : image_{std::move(image)}, content_{content} {}
 
@@ -313,6 +321,7 @@ class Database final {
     std::vector<InflectionRule> rules_;
     std::vector<QuantityMask> inflection_quantities_;
     std::vector<StemQuantityRecord> stem_quantities_;
+    std::vector<MorphologicalNoticeRecord> morphological_notices_;
     std::vector<SuffixRule> suffixes_;
     std::vector<PrefixRule> prefixes_;
     std::vector<TackonRule> tackons_;

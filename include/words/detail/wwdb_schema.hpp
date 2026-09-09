@@ -36,6 +36,7 @@ inline constexpr std::uint16_t major_version = 1U;
 inline constexpr std::uint16_t legacy_minor_version = 6U;
 inline constexpr std::uint16_t quantity_minor_version = 7U;
 inline constexpr std::uint16_t typed_packon_minor_version = 8U;
+inline constexpr std::uint16_t morphological_notices_minor_version = 9U;
 
 enum class Profile : std::uint32_t {
     simple = 1U,
@@ -68,6 +69,7 @@ enum class SectionType : std::uint32_t {
     rewrites = 21U,
     inflection_quantities = 22U,
     stem_quantities = 23U,
+    morphological_notices = 24U,
 };
 
 inline constexpr std::uint32_t minimum_section_type =
@@ -76,6 +78,8 @@ inline constexpr std::uint32_t legacy_maximum_section_type =
     std::to_underlying(SectionType::rewrites);
 inline constexpr std::uint32_t quantity_maximum_section_type =
     std::to_underlying(SectionType::stem_quantities);
+inline constexpr std::uint32_t morphological_notices_maximum_section_type =
+    std::to_underlying(SectionType::morphological_notices);
 
 inline constexpr std::size_t header_major_offset = magic.size();
 inline constexpr std::size_t header_minor_offset =
@@ -146,6 +150,21 @@ inline constexpr std::uint32_t stem_quantity_stride = u24_size * 3U;
 inline constexpr std::uint32_t stem_quantity_known_offset = u24_size;
 inline constexpr std::uint32_t stem_quantity_long_vowel_offset =
     stem_quantity_known_offset + u24_size;
+
+inline constexpr std::uint32_t morphological_notice_lexeme_offset = 0U;
+inline constexpr std::uint32_t morphological_notice_metadata_offset = u16_size;
+inline constexpr std::size_t morphological_notice_trigger_width = 3U;
+inline constexpr std::uint8_t morphological_notice_trigger_mask =
+    low_mask<std::uint8_t>(morphological_notice_trigger_width);
+inline constexpr std::size_t morphological_notice_values_shift =
+    morphological_notice_trigger_width;
+inline constexpr std::size_t morphological_notice_values_width = 3U;
+inline constexpr std::uint8_t morphological_notice_values_mask =
+    low_mask<std::uint8_t>(morphological_notice_values_width);
+inline constexpr std::size_t morphological_notice_used_bits =
+    morphological_notice_values_shift + morphological_notice_values_width;
+inline constexpr std::uint32_t morphological_notice_stride =
+    morphological_notice_metadata_offset + 1U;
 
 inline constexpr std::uint32_t lexeme_stem_id_size = u16_size;
 inline constexpr std::uint32_t lexeme_meaning_id_offset =

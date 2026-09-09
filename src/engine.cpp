@@ -1777,12 +1777,18 @@ void sort_and_deduplicate_analyses(std::vector<AnalysisIR> &analyses) {
            !future_infinitive;
 }
 
-[[nodiscard]] bool is_audeo_lexeme(const Database &database,
-                                   const LexemeRecord &lexeme) {
-    return lexeme.part_of_speech == PartOfSpeech::verb &&
-           lexeme.verb_kind == VerbKind::semideponent &&
-           database.stem_string(lexeme.stems.at(0)) == "aud" &&
-           database.stem_string(lexeme.stems.at(2)) == "aus";
+void add_trim_reason_with_notices(
+    const Database &database, const LexemeId lexeme,
+    const WhitakerTrimReason reason,
+    MorphologicalAssessmentIR &assessment) {
+    assessment.whitaker_trim.add(reason);
+    const auto notices =
+        database.lookup_morphological_notices(lexeme, reason);
+    for (const auto notice : all_morphological_notices) {
+        if (notices.contains(notice)) {
+            assessment.add_notice(notice);
+        }
+    }
 }
 
 [[nodiscard]] MorphologicalAssessmentIR
@@ -1841,23 +1847,19 @@ assess_morphology(const Database &database, const SurfaceForm &surface,
             (verb->tense == Tense::present ||
              verb->tense == Tense::imperfect ||
              verb->tense == Tense::future)) {
-            assessment.whitaker_trim.add(
-                WhitakerTrimReason::semideponent_passive_present_system);
-            if (is_audeo_lexeme(database, lexeme)) {
-                assessment.add_notice(
-                    MorphologicalNotice::related_passive_usage_attested);
-                assessment.add_notice(
-                    MorphologicalNotice::source_disagreement);
-                assessment.add_notice(
-                    MorphologicalNotice::manual_review_recommended);
-            }
+            constexpr auto trigger =
+                WhitakerTrimReason::semideponent_passive_present_system;
+            add_trim_reason_with_notices(database, analysis.lexeme, trigger,
+                                         assessment);
         }
         if (verb->voice == Voice::active &&
             (verb->tense == Tense::perfect ||
              verb->tense == Tense::pluperfect ||
              verb->tense == Tense::future_perfect)) {
-            assessment.whitaker_trim.add(
-                WhitakerTrimReason::semideponent_active_perfect_system);
+            constexpr auto trigger =
+                WhitakerTrimReason::semideponent_active_perfect_system;
+            add_trim_reason_with_notices(database, analysis.lexeme, trigger,
+                                         assessment);
         }
     }
     return assessment;

@@ -15,6 +15,7 @@
 namespace words {
 
 class Engine;
+class Database;
 
 // Opaque provenance carried by analysis results.  Consumers can compare it
 // only through Engine::owns(), so dataset strings cannot be substituted for a
@@ -419,6 +420,42 @@ enum class MorphologicalNotice : std::uint8_t {
     manual_review_recommended,
 };
 
+inline constexpr std::size_t morphological_notice_count{3U};
+inline constexpr std::array<MorphologicalNotice, morphological_notice_count>
+    all_morphological_notices{
+        MorphologicalNotice::related_passive_usage_attested,
+        MorphologicalNotice::source_disagreement,
+        MorphologicalNotice::manual_review_recommended,
+    };
+
+class MorphologicalNoticeSet final {
+  public:
+    constexpr MorphologicalNoticeSet() noexcept = default;
+
+    [[nodiscard]] constexpr bool
+    contains(const MorphologicalNotice notice) const noexcept {
+        const auto mask = static_cast<std::uint8_t>(
+            std::uint8_t{1U} << std::to_underlying(notice));
+        return (bits_ & mask) != 0U;
+    }
+
+    [[nodiscard]] constexpr bool empty() const noexcept { return bits_ == 0U; }
+    auto operator<=>(const MorphologicalNoticeSet &) const = default;
+
+  private:
+    [[nodiscard]] static constexpr MorphologicalNoticeSet
+    from_bits(const std::uint8_t bits) noexcept {
+        return MorphologicalNoticeSet{bits};
+    }
+
+    explicit constexpr MorphologicalNoticeSet(const std::uint8_t bits) noexcept
+        : bits_{bits} {}
+
+    std::uint8_t bits_{};
+
+    friend class Database;
+};
+
 enum class OrthographyMode : std::uint8_t {
     disabled,
     classical_only,
@@ -470,8 +507,6 @@ struct WhitakerTrimAssessment final {
         reasons.at(count++) = reason;
     }
 };
-
-inline constexpr std::size_t morphological_notice_count{3U};
 
 struct MorphologicalAssessmentIR final {
     // Every AnalysisIR candidate originates in Whitaker data/rules, including

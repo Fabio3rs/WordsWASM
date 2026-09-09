@@ -21,7 +21,7 @@ WebAssembly. O primeiro corte vertical já existe no diretório raiz do projeto:
 - compara formas regulares e derivadas automaticamente com o executável Ada.
 
 O perfil WWDB lido atualmente é uma ponte para usar os dados reais. Ele não é
-o formato definitivo. A versão 1.8 contém todos os registros ativos de
+o formato definitivo. A versão 1.9 contém todos os registros ativos de
 `ADDONS.LAT`: 135 prefixos, incluindo seis tickons, 179 sufixos e 29 tackons,
 dos quais 11 são packons, as 76 análises diretas de `UNIQUES.LAT` e 170 regras
 de reescrita: 11 de síncope e 159 ortográficas. Ela acrescenta uma coluna de
@@ -29,7 +29,8 @@ quantidade para as 1.785 flexões e uma coluna esparsa de quantidade por
 lexema/slot. No corte atual, há três regras flexionais e 76 alvos lexicais
 curados. Ela ainda usa os bits reservados de lexemas PACK para identificar o
 packon sem consultar meanings, permitindo que a projeção search funcione de
-forma autônoma.
+forma autônoma. Ela também move notices morfológicos lexicais curados para uma
+seção esparsa de três bytes por `(lexema, condição)`, sem strings.
 
 ## Analogia de compilador
 
@@ -69,13 +70,15 @@ flowchart LR
     E[QUANTITY_EVIDENCE.jsonl] --> IQ[import_quantities.py]
     IQ --> Q[QUANTITIES.LAT]
     Q --> P
+    MN[MORPHOLOGICAL_NOTICES.LAT] --> P
     P --> F[words-full.wwdb]
     P --> S[words-search.wwdb]
 ```
 
 No marco atual, `wwdb_poc_pack.cpp` lê `DICTFILE.GEN`, `STEMFILE.GEN`,
 `INFLECTS.SEC` e os registros humanos de `ADDONS.LAT`, `UNIQUES.LAT` e
-`REWRITES.LAT` e o `QUANTITIES.LAT` gerado de evidências rastreáveis, e produz
+`REWRITES.LAT`, `MORPHOLOGICAL_NOTICES.LAT` e o `QUANTITIES.LAT` gerado de
+evidências rastreáveis, e produz
 `words-poc-dense.wwdb`. O
 empacotador definitivo
 deverá ler todas as fontes
@@ -140,7 +143,7 @@ Ficam nos arquivos de dados:
 - substituições de síncope/ortografia e suas restrições semânticas;
 - restrições de origem e atributos de destino dos addons;
 - quantidade breve, longa ou desconhecida;
-- frequência, época, proveniência e meanings.
+- frequência, época, proveniência, notices morfológicos curados e meanings.
 
 Regras dinâmicas são registros tipados. Uma mudança de terminação ou de
 paradigma não exige recompilar a engine. Uma operação semântica inteiramente
@@ -200,6 +203,7 @@ Database
 ├── InflectionRule[]
 ├── QuantityMask[] por RuleId, acesso O(1)
 ├── StemQuantityRecord[] esparso e ordenado por lexema/slot
+├── MorphologicalNoticeRecord[] esparso e ordenado por lexema/trigger
 ├── StemReference[] + StemGroup[]
 ├── RuleId[] + EndingGroup[]
 ├── UniqueReference[] + UniqueGroup[]
@@ -227,7 +231,7 @@ O loader verifica:
   referências e ordem das chaves esparsas.
 
 O marco aceita WWDB PoC 1.6 sem quantidades e 1.7 com ambas as seções no
-perfil `dense` por linhas. Em 1.8, aceita tanto `dense` full quanto
+perfil `dense` por linhas. Em 1.8/1.9, aceita tanto `dense` full quanto
 `search-only` colunar; os demais perfis são rejeitados explicitamente, em vez
 de serem interpretados por heurística.
 

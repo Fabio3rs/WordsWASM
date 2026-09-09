@@ -3,15 +3,17 @@
 //
 // This is deliberately a measurement tool, not the production wwpack. It
 // reads the concrete GNAT/x86-64 legacy files in this repository and writes a
-// portable, explicitly little-endian image. Version 1.8 retains the vowel
-// quantity masks from 1.7 and adds a typed PACKON selector, which lets the
-// search-only projection operate without inspecting editorial meanings.
+// portable, explicitly little-endian image. Version 1.9 retains the vowel
+// quantity masks and typed PACKON selector from 1.8 and adds sparse, packed
+// morphological notices, which both runtime profiles can query without
+// inspecting editorial meanings.
 // This tool still is not the production wwpack.
 
 #include <algorithm>
 #include <array>
 #include <bit>
 #include <charconv>
+#include <compare>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -31,6 +33,7 @@
 #include <nlohmann/json.hpp>
 
 #include "words/detail/wwdb_schema.hpp"
+#include "words/model.hpp"
 
 namespace {
 
@@ -41,12 +44,40 @@ using SectionType = wwdb::SectionType;
 
 constexpr std::size_t dictionary_record_size = 180;
 constexpr std::size_t dictionary_part_of_speech_offset = 72U;
+constexpr std::size_t dictionary_class_attribute_offset = 84U;
 constexpr std::size_t stem_record_size = 56;
 constexpr std::size_t inflection_record_size = 40;
 constexpr std::size_t inflections_per_section = 570;
 constexpr std::size_t inflection_section_count = wwdb::inflection_section_count;
 constexpr std::uint8_t legacy_pack_part_of_speech = 3U;
+constexpr auto legacy_verb_part_of_speech = static_cast<std::uint8_t>(
+    std::to_underlying(words::PartOfSpeech::verb));
+constexpr auto legacy_semideponent_kind = static_cast<std::uint8_t>(
+    std::to_underlying(words::VerbKind::semideponent));
+constexpr auto semideponent_passive_present_trigger =
+    static_cast<std::uint8_t>(std::to_underlying(
+        words::WhitakerTrimReason::semideponent_passive_present_system));
+constexpr std::string_view ada_comment_marker{"--"};
 constexpr std::uint16_t maximum_encoded_packon_plus_one = 511U;
+constexpr std::string_view morphological_notices_file{
+    "MORPHOLOGICAL_NOTICES.LAT"};
+constexpr std::array<std::string_view, 6U> whitaker_trim_reason_names{
+    "UNSUPPORTED_SHORT_IMPERATIVE",
+    "INVALID_IMPERATIVE_PERSON",
+    "IMPERSONAL_NON_THIRD_PERSON",
+    "DEPONENT_ACTIVE_FORM",
+    "SEMIDEPONENT_PASSIVE_PRESENT_SYSTEM",
+    "SEMIDEPONENT_ACTIVE_PERFECT_SYSTEM",
+};
+constexpr std::array<std::string_view, 3U> morphological_notice_names{
+    "RELATED_PASSIVE_USAGE_ATTESTED",
+    "SOURCE_DISAGREEMENT",
+    "MANUAL_REVIEW_RECOMMENDED",
+};
+static_assert(whitaker_trim_reason_names.size() ==
+              words::whitaker_trim_reason_count);
+static_assert(morphological_notice_names.size() ==
+              words::morphological_notice_count);
 
 struct Section {
     SectionType type;
@@ -142,6 +173,13 @@ struct StemQuantitySource final {
 struct QuantitySources final {
     std::vector<InflectionQuantitySource> inflections;
     std::vector<StemQuantitySource> stems;
+};
+
+struct MorphologicalNoticeSource final {
+    std::uint16_t dictionary_entry{};
+    std::uint8_t trigger{};
+    std::uint8_t notice{};
+    auto operator<=>(const MorphologicalNoticeSource &) const = default;
 };
 
 struct CompiledLexeme final {
@@ -521,6 +559,18 @@ std::uint8_t enum_value(std::string_view value,
         std::ranges::find_if(names, [&](const std::string_view name) {
             return ascii_equal(name, value);
         });
+    if (found == names.end()) {
+        fail("invalid " + std::string(field) + " in " + std::string(source) +
+             ": " + std::string(value));
+    }
+    return static_cast<std::uint8_t>(std::distance(names.begin(), found));
+}
+
+template <std::size_t Size>
+std::uint8_t enum_value(std::string_view value,
+                        const std::array<std::string_view, Size> &names,
+                        std::string_view field, std::string_view source) {
+    const auto found = std::ranges::find(names, value);
     if (found == names.end()) {
         fail("invalid " + std::string(field) + " in " + std::string(source) +
              ": " + std::string(value));
@@ -1087,7 +1137,7 @@ QuantitySources read_quantities(const std::filesystem::path &path) {
     QuantitySources result;
     std::string line;
     while (std::getline(input, line)) {
-        if (const auto comment = line.find("--");
+        if (const auto comment = line.find(ada_comment_marker);
             comment != std::string::npos) {
             line.erase(comment);
         }
@@ -1127,6 +1177,49 @@ QuantitySources read_quantities(const std::filesystem::path &path) {
             continue;
         }
         fail("invalid QUANTITIES.LAT record shape: " + line);
+    }
+    return result;
+}
+
+std::vector<MorphologicalNoticeSource>
+read_morphological_notices(const std::filesystem::path &path) {
+    constexpr std::string_view entry_field{"dictionary entry"};
+    constexpr std::string_view trigger_field{"morphological notice trigger"};
+    constexpr std::string_view notice_field{"morphological notice value"};
+    std::ifstream input(path);
+    if (!input) {
+        fail("cannot open input: " + path.string());
+    }
+
+    std::vector<MorphologicalNoticeSource> result;
+    std::string line;
+    while (std::getline(input, line)) {
+        if (const auto comment = line.find(ada_comment_marker);
+            comment != std::string::npos) {
+            line.erase(comment);
+        }
+        const auto fields = split_words(line);
+        if (fields.empty()) {
+            continue;
+        }
+        if (fields.size() != 3U) {
+            fail("invalid " + std::string(morphological_notices_file) +
+                 " record shape: " + line);
+        }
+        const auto entry = parse_u32(fields[0], entry_field,
+                                     morphological_notices_file);
+        if (entry == 0U ||
+            entry > std::numeric_limits<std::uint16_t>::max()) {
+            fail("dictionary entry exceeds one-based u16 in " +
+                 std::string(morphological_notices_file));
+        }
+        result.push_back({
+            static_cast<std::uint16_t>(entry),
+            enum_value(fields[1], whitaker_trim_reason_names, trigger_field,
+                       morphological_notices_file),
+            enum_value(fields[2], morphological_notice_names, notice_field,
+                       morphological_notices_file),
+        });
     }
     return result;
 }
@@ -1322,7 +1415,7 @@ Bytes make_image(std::vector<Section> sections, PackingProfile profile) {
         append_u8(output, byte);
     }
     append_u16_le(output, wwdb::major_version);
-    append_u16_le(output, wwdb::typed_packon_minor_version);
+    append_u16_le(output, wwdb::morphological_notices_minor_version);
     append_u32_le(output, wwdb::fixed_header_size);
     append_u32_le(output, section_count);
     append_u32_le(output, std::to_underlying(profile));
@@ -1385,6 +1478,8 @@ int main(int argc, char **argv) try {
     const auto uniques = read_uniques(root / "UNIQUES.LAT");
     const auto rewrites = read_rewrites(root / "REWRITES.LAT");
     const auto quantities = read_quantities(root / "QUANTITIES.LAT");
+    auto morphological_notices = read_morphological_notices(
+        root / morphological_notices_file);
     const auto compiled_lexemes = read_compiled_lexemes(root / "LEXEMES.LAT");
 
     if (dictionary.size() % dictionary_record_size != 0 ||
@@ -1395,6 +1490,51 @@ int main(int argc, char **argv) try {
     }
 
     const auto legacy_lexeme_count = dictionary.size() / dictionary_record_size;
+    for (const auto &notice : morphological_notices) {
+        if (notice.dictionary_entry > legacy_lexeme_count) {
+            fail("morphological notice dictionary entry is outside "
+                 "DICTFILE.GEN");
+        }
+        const auto record = std::span{dictionary}.subspan(
+            (notice.dictionary_entry - 1U) * dictionary_record_size,
+            dictionary_record_size);
+        if (byte_at(record, dictionary_part_of_speech_offset) !=
+            legacy_verb_part_of_speech) {
+            fail("morphological notice target is not a verb");
+        }
+        if (notice.trigger == semideponent_passive_present_trigger &&
+            byte_at(record, dictionary_class_attribute_offset) !=
+                legacy_semideponent_kind) {
+            fail("semideponent notice target is not a semideponent verb");
+        }
+    }
+    std::ranges::sort(morphological_notices);
+    if (std::ranges::adjacent_find(morphological_notices) !=
+        morphological_notices.end()) {
+        fail("duplicate morphological notice");
+    }
+    struct PackedMorphologicalNotice final {
+        std::uint16_t dictionary_entry{};
+        std::uint8_t trigger{};
+        std::uint8_t notice_bits{};
+    };
+    std::vector<PackedMorphologicalNotice> packed_morphological_notices;
+    packed_morphological_notices.reserve(morphological_notices.size());
+    for (const auto &notice : morphological_notices) {
+        const auto bit = static_cast<std::uint8_t>(
+            std::uint8_t{1U} << notice.notice);
+        if (!packed_morphological_notices.empty() &&
+            packed_morphological_notices.back().dictionary_entry ==
+                notice.dictionary_entry &&
+            packed_morphological_notices.back().trigger == notice.trigger) {
+            packed_morphological_notices.back().notice_bits =
+                static_cast<std::uint8_t>(
+                    packed_morphological_notices.back().notice_bits | bit);
+            continue;
+        }
+        packed_morphological_notices.push_back(
+            {notice.dictionary_entry, notice.trigger, bit});
+    }
     if (packon_requirements.size() > legacy_lexeme_count) {
         fail("too many typed packon requirements");
     }
@@ -1985,6 +2125,20 @@ int main(int argc, char **argv) try {
         append_u24_le(stem_quantity_records, quantity.long_vowel);
     }
 
+    Bytes morphological_notice_records;
+    morphological_notice_records.reserve(
+        packed_morphological_notices.size() *
+        wwdb::morphological_notice_stride);
+    for (const auto &notice : packed_morphological_notices) {
+        append_u16_le(morphological_notice_records,
+                      static_cast<std::uint16_t>(notice.dictionary_entry - 1U));
+        const auto metadata = static_cast<std::uint8_t>(
+            notice.trigger |
+            static_cast<std::uint8_t>(
+                notice.notice_bits << wwdb::morphological_notice_values_shift));
+        append_u8(morphological_notice_records, metadata);
+    }
+
     Bytes suffix_records;
     const std::uint32_t suffix_stride = include_meanings
                                             ? wwdb::full_suffix_stride
@@ -2197,6 +2351,13 @@ int main(int argc, char **argv) try {
         static_cast<std::uint32_t>(packed_stem_quantities.size()),
         wwdb::stem_quantity_stride,
         std::move(stem_quantity_records),
+    });
+    sections.push_back({
+        SectionType::morphological_notices,
+        wwdb::section_flag_row_major,
+        static_cast<std::uint32_t>(packed_morphological_notices.size()),
+        wwdb::morphological_notice_stride,
+        std::move(morphological_notice_records),
     });
     sections.push_back({SectionType::suffix_strings, wwdb::section_flag_pool,
                         suffix_string_pool.size(), wwdb::variable_stride,

@@ -40,6 +40,12 @@ static_assert(std::to_underlying(Voice::passive) <= wwdb::two_bit_mask);
 static_assert(std::to_underlying(Mood::participle) <= wwdb::three_bit_mask);
 static_assert(std::to_underlying(VerbKind::perfect_definite) <=
               wwdb::nibble_mask);
+static_assert(std::to_underlying(
+                  WhitakerTrimReason::semideponent_active_perfect_system) <=
+              wwdb::morphological_notice_trigger_mask);
+static_assert(std::to_underlying(
+                  MorphologicalNotice::manual_review_recommended) <=
+              wwdb::morphological_notice_values_mask);
 
 struct SectionView final {
     SectionType type{};
@@ -265,6 +271,17 @@ find_optional_section(const std::vector<SectionView> &sections,
     return found == sections.end() ? nullptr : &*found;
 }
 
+[[nodiscard]] constexpr std::uint32_t
+maximum_section_type(const std::uint16_t minor_version) noexcept {
+    if (minor_version >= wwdb::morphological_notices_minor_version) {
+        return wwdb::morphological_notices_maximum_section_type;
+    }
+    if (minor_version >= wwdb::quantity_minor_version) {
+        return wwdb::quantity_maximum_section_type;
+    }
+    return wwdb::legacy_maximum_section_type;
+}
+
 void require_shape(const SectionView &section, const std::uint32_t flags,
                    const std::uint32_t stride) {
     if (section.flags != flags || section.stride != stride) {
@@ -433,7 +450,8 @@ parse_stem_quantities(const std::span<const std::byte> image,
 }
 
 void validate_section_shapes(const std::vector<SectionView> &sections,
-                             const DatabaseContent content) {
+                             const DatabaseContent content,
+                             const std::uint16_t minor_version) {
     const auto search = content == DatabaseContent::search;
     const auto record_flags =
         search ? wwdb::section_flag_columnar : wwdb::section_flag_row_major;
@@ -510,6 +528,15 @@ void validate_section_shapes(const std::vector<SectionView> &sections,
         require_shape(*section, wwdb::section_flag_row_major,
                       wwdb::stem_quantity_stride);
     }
+    if (const auto *section = find_optional_section(
+            sections, SectionType::morphological_notices)) {
+        require_shape(*section, wwdb::section_flag_row_major,
+                      wwdb::morphological_notice_stride);
+    } else if (minor_version >=
+               wwdb::morphological_notices_minor_version) {
+        fail("missing-section",
+             "WWDB 1.9 requires the morphological notices section");
+    }
 
     const auto &stem_boundaries =
         find_section(sections, SectionType::stem_prefix_boundaries);
@@ -549,10 +576,11 @@ Database::load_poc(std::vector<std::byte> image) try {
     if (major != wwdb::major_version ||
         (minor != wwdb::legacy_minor_version &&
          minor != wwdb::quantity_minor_version &&
-         minor != wwdb::typed_packon_minor_version) ||
+         minor != wwdb::typed_packon_minor_version &&
+         minor != wwdb::morphological_notices_minor_version) ||
         header_size != wwdb::fixed_header_size) {
         fail("unsupported-version",
-             "only PoC WWDB versions 1.6 through 1.8 are supported");
+             "only PoC WWDB versions 1.6 through 1.9 are supported");
     }
     if (profile != std::to_underlying(wwdb::Profile::dense) &&
         profile != std::to_underlying(wwdb::Profile::search_only)) {
@@ -594,12 +622,9 @@ Database::load_poc(std::vector<std::byte> image) try {
             (static_cast<std::size_t>(index) * wwdb::directory_entry_size);
         const auto raw_type =
             read_u32_le(bytes, offset + wwdb::directory_type_offset);
-        const auto maximum_section_type =
-            minor >= wwdb::quantity_minor_version
-                ? wwdb::quantity_maximum_section_type
-                : wwdb::legacy_maximum_section_type;
+        const auto maximum_type = maximum_section_type(minor);
         if (raw_type < wwdb::minimum_section_type ||
-            raw_type > maximum_section_type) {
+            raw_type > maximum_type) {
             fail("unknown-section", "WWDB contains an unknown section type");
         }
         const SectionView section{
@@ -684,6 +709,8 @@ Database::load_poc(std::vector<std::byte> image) try {
         find_optional_section(sections, SectionType::inflection_quantities);
     const auto *stem_quantity_section =
         find_optional_section(sections, SectionType::stem_quantities);
+    const auto *morphological_notice_section = find_optional_section(
+        sections, SectionType::morphological_notices);
     if (minor >= wwdb::quantity_minor_version &&
         (inflection_quantity_section == nullptr ||
          stem_quantity_section == nullptr)) {
@@ -692,7 +719,7 @@ Database::load_poc(std::vector<std::byte> image) try {
 
     // WHY: layout validation belongs to the versioned wire schema and must
     // finish before any record is decoded into runtime objects.
-    validate_section_shapes(sections, content);
+    validate_section_shapes(sections, content, minor);
 
     auto database =
         std::unique_ptr<Database>{new Database{std::move(image), content}};
@@ -1000,6 +1027,60 @@ Database::load_poc(std::vector<std::byte> image) try {
             fail("reserved-bits", "unused lexical payload is nonzero");
         }
         database->lexemes_.push_back(record);
+    }
+
+    if (morphological_notice_section != nullptr) {
+        const RecordView notice_records{
+            section_bytes(owned_bytes, *morphological_notice_section),
+            *morphological_notice_section};
+        database->morphological_notices_.reserve(
+            morphological_notice_section->count);
+        std::optional<std::uint32_t> previous_key;
+        for (std::uint32_t ordinal = 0;
+             ordinal < morphological_notice_section->count; ++ordinal) {
+            const auto lexeme_id = notice_records.read_u16(
+                ordinal, wwdb::morphological_notice_lexeme_offset);
+            const auto metadata = notice_records.byte(
+                ordinal, wwdb::morphological_notice_metadata_offset);
+            const auto trigger_value = static_cast<std::uint8_t>(
+                metadata & wwdb::morphological_notice_trigger_mask);
+            const auto notice_bits = static_cast<std::uint8_t>(
+                (metadata >> wwdb::morphological_notice_values_shift) &
+                wwdb::morphological_notice_values_mask);
+            if (lexeme_id >= lexeme_section.count) {
+                fail("invalid-reference",
+                     "morphological notice lexeme is out of range");
+            }
+            if ((metadata >> wwdb::morphological_notice_used_bits) != 0U) {
+                fail("reserved-bits",
+                     "morphological notice has nonzero reserved bits");
+            }
+            if (trigger_value > std::to_underlying(
+                                    WhitakerTrimReason::
+                                        semideponent_active_perfect_system) ||
+                notice_bits == 0U) {
+                fail("invalid-enum",
+                     "morphological notice contains an invalid enum");
+            }
+            const auto &lexeme = database->lexemes_.at(lexeme_id);
+            if (lexeme.part_of_speech != PartOfSpeech::verb) {
+                fail("invalid-reference",
+                     "morphological notice target is not a verb");
+            }
+            const auto key =
+                (static_cast<std::uint32_t>(lexeme_id)
+                 << wwdb::morphological_notice_trigger_width) |
+                trigger_value;
+            if (previous_key && *previous_key >= key) {
+                fail("invalid-order",
+                     "morphological notices are not strictly ordered");
+            }
+            previous_key = key;
+            database->morphological_notices_.push_back({
+                key,
+                MorphologicalNoticeSet::from_bits(notice_bits),
+            });
+        }
     }
 
     struct IndexedStem final {
@@ -2132,6 +2213,19 @@ Database::stem_quantity(const LexemeId id,
     return found != stem_quantities_.end() && found->key == key
                ? found->quantity
                : QuantityMask{};
+}
+
+MorphologicalNoticeSet
+Database::lookup_morphological_notices(
+    const LexemeId id, const WhitakerTrimReason trigger) const noexcept {
+    const auto key =
+        (id.value() << wwdb::morphological_notice_trigger_width) |
+        std::to_underlying(trigger);
+    const auto found = std::ranges::lower_bound(morphological_notices_, key, {},
+                                                &MorphologicalNoticeRecord::key);
+    return found != morphological_notices_.end() && found->key == key
+               ? found->notices
+               : MorphologicalNoticeSet{};
 }
 
 const SuffixRule &Database::suffix(const AddonId id) const {

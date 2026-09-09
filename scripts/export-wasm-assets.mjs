@@ -205,6 +205,7 @@ async function main() {
     "whitakers-words/UNIQUES.LAT",
     "whitakers-words/REWRITES.LAT",
     "whitakers-words/QUANTITIES.LAT",
+    "whitakers-words/MORPHOLOGICAL_NOTICES.LAT",
     "whitakers-words/poc/compact-db/wwdb_poc_pack.cpp",
   ];
   const optionalIdentitySourceNames = [

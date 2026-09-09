@@ -42,8 +42,8 @@ Os nomes de distribuição descrevem capacidade, não layout:
 
 | Arquivo | Conteúdo | Estado |
 | --- | --- | --- |
-| `words-full.wwdb` | morfologia, metadados e significados | implementado; layout `dense` PoC 1.8 |
-| `words-search.wwdb` | morfologia e IDs, sem definições | implementado; layout `search-only` PoC 1.8 |
+| `words-full.wwdb` | morfologia, metadados e significados | implementado; layout `dense` PoC 1.9 |
+| `words-search.wwdb` | morfologia e IDs, sem definições | implementado; layout `search-only` PoC 1.9 |
 
 No CLI, o banco full produz os JSONs `analysis-v1` e `search-v1`; o banco
 search produz somente `search-v1`. No navegador, ambos expõem a projeção

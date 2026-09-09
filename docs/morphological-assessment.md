@@ -11,6 +11,9 @@ JSON parsing and serialization remain outside the WASM binary.
 The browser contracts are documented by
 `schemas/browser-search-v4.schema.json` and
 `schemas/browser-analysis-v4.schema.json`.
+The Pages demo maps the typed reason/notice codes to explanatory English,
+Brazilian Portuguese, and Latin strings in `web/app.js`; those presentation
+strings are deliberately absent from WWDB and the WASM module.
 
 ## Whitaker trim compatibility
 
@@ -28,7 +31,7 @@ The browser contracts are documented by
 The default engine mode is `annotate`, which retains these candidates. The
 explicit `filter` mode reproduces Whitaker's early removal.
 
-## `audeo` passive
+## Reviewed semideponent exceptions
 
 Whitaker generates passive present-system candidates for `audeo` and then
 removes them under `Trim_Output` because the lexeme is marked semideponent.
@@ -47,6 +50,26 @@ passive candidate for the `audeo` lexeme receives these notices:
 “Related usage attested” is intentionally narrower than “this exact queried
 surface is attested.” Exact-form attestation requires a separate corpus layer.
 
+The same distinction now covers two additional reviewed cases. Livy 24.8
+contains the impersonal passive `diffideretur`, so present-system passive
+candidates for Whitaker's `diffido` entry receive the same three related-use
+notices. Allen & Greenough records the old perfect subjunctive `ausim`, and
+Lewis & Short records the exceptional active perfect `ausi`; active
+perfect-system candidates for the two `audeo` entries therefore receive
+`source-disagreement` and `manual-review-recommended`. These trigger-level
+summaries invite analysis-specific review; they do not attest every generated
+cell in either subparadigm.
+
+The reviewed mapping is data, not an engine special case. The human-readable
+`whitakers-words/MORPHOLOGICAL_NOTICES.LAT` ledger targets the two `audeo`
+entries plus the reviewed `diffido` entry, and the WWDB packer emits one
+three-byte record per
+`(LexemeId, WhitakerTrimReason)`: a 16-bit lexeme ID followed by three trigger
+bits, three notice bits, and two reserved bits. No notice name, source URL, or
+documentation string is stored in WWDB or WebAssembly. The full database keeps
+this sparse section row-major; the search database keeps its large hot tables
+columnar but uses the same row-major notice section.
+
 References:
 
 - [Bennett, New Latin Grammar](https://www.gutenberg.org/cache/epub/15665/pg15665-images.html)
@@ -58,8 +81,8 @@ References:
 
 `source-disagreement` is a curated flag, not a conclusion inferred from the
 surface alone. It is emitted only for reviewed cases whose supporting sources
-are recorded here or in `.study/WHITAKER_MORPHOLOGY_FINDINGS.md`. New cases
-must add both a focused test and documentation before receiving the flag.
+are recorded here or in `docs/whitaker-morphology-findings.md`. New cases must
+add both a focused test and documentation before receiving the flag.
 
 ## Review policy
 
@@ -68,6 +91,37 @@ contextual or syntactic ranker. Downstream consumers may lower its score, but
 should not silently convert the notice into “unknown” or “impossible.” A future
 attestation component should add its own evidence instead of overwriting the
 Whitaker compatibility assessment.
+
+## Exact-form attestation and contextual ranking
+
+Whitaker does not provide an exact-form concordance. Its lexical `SOURCE`
+field identifies a principal dictionary used to derive an entry, `FREQ` is a
+coarse lexical/rule frequency, and `DO_EXAMPLES` synthesizes an English
+paraphrase from morphology. None of those fields proves that a queried Latin
+surface with a particular analysis occurs in a cited passage.
+
+Consequently exact attestation should follow the existing quantity-evidence
+pipeline rather than become an `if` in `Engine`:
+
+1. rich source identity, edition, locator, observed form, analysis, and review
+   state stay in an editorial manifest or immutable corpus index;
+2. a deterministic native compiler rejects conflicts and emits only reviewed
+   summaries into a versioned compact WWDB section;
+3. the immutable `Database` exposes typed lookup values and `Engine` annotates
+   already-generated analyses after morphology, without deleting candidates;
+4. CLI JSON and typed Embind project those values; the WASM graph never parses
+   or serializes JSON;
+5. a later contextual ranker consumes the complete candidate set and may score
+   it, but does not rewrite `generatedByWhitaker`, trim compatibility, or
+   attestation.
+
+The minimum honest exact-attestation states are `not-checked`,
+`exact-attested`, `related-only`, and `source-conflict`. “Not observed” is
+valid only when accompanied by an explicit corpus/edition coverage set; it
+must never be treated as “morphologically invalid.” An exact-form section will
+need the actual normalized Latin surface (a legitimate pooled string), a
+lexeme ID, a typed morphology identity, and compact status/source-family
+flags. It should not be added until reviewed exact-form records exist.
 
 ## Orthographic provenance
 

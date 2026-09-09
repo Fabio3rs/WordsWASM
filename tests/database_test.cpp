@@ -1,6 +1,7 @@
 #include "test_support.hpp"
 
 #include "words/database.hpp"
+#include "words/detail/wwdb_schema.hpp"
 #include "words/semantics.hpp"
 
 #include <gtest/gtest.h>
@@ -8,6 +9,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <ranges>
 #include <type_traits>
 #include <utility>
@@ -22,18 +24,51 @@ constexpr std::size_t test_header_section_count_offset = 16U;
 constexpr std::size_t test_directory_offset = 40U;
 constexpr std::size_t test_directory_flags_offset = test_directory_offset + 4U;
 
+std::uint32_t read_u32_le(const std::vector<std::byte> &bytes,
+                          const std::size_t offset) {
+    std::uint32_t value{};
+    for (std::size_t index = 0; index < detail::wwdb::u32_size; ++index) {
+        value |= std::to_integer<std::uint32_t>(bytes.at(offset + index))
+                 << (index * detail::wwdb::bits_per_byte);
+    }
+    return value;
+}
+
+std::uint32_t section_flags(
+    const std::vector<std::byte> &bytes,
+    const detail::wwdb::SectionType requested_type) {
+    const auto count =
+        read_u32_le(bytes, detail::wwdb::header_section_count_offset);
+    for (std::uint32_t index = 0; index < count; ++index) {
+        const auto offset = detail::wwdb::fixed_header_size +
+                            (static_cast<std::size_t>(index) *
+                             detail::wwdb::directory_entry_size);
+        if (read_u32_le(bytes,
+                        offset + detail::wwdb::directory_type_offset) ==
+            std::to_underlying(requested_type)) {
+            return read_u32_le(bytes,
+                               offset + detail::wwdb::directory_flags_offset);
+        }
+    }
+    return std::numeric_limits<std::uint32_t>::max();
+}
+
 void write_u16_le(std::vector<std::byte> &bytes, const std::size_t offset,
                   const std::uint16_t value) {
-    bytes[offset] = static_cast<std::byte>(value & 0xffU);
-    bytes[offset + 1U] = static_cast<std::byte>(value >> 8U);
+    for (std::size_t index = 0; index < detail::wwdb::u16_size; ++index) {
+        bytes.at(offset + index) = static_cast<std::byte>(
+            (value >> (index * detail::wwdb::bits_per_byte)) &
+            detail::wwdb::byte_mask);
+    }
 }
 
 void write_u32_le(std::vector<std::byte> &bytes, const std::size_t offset,
                   const std::uint32_t value) {
-    bytes[offset] = static_cast<std::byte>(value & 0xffU);
-    bytes[offset + 1U] = static_cast<std::byte>((value >> 8U) & 0xffU);
-    bytes[offset + 2U] = static_cast<std::byte>((value >> 16U) & 0xffU);
-    bytes[offset + 3U] = static_cast<std::byte>(value >> 24U);
+    for (std::size_t index = 0; index < detail::wwdb::u32_size; ++index) {
+        bytes.at(offset + index) = static_cast<std::byte>(
+            (value >> (index * detail::wwdb::bits_per_byte)) &
+            detail::wwdb::byte_mask);
+    }
 }
 
 } // namespace
@@ -56,6 +91,77 @@ TEST(DatabaseTest, LoadsColumnarSearchPocWithoutMeaningPools) {
     EXPECT_FALSE((*database)->lookup_ending("ae").empty());
     EXPECT_EQ((*database)->lookup_unique("eadem").size(), 3U);
     EXPECT_EQ((*database)->lookup_suffix("icul").size(), 3U);
+}
+
+TEST(DatabaseTest, LoadsCuratedMorphologicalNoticesFromBothProfiles) {
+    auto dense = Database::load_poc(test::read_database());
+    auto search = Database::load_poc(test::read_search_database());
+    ASSERT_TRUE(dense) << dense.error().message;
+    ASSERT_TRUE(search) << search.error().message;
+
+    constexpr LexemeId first_audeo{5549U};
+    constexpr auto trigger =
+        WhitakerTrimReason::semideponent_passive_present_system;
+    const auto dense_notices =
+        (*dense)->lookup_morphological_notices(first_audeo, trigger);
+    const auto search_notices =
+        (*search)->lookup_morphological_notices(first_audeo, trigger);
+    EXPECT_EQ(dense_notices, search_notices);
+    EXPECT_TRUE(dense_notices.contains(
+        MorphologicalNotice::related_passive_usage_attested));
+    EXPECT_TRUE(
+        dense_notices.contains(MorphologicalNotice::source_disagreement));
+    EXPECT_TRUE(dense_notices.contains(
+        MorphologicalNotice::manual_review_recommended));
+
+    constexpr auto active_perfect_trigger =
+        WhitakerTrimReason::semideponent_active_perfect_system;
+    const auto active_perfect_notices =
+        (*dense)->lookup_morphological_notices(first_audeo,
+                                               active_perfect_trigger);
+    EXPECT_EQ(active_perfect_notices,
+              (*search)->lookup_morphological_notices(
+                  first_audeo, active_perfect_trigger));
+    EXPECT_TRUE(active_perfect_notices.contains(
+        MorphologicalNotice::source_disagreement));
+    EXPECT_TRUE(active_perfect_notices.contains(
+        MorphologicalNotice::manual_review_recommended));
+
+    constexpr LexemeId diffido{17682U};
+    const auto diffido_notices =
+        (*dense)->lookup_morphological_notices(diffido, trigger);
+    EXPECT_EQ(diffido_notices,
+              (*search)->lookup_morphological_notices(diffido, trigger));
+    EXPECT_TRUE(diffido_notices.contains(
+        MorphologicalNotice::related_passive_usage_attested));
+    EXPECT_TRUE(
+        diffido_notices.contains(MorphologicalNotice::source_disagreement));
+    EXPECT_TRUE(diffido_notices.contains(
+        MorphologicalNotice::manual_review_recommended));
+
+    EXPECT_TRUE((*dense)
+                    ->lookup_morphological_notices(LexemeId{0U}, trigger)
+                    .empty());
+}
+
+TEST(DatabaseTest, KeepsSparseNoticesRowMajorAcrossRuntimeProfiles) {
+    const auto dense = test::read_database();
+    const auto search = test::read_search_database();
+    EXPECT_EQ(read_u32_le(dense, detail::wwdb::header_profile_offset),
+              std::to_underlying(detail::wwdb::Profile::dense));
+    EXPECT_EQ(read_u32_le(search, detail::wwdb::header_profile_offset),
+              std::to_underlying(detail::wwdb::Profile::search_only));
+
+    EXPECT_EQ(section_flags(dense, detail::wwdb::SectionType::lexemes),
+              detail::wwdb::section_flag_row_major);
+    EXPECT_EQ(section_flags(search, detail::wwdb::SectionType::lexemes),
+              detail::wwdb::section_flag_columnar);
+    EXPECT_EQ(section_flags(
+                  dense, detail::wwdb::SectionType::morphological_notices),
+              detail::wwdb::section_flag_row_major);
+    EXPECT_EQ(section_flags(
+                  search, detail::wwdb::SectionType::morphological_notices),
+              detail::wwdb::section_flag_row_major);
 }
 
 TEST(DatabaseTest, DenseAndSearchProfilesAgreeOnWireSemantics) {
@@ -785,7 +891,7 @@ TEST(DatabaseTest, RejectsUnsupportedProfile) {
 }
 
 TEST(DatabaseTest, RejectsUnsupportedVersionAndHeaderSize) {
-    for (const auto minor : {std::uint16_t{5U}, std::uint16_t{9U}}) {
+    for (const auto minor : {std::uint16_t{5U}, std::uint16_t{10U}}) {
         SCOPED_TRACE(minor);
         auto bytes = test::read_database();
         write_u16_le(bytes, test_header_minor_offset, minor);
@@ -817,7 +923,7 @@ TEST(DatabaseTest, RejectsUnsafeSectionCountsAndTypes) {
         EXPECT_EQ(database.error().code, "invalid-directory");
     }
 
-    for (const auto type : {std::uint32_t{0U}, std::uint32_t{24U}}) {
+    for (const auto type : {std::uint32_t{0U}, std::uint32_t{25U}}) {
         SCOPED_TRACE(type);
         auto bytes = test::read_database();
         write_u32_le(bytes, test_directory_offset, type);

@@ -417,6 +417,33 @@ h1 {
   font-size: 0.82rem;
 }
 
+.morphological-assessment {
+  margin: 0.85rem 0;
+  padding: 0.72rem 0.82rem;
+  border-left: 3px solid var(--warning);
+  border-radius: 0.35rem;
+  background: #f8eed7;
+  color: #5f4516;
+}
+
+.morphological-assessment__title {
+  display: block;
+  color: var(--warning);
+}
+
+.morphological-assessment__lead {
+  margin: 0.5rem 0 0.2rem;
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.morphological-assessment__items {
+  margin: 0;
+  padding-left: 1.15rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
 .traits {
   display: flex;
   flex-wrap: wrap;
