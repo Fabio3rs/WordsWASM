@@ -742,7 +742,11 @@ TEST(EngineTest, AppliesDataDrivenPerfectSyncopeByPriority) {
         const auto &derivation = full.at("analyses").front().at("derivation");
         EXPECT_EQ(derivation.at("method"), "syncope") << word;
         ASSERT_EQ(derivation.at("steps").size(), 1U) << word;
-        EXPECT_EQ(derivation.at("steps").front().at("rule"), rule_name) << word;
+        const auto &serialized_rule = derivation.at("steps")
+                                          .front()
+                                          .at("rule")
+                                          .get_ref<const Json::string_t &>();
+        EXPECT_EQ(std::string_view{serialized_rule}, rule_name) << word;
 
         const auto search = Json::parse(search_json(test::engine(), result));
         ASSERT_EQ(search.at("hits").size(), 1U) << word;
@@ -827,9 +831,13 @@ TEST(EngineTest, AppliesDataDrivenOrthographicFamilies) {
         for (const auto &analysis : full.at("analyses")) {
             EXPECT_EQ(analysis.at("derivation").at("method"), "orthographic")
                 << word;
-            EXPECT_EQ(analysis.at("derivation").at("steps").front().at("rule"),
-                      rule_name)
-                << word;
+            const auto &serialized_rule =
+                analysis.at("derivation")
+                    .at("steps")
+                    .front()
+                    .at("rule")
+                    .get_ref<const Json::string_t &>();
+            EXPECT_EQ(std::string_view{serialized_rule}, rule_name) << word;
         }
         const auto search = Json::parse(search_json(test::engine(), result));
         EXPECT_TRUE(std::ranges::all_of(search.at("hits"), [](const Json &hit) {
@@ -980,7 +988,9 @@ TEST(EngineTest, AnalyzesBoundedCompoundsWithSum) {
 
         const auto full = Json::parse(analysis_json(test::engine(), result));
         ASSERT_EQ(full.at("analyses").size(), 2U) << fixture.text;
-        EXPECT_EQ(full.at("query").at("normalized"), fixture.text);
+        const auto &normalized =
+            full.at("query").at("normalized").get_ref<const Json::string_t &>();
+        EXPECT_EQ(std::string_view{normalized}, fixture.text);
         const auto &derivation = full.at("analyses").back().at("derivation");
         EXPECT_EQ(derivation.at("method"), "compound") << fixture.text;
         ASSERT_EQ(derivation.at("steps").size(), 1U) << fixture.text;
