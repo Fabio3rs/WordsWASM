@@ -1,3 +1,8 @@
 # macOS arm64 initializes Objective-C/XPC state before main and intentionally
 # retains this per-process class-initialization list until process shutdown.
 leak:_fetchInitializingClassList
+
+# libc++abi lazily initializes process-wide exception strings, while dyld
+# retains its per-thread exception runtime slot until process shutdown.
+leak:compute_gcc_empty_string_storage
+leak:dyld::ThreadLocalVariables::instantiateVariable

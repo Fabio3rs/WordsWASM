@@ -91,6 +91,7 @@ if(ENABLE_TESTS)
 
     if(NOT GTest_FOUND AND FETCH_GTEST)
         include(FetchContent)
+        set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
         if(MSVC)
             # Keep GoogleTest on the same MSVC runtime selected by the parent.
             set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
@@ -162,11 +163,12 @@ endif()
 
 if(MSVC AND ENABLE_SANITIZERS)
     # MSVC's annotated STL requires every object in the final executable to
-    # agree on ASan instrumentation. This includes fetched GoogleTest libs.
+    # agree on ASan instrumentation. Instrument fetched GoogleTest directly
+    # so its install(EXPORT) does not acquire a dependency on a project target.
     foreach(gtest_target IN ITEMS gtest gtest_main gmock gmock_main)
         if(TARGET ${gtest_target})
-            target_link_libraries(${gtest_target}
-                PRIVATE words_project_sanitizers
+            target_compile_options(${gtest_target} PRIVATE
+                /fsanitize=address /Zi
             )
         endif()
     endforeach()
