@@ -175,9 +175,10 @@ Esta seção será ampliada em cada ciclo com o formato:
 
 O teste `configured_oracle_test.py` cria um diretório temporário, liga somente
 os dados necessários e escreve fixtures **completas** de `WORD.MOD` e
-`WORD.MDV`. Ele verifica também que o hash do `WORD.MDV` da árvore permanece
-inalterado. Assim, a configuração usada para medir o original nunca vaza da
-pasta de trabalho nem modifica o arquivo que está sendo investigado.
+`WORD.MDV`. Se um `WORD.MDV` local opcional existe, ele verifica que seu hash
+permanece inalterado; em checkout limpo, verifica que o teste não cria esse
+arquivo ignorado. Assim, a configuração usada para medir o original nunca
+vaza da pasta temporária nem modifica a árvore que está sendo investigada.
 
 ### Caso defensivo sem testemunho no dataset
 

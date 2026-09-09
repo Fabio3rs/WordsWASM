@@ -113,7 +113,8 @@ def main() -> None:
     root = args.root.resolve()
     ada_root = root / "whitakers-words"
     source_mdv = ada_root / "WORD.MDV"
-    original_mdv_hash = sha256(source_mdv)
+    source_mdv_was_present = source_mdv.exists()
+    original_mdv_hash = sha256(source_mdv) if source_mdv_was_present else None
     database = ada_root / "poc/compact-db/output/words-poc-dense.wwdb"
     native_base = [
         str(args.cpp.resolve()), "--database", str(database),
@@ -177,7 +178,11 @@ def main() -> None:
         ("pretor",), mode={"DO_TRICKS": False},
         native_flags=("--orthography=disabled",))
 
-    if sha256(source_mdv) != original_mdv_hash:
+    if source_mdv.exists() != source_mdv_was_present:
+        raise AssertionError(
+            "configured oracle changed whether source WORD.MDV exists")
+    if original_mdv_hash is not None and \
+            sha256(source_mdv) != original_mdv_hash:
         raise AssertionError("configured oracle modified the source WORD.MDV")
 
 
