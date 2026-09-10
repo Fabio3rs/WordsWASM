@@ -1189,7 +1189,7 @@ TEST(EngineTest, AnalyzesBoundedCompoundsWithSum) {
     for (const auto &fixture : fixtures) {
         const auto result = test::engine().analyze_text(fixture.text);
         ASSERT_EQ(result.status, QueryStatus::analyzed) << fixture.text;
-        ASSERT_EQ(result.analyses.size(), 1U) << fixture.text;
+        ASSERT_FALSE(result.analyses.empty()) << fixture.text;
         ASSERT_EQ(result.compound_analyses.size(), 1U) << fixture.text;
         const auto &compound = result.compound_analyses.front();
         EXPECT_EQ(compound.kind, fixture.kind) << fixture.text;
@@ -1200,21 +1200,127 @@ TEST(EngineTest, AnalyzesBoundedCompoundsWithSum) {
         EXPECT_EQ(compound.morphology.number, fixture.number) << fixture.text;
 
         const auto full = Json::parse(analysis_json(test::engine(), result));
-        ASSERT_EQ(full.at("analyses").size(), 2U) << fixture.text;
+        ASSERT_EQ(full.at("analyses").size(),
+                  result.analyses.size() + result.compound_analyses.size())
+            << fixture.text;
         const auto &normalized =
             full.at("query").at("normalized").get_ref<const Json::string_t &>();
         EXPECT_EQ(std::string_view{normalized}, fixture.text);
-        const auto &derivation = full.at("analyses").back().at("derivation");
+        const Json *compound_projection = nullptr;
+        for (const auto &analysis : full.at("analyses")) {
+            if (analysis.at("derivation").at("method") == "compound") {
+                compound_projection = &analysis;
+                break;
+            }
+        }
+        ASSERT_NE(compound_projection, nullptr) << fixture.text;
+        const auto &derivation = compound_projection->at("derivation");
         EXPECT_EQ(derivation.at("method"), "compound") << fixture.text;
         ASSERT_EQ(derivation.at("steps").size(), 1U) << fixture.text;
         EXPECT_EQ(derivation.at("steps").front().at("type"), "compound");
 
         const auto search = Json::parse(search_json(test::engine(), result));
-        ASSERT_EQ(search.at("hits").size(), 2U) << fixture.text;
+        ASSERT_EQ(search.at("hits").size(),
+                  result.analyses.size() + result.compound_analyses.size())
+            << fixture.text;
         EXPECT_EQ(std::ranges::count_if(
                       search.at("hits"),
                       [](const Json &hit) { return hit.contains("compound"); }),
                   1U);
+    }
+}
+
+TEST(EngineTest, FiniteCompoundsSelectNominativeParticiplesMatchingNumber) {
+    struct Fixture final {
+        std::string_view text;
+        GrammaticalNumber number;
+    };
+    constexpr std::array fixtures{
+        Fixture{.text = "amata est",
+                .number = GrammaticalNumber::singular},
+        Fixture{.text = "amata sunt",
+                .number = GrammaticalNumber::plural},
+        Fixture{.text = "amati sunt",
+                .number = GrammaticalNumber::plural},
+    };
+
+    for (const auto &fixture : fixtures) {
+        const auto result = test::engine().analyze_text(fixture.text);
+        ASSERT_EQ(result.status, QueryStatus::analyzed) << fixture.text;
+        ASSERT_EQ(result.compound_analyses.size(), 1U) << fixture.text;
+        const auto &compound = result.compound_analyses.front();
+        ASSERT_TRUE(compound.source_rule.has_value()) << fixture.text;
+        const auto &source =
+            test::engine().database().rule(*compound.source_rule);
+        EXPECT_EQ(source.part_of_speech, PartOfSpeech::participle)
+            << fixture.text;
+        EXPECT_EQ(source.grammatical_case, GrammaticalCase::nominative)
+            << fixture.text;
+        EXPECT_EQ(source.number, fixture.number) << fixture.text;
+    }
+}
+
+TEST(EngineTest, AnalyzeLinePreservesTokensWhenFiniteAgreementRejectsCompound) {
+    const auto isolated_participle = test::engine().analyze("amatam");
+    const auto isolated_auxiliary = test::engine().analyze("est");
+    const auto results = test::engine().analyze_line("amatam est");
+
+    ASSERT_EQ(results.size(), 2U);
+    EXPECT_TRUE(results[0].compound_analyses.empty());
+    EXPECT_TRUE(results[1].compound_analyses.empty());
+    EXPECT_EQ(semantic_signatures(results[0].analyses),
+              semantic_signatures(isolated_participle.analyses));
+    EXPECT_EQ(semantic_signatures(results[1].analyses),
+              semantic_signatures(isolated_auxiliary.analyses));
+}
+
+TEST(EngineTest, CompoundAnalysisPreservesIndependentFirstTokenAnalyses) {
+    struct Fixture final {
+        std::string_view first;
+        std::string_view phrase;
+    };
+    constexpr std::array fixtures{
+        Fixture{.first = "amata", .phrase = "amata est"},
+        Fixture{.first = "amatam", .phrase = "amatam esse"},
+        Fixture{.first = "amatum", .phrase = "amatum iri"},
+    };
+
+    for (const auto &fixture : fixtures) {
+        const auto isolated = test::engine().analyze(fixture.first);
+        const auto compound = test::engine().analyze_text(fixture.phrase);
+        ASSERT_EQ(compound.status, QueryStatus::analyzed) << fixture.phrase;
+        ASSERT_FALSE(compound.compound_analyses.empty()) << fixture.phrase;
+        EXPECT_EQ(compound.analyses.size(), isolated.analyses.size())
+            << fixture.phrase;
+        if (compound.analyses.size() != isolated.analyses.size()) {
+            continue;
+        }
+        EXPECT_EQ(semantic_signatures(compound.analyses),
+                  semantic_signatures(isolated.analyses))
+            << fixture.phrase;
+    }
+}
+
+TEST(EngineTest, PreservesCompoundSourceRulesForHomographicParticiples) {
+    // The Ada presentation collapses these to one synthetic compound.  The
+    // native IR instead retains the four distinct inflection rules that can
+    // underlie the homographic -um surface.  A future aggregated hypothesis
+    // must preserve all four supports rather than choose one arbitrarily.
+    constexpr std::array<std::string_view, 4> phrases{
+        "amatum esse", "captum esse", "amaturum esse", "amaturum fuisse"};
+    for (const auto phrase : phrases) {
+        const auto result = test::engine().analyze_text(phrase);
+        ASSERT_EQ(result.status, QueryStatus::analyzed) << phrase;
+        ASSERT_EQ(result.compound_analyses.size(), 4U) << phrase;
+
+        std::vector<RuleId> source_rules;
+        for (const auto &compound : result.compound_analyses) {
+            ASSERT_TRUE(compound.source_rule.has_value()) << phrase;
+            source_rules.push_back(*compound.source_rule);
+        }
+        std::ranges::sort(source_rules);
+        EXPECT_EQ(std::ranges::adjacent_find(source_rules), source_rules.end())
+            << phrase;
     }
 }
 

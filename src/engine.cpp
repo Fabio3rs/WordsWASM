@@ -2520,10 +2520,7 @@ void append_compound(const AnalysisIR &source, const CompoundKind kind,
     const auto kind =
         compound_kind_from_auxiliary(auxiliary_word, finite != nullptr);
 
-    std::vector<std::size_t> source_indices;
-    source_indices.reserve(result.analyses.size());
-    for (std::size_t index{}; index < result.analyses.size(); ++index) {
-        const auto &analysis = result.analyses[index];
+    for (const auto &analysis : result.analyses) {
         if (const auto *participle =
                 std::get_if<ParticipleMorphology>(&analysis.morphology)) {
             if (!is_compound_participle(*participle)) {
@@ -2567,7 +2564,6 @@ void append_compound(const AnalysisIR &source, const CompoundKind kind,
                                 ? DerivationIR{}
                                 : finite_analysis->derivation,
                             morphology, result.compound_analyses);
-            source_indices.push_back(index);
             continue;
         }
 
@@ -2589,23 +2585,13 @@ void append_compound(const AnalysisIR &source, const CompoundKind kind,
                                        .person = Person::unknown,
                                        .number = GrammaticalNumber::unknown},
                         result.compound_analyses);
-        source_indices.push_back(index);
     }
 
-    // A failed lookahead must be observationally pure: the caller may reuse
-    // both independently analyzed words without lexing or analyzing either
-    // one again.
-    if (result.compound_analyses.empty()) {
-        return false;
-    }
-
-    std::vector<AnalysisIR> sources;
-    sources.reserve(source_indices.size());
-    for (const auto index : source_indices) {
-        sources.push_back(std::move(result.analyses[index]));
-    }
-    result.analyses = std::move(sources);
-    return true;
+    // Compound hypotheses supplement the independent first-token analyses.
+    // Keeping the lexical vector intact is both lossless and observationally
+    // pure when lookahead fails; each compound already records its own source
+    // rule and derivation.
+    return !result.compound_analyses.empty();
 }
 
 [[nodiscard]] bool try_compound_query(const Database &database,

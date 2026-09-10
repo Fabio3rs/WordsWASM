@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import copy
 import json
 import subprocess
 import sys
@@ -45,6 +46,9 @@ COMPOUND_FIXTURES = (
     "amata fuerit", "amata fuerunt", "amati sunt", "amaturus est",
     "amatus esse", "amaturus esse", "amaturus fuisse", "amatum iri",
 )
+COMPOUND_FIRST_TOKENS = tuple(dict.fromkeys(
+    phrase.split(maxsplit=1)[0] for phrase in COMPOUND_FIXTURES
+))
 TWO_WORD_FIXTURES = {
     "respublica": ("res", "publica"),
     "annam": ("an", "nam"),
@@ -157,6 +161,8 @@ def main() -> None:
                 "search", two_word_queries, True).items()
         },
     }
+    compound_first_documents = cpp_batch(
+        "analysis", COMPOUND_FIRST_TOKENS)
 
     def cpp(word: str, output_format: str,
             two_words: bool = False) -> dict:
@@ -242,26 +248,61 @@ def main() -> None:
         expected = load_json(["bin/words_json", phrase], cwd=ada_root)
         actual = cpp(phrase, "analysis")
         analysis_validator.validate(actual)
-        if len(actual["analyses"]) != len(expected["analyses"]):
-            raise AssertionError(
-                f"C++ compound count differs from Ada for {phrase}")
 
         # The historical exporter receives the full query as text but exposes
-        # only the first token as normalized and loses the Ppp provenance.
-        # The native contract intentionally fixes both presentation losses.
+        # only the first token as normalized, loses the Ppp provenance and
+        # filters out independent first-token readings that do not participate
+        # in the compound.  The native contract intentionally fixes all three
+        # losses.  Require the complete isolated lexical set first, then prove
+        # that the Ada projection remains a subset of the richer result.
         expected["query"]["normalized"] = actual["query"]["normalized"]
-        compound_count = 0
-        for actual_item, expected_item in zip(
-                actual["analyses"], expected["analyses"], strict=True):
-            if actual_item["derivation"]["method"] == "compound":
-                compound_count += 1
-                expected_item["derivation"] = actual_item["derivation"]
-        if compound_count == 0 or actual != expected:
+        actual_header = copy.deepcopy(actual)
+        expected_header = copy.deepcopy(expected)
+        actual_header["analyses"] = []
+        expected_header["analyses"] = []
+        if actual_header != expected_header:
+            raise AssertionError(
+                f"C++ compound envelope differs from Ada for {phrase}")
+
+        first_token = phrase.split(maxsplit=1)[0]
+        independent = compound_first_documents[first_token]["analyses"]
+        actual_lexical = [
+            item for item in actual["analyses"]
+            if item["derivation"]["method"] != "compound"
+        ]
+        if actual_lexical != independent:
+            raise AssertionError(
+                f"C++ compound lost independent analyses for {phrase}")
+
+        unmatched = copy.deepcopy(actual["analyses"])
+        matched_compounds = 0
+        for expected_item in expected["analyses"]:
+            match = None
+            match_is_compound = False
+            for index, actual_item in enumerate(unmatched):
+                candidate = copy.deepcopy(actual_item)
+                is_compound = (
+                    candidate["derivation"]["method"] == "compound")
+                if is_compound:
+                    candidate["derivation"] = expected_item["derivation"]
+                if candidate == expected_item:
+                    match = index
+                    match_is_compound = is_compound
+                    break
+            if match is None:
+                raise AssertionError(
+                    f"C++ compound lost Ada analysis for {phrase}")
+            matched_compounds += int(match_is_compound)
+            unmatched.pop(match)
+
+        if matched_compounds == 0 or any(
+                item["derivation"]["method"] == "compound"
+                for item in unmatched):
             raise AssertionError(
                 f"C++ compound semantics differ from Ada for {phrase}")
 
         search = cpp(phrase, "search")
-        if sum("compound" in hit for hit in search["hits"]) != compound_count:
+        if sum("compound" in hit for hit in search["hits"]) != matched_compounds:
             raise AssertionError(
                 f"C++ search lost compound identity for {phrase}")
         search_validator.validate(search)
