@@ -17,6 +17,7 @@ const defaults = Object.freeze({
   iterations: 5,
   interval: 250,
   twoWords: false,
+  measureHeap: false,
 });
 
 function usage() {
@@ -33,6 +34,7 @@ function usage() {
   --iterations N           iterations inside the measured region
   --interval MICROSECONDS  V8 sampling interval
   --two-words              enable legacy two-word recovery
+  --measure-heap           sample the C++ allocator; requires core/none
   --help`);
 }
 
@@ -73,6 +75,7 @@ function parseArguments(arguments_) {
         options.interval = positiveInteger(value(), argument);
         break;
       case "--two-words": options.twoWords = true; break;
+      case "--measure-heap": options.measureHeap = true; break;
       case "--help": usage(); process.exit(0);
       default: throw new TypeError(`unknown option: ${argument}`);
     }
@@ -82,6 +85,12 @@ function parseArguments(arguments_) {
   }
   if (!new Set(["inspector", "none"]).has(options.profiler)) {
     throw new TypeError("--profiler must be inspector or none");
+  }
+  if (options.measureHeap &&
+      (options.mode !== "core" || options.profiler !== "none")) {
+    throw new TypeError(
+      "--measure-heap requires --mode core --profiler none",
+    );
   }
   options.output ??=
     `build/wasm-profile/profiles/words-wasm-${options.mode}.cpuprofile`;
@@ -121,8 +130,11 @@ function runEndToEnd(engine, corpus, iterations, twoWords) {
   return total;
 }
 
-function runCore(engine, corpus, iterations, twoWords) {
-  return engine.benchmarkCorpus(corpus, iterations, twoWords);
+function runCore(engine, corpus, iterations, twoWords, measureHeap) {
+  const operation = measureHeap
+    ? engine.benchmarkCorpusMemory
+    : engine.benchmarkCorpus;
+  return operation(corpus, iterations, twoWords);
 }
 
 function assertDeterministic(warmup, measured, warmupIterations,
@@ -172,9 +184,16 @@ async function createCore(options, databaseBytes, datasetId) {
       "benchmarkCorpus is absent; configure with WORDS_WASM_PROFILING=ON",
     );
   }
+  if (options.measureHeap &&
+      typeof engine.benchmarkCorpusMemory !== "function") {
+    engine.delete();
+    throw new Error("benchmarkCorpusMemory is absent from the Wasm module");
+  }
   return Object.freeze({
     benchmarkCorpus: (corpus, iterations, twoWords) =>
       engine.benchmarkCorpus(corpus, iterations, twoWords),
+    benchmarkCorpusMemory: (corpus, iterations, twoWords) =>
+      engine.benchmarkCorpusMemory(corpus, iterations, twoWords),
     dispose: () => engine.delete(),
   });
 }
@@ -200,7 +219,9 @@ async function main() {
     ? await createCore(options, databaseBytes, datasetId)
     : await createEndToEnd(options, databaseBytes, datasetId);
   const run = options.mode === "core"
-    ? (iterations) => runCore(engine, corpus, iterations, options.twoWords)
+    ? (iterations) => runCore(
+      engine, corpus, iterations, options.twoWords, options.measureHeap,
+    )
     : (iterations) =>
       runEndToEnd(engine, corpus, iterations, options.twoWords);
 
@@ -246,6 +267,7 @@ async function main() {
       warmupIterations: options.warmup,
       iterations: options.iterations,
       twoWords: options.twoWords,
+      measureCppHeap: options.measureHeap,
       checksum: measured.checksum,
       units: measured.units,
       analyses: measured.analyses,
@@ -273,6 +295,22 @@ async function main() {
         architecture: process.arch,
       },
     };
+    if (options.measureHeap) {
+      summary.cppHeap = {
+        before: measured.before,
+        peakResultsLive: measured.peakResultsLive,
+        after: measured.after,
+        maximumLinearMemoryBytes: measured.maximumLinearMemoryBytes,
+        resultsLiveAllocatedDeltaBytes:
+          measured.peakResultsLive.allocatedBytes -
+          measured.before.allocatedBytes,
+        afterAllocatedDeltaBytes:
+          measured.after.allocatedBytes - measured.before.allocatedBytes,
+        linearMemoryGrowthBytes:
+          measured.maximumLinearMemoryBytes -
+          measured.before.linearMemoryBytes,
+      };
+    }
     const summaryPath = `${outputPath}.summary.json`;
     await mkdir(dirname(summaryPath), {recursive: true});
     await writeFile(summaryPath, `${JSON.stringify(summary, null, 2)}\n`);

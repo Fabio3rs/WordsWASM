@@ -40,6 +40,7 @@ if (baselinePath === undefined || candidatePath === undefined ||
   requireEqual(baseline, candidate, "samplingIntervalUs");
   requireEqual(baseline, candidate, "warmupIterations");
   requireEqual(baseline, candidate, "twoWords");
+  requireEqual(baseline, candidate, "measureCppHeap");
   requireEqual(baseline, candidate, "corpusBytes");
   requireEqual(baseline, candidate, "corpusSha256");
   requireEqual(baseline, candidate, "databaseBytes");
@@ -95,5 +96,18 @@ if (baselinePath === undefined || candidatePath === undefined ||
       sameWasmArtifact: baseline.wasmSha256 === candidate.wasmSha256,
     },
   };
+  if (baseline.measureCppHeap) {
+    comparison.baseline.cppHeap = baseline.cppHeap;
+    comparison.candidate.cppHeap = candidate.cppHeap;
+    comparison.delta.resultsLiveAllocatedBytes =
+      candidate.cppHeap.resultsLiveAllocatedDeltaBytes -
+      baseline.cppHeap.resultsLiveAllocatedDeltaBytes;
+    comparison.delta.maximumLinearMemoryBytes =
+      candidate.cppHeap.maximumLinearMemoryBytes -
+      baseline.cppHeap.maximumLinearMemoryBytes;
+    comparison.delta.linearMemoryGrowthBytes =
+      candidate.cppHeap.linearMemoryGrowthBytes -
+      baseline.cppHeap.linearMemoryGrowthBytes;
+  }
   console.log(JSON.stringify(comparison, null, 2));
 }

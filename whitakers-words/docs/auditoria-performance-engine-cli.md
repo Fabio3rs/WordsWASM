@@ -564,7 +564,8 @@ V8 entre as duas metades invalida a comparação, ainda que o checksum coincida.
 Foram adicionadas duas opções CMake independentes:
 
 - `WORDS_WASM_PROFILING=ON` acrescenta `--profiling-funcs` somente ao link e
-  habilita o binding privado `benchmarkCorpus`;
+  habilita os bindings privados `benchmarkCorpus`, `heapSnapshot` e
+  `benchmarkCorpusMemory`;
 - `WORDS_WASM_SOURCE_MAPS=ON` acrescenta `-gsource-map` à compilação de
   `words_core`/binding e ao link. É uma etapa opcional para navegação em fonte,
   não a configuração padrão do profiler amostral.
@@ -573,11 +574,12 @@ Foram adicionadas duas opções CMake independentes:
 minificação normais, adicionando nomes de funções ao Wasm. O artefato de
 profiling mediu 1.014.333 bytes contra 839.084 bytes do Release, enquanto o
 glue `.mjs` permaneceu em 56.721 bytes. Esse crescimento inclui a name section
-e o binding de benchmark; portanto, o tamanho dessa build não deve ser usado
-como tamanho de entrega.
+e os bindings de benchmark; depois dos contadores de heap, o artefato passou a
+1.023.033 bytes. Portanto, o tamanho dessa build não deve ser usado como
+tamanho de entrega.
 
 A opção de source map também foi compilada: produziu
-`words_wasm.wasm.map` com 392.411 bytes e referências verificadas a
+`words_wasm.wasm.map` com 394.555 bytes e referências verificadas a
 `src/engine.cpp`, `src/database.cpp` e `wasmsrc/main.cpp`. Ela fica desligada
 no perfil de funções porque o `.cpuprofile` já mostrou nomes C++ suficientes;
 deve ser ligada apenas quando uma amostra precisar ser levada até a linha.
@@ -613,11 +615,11 @@ JS -> Embind -> Engine::analyze_line -> BrowserSearchResult -> Embind
    -> copyOwnedVector/objetos JS, repetido N vezes
 ```
 
-O binding `benchmarkCorpus` só existe quando `WORDS_WASM_PROFILING=ON`; não
-altera a API pública nem o Release. Ele devolve apenas três números exatamente
-representáveis por JavaScript no workload esperado. O modo end-to-end chama o
-wrapper público sobre o corpus inteiro, que corresponde ao uso da caixa de
-texto e mantém uma única travessia JS -> Wasm por iteração.
+Os bindings de benchmark só existem quando `WORDS_WASM_PROFILING=ON`; não
+alteram a API pública nem o Release. `benchmarkCorpus` devolve apenas três
+números exatamente representáveis por JavaScript no workload esperado. O modo
+end-to-end chama o wrapper público sobre o corpus inteiro, que corresponde ao
+uso da caixa de texto e mantém uma única travessia JS -> Wasm por iteração.
 
 Exemplos:
 
@@ -657,6 +659,61 @@ end-to-end, 524 ms. A diferença grande confirma o valor de manter os dois
 perfis, mas não é o ganho esperado do sink: ela inclui toda a projeção,
 travessia de vetores, construção de objetos JS e garbage collection. O sink
 proposto elimina somente a primeira coleção de `QueryResult` e sua retenção.
+
+Uma primeira medição externa de memória com `/usr/bin/time -v`, uma iteração e
+um warmup, registrou:
+
+| Modo | Pico RSS | Minor faults | Observação |
+| --- | ---: | ---: | --- |
+| `core` | 109.004 KiB | 23.090 | módulo, V8/JIT, WWDB e memória linear; resultado não cruza para objetos JS |
+| `end-to-end` | 229.304 KiB | 53.420 | inclui ainda projeção Embind, objetos JS e retenção até o GC |
+
+O delta de 120.300 KiB é evidência de pressão de memória na integração, mas não
+pode ser atribuído integralmente ao vetor externo que o sink pretende remover.
+RSS mede o processo inteiro e não distingue páginas comprometidas da memória
+linear, heap C++, heap V8, código JIT e handles Embind. A execução síncrona
+também impede JavaScript de observar o pico intermediário enquanto o Wasm está
+rodando.
+
+A medição interna foi implementada separadamente do CPU profiler. O binding
+`heapSnapshot` expõe `mallinfo()` e
+`emscripten_get_heap_size()`/`emscripten_get_sbrk_ptr()` sob nomes estáveis. O
+binding `benchmarkCorpusMemory` amostra imediatamente antes da região, depois
+de `Engine::analyze_line` retornar com o `vector<QueryResult>` ainda vivo e
+depois de sua destruição. O runner seleciona esse caminho com:
+
+```sh
+node scripts/profile-wasm.mjs \
+  --mode core --profiler none --measure-heap \
+  --warmup 1 --iterations 1 \
+  --output build/wasm-profile/profiles/cpp-heap-baseline.cpuprofile
+```
+
+Resultado da Eneida IV depois do warmup:
+
+| Métrica | Antes | Resultados vivos | Depois |
+| --- | ---: | ---: | ---: |
+| `mallinfo.uordblks` / bytes alocados | 7.113.080 | 14.849.176 | 7.113.080 |
+| `mallinfo.fordblks` / bytes livres | 8.713.832 | 977.736 | 8.713.832 |
+| arena do allocator | 15.826.912 | 15.826.912 | 15.826.912 |
+| topo dinâmico | 16.257.024 | 16.257.024 | 16.257.024 |
+| memória linear | 17.235.968 | 17.235.968 | 17.235.968 |
+
+O vetor completo e seus objetos alcançáveis mantêm, portanto, **7.736.096
+bytes adicionais** (aproximadamente 7,38 MiB) vivos no ponto que a sink pretende
+eliminar. Depois da destruição, `allocatedBytes` volta exatamente à baseline;
+o warmup já havia dimensionado a memória linear, que não cresceu na região
+medida. Três iterações repetiram exatamente os mesmos snapshots e checksum
+68.169, confirmando que o número não é acúmulo entre chamadas.
+
+`mallinfo().uordblks` mede bytes atualmente em uso, não pico histórico
+(`usmblks` é explicitamente não usado nesta implementação), portanto o harness
+acumula a maior amostra com resultados vivos. Na variante sink, a medição deve
+ser movida para dentro do consumidor para capturar o maior conjunto ainda vivo.
+Para o end-to-end, RSS e estatísticas do V8 continuam sendo uma segunda métrica
+separada. Contagem de alocações internas ainda exige interceptar o allocator ou
+usar o memory profiler do Emscripten; heap snapshots do Node não enxergam
+objetos individuais dentro da memória linear.
 
 Para `perf`, o mesmo runner aceita `--profiler none`, deixando a delimitação ao
 profiler externo:

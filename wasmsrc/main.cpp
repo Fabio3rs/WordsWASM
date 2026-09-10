@@ -7,6 +7,11 @@
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
 
+#if defined(WORDS_WASM_PROFILING)
+#include <emscripten/heap.h>
+#include <malloc.h>
+#endif
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -40,10 +45,92 @@ struct BrowserBenchmarkResult final {
     double units{};
     double analyses{};
 };
+
+struct BrowserHeapSnapshot final {
+    double linear_memory_bytes{};
+    double dynamic_top_bytes{};
+    double arena_bytes{};
+    double allocated_bytes{};
+    double free_bytes{};
+    double releasable_bytes{};
+    double free_chunks{};
+};
+
+struct BrowserMemoryBenchmarkResult final {
+    double checksum{};
+    double units{};
+    double analyses{};
+    BrowserHeapSnapshot before;
+    BrowserHeapSnapshot peak_results_live;
+    BrowserHeapSnapshot after;
+    double maximum_linear_memory_bytes{};
+};
 #endif
 
 constexpr std::string_view full_database_kind{"full"};
 constexpr std::string_view search_database_kind{"search"};
+
+#if defined(WORDS_WASM_PROFILING)
+constexpr auto maximum_safe_javascript_integer =
+    (std::uint64_t{1U} << 53U) - 1U;
+
+struct BenchmarkCounts final {
+    std::uint64_t units{};
+    std::uint64_t analyses{};
+};
+
+void add_benchmark_count(std::uint64_t &total, const std::size_t count) {
+    if (count > maximum_safe_javascript_integer - total) {
+        throw std::overflow_error{
+            "benchmark count exceeds JavaScript safe integer"};
+    }
+    total += static_cast<std::uint64_t>(count);
+}
+
+void consume_benchmark_results(const std::vector<words::QueryResult> &results,
+                               BenchmarkCounts &counts) {
+    add_benchmark_count(counts.units, results.size());
+    for (const auto &result : results) {
+        add_benchmark_count(counts.analyses, result.analyses.size());
+        add_benchmark_count(counts.analyses,
+                            result.compound_analyses.size());
+        add_benchmark_count(counts.analyses,
+                            result.artificial_analyses.size());
+    }
+}
+
+void validate_benchmark_checksum(const BenchmarkCounts counts) {
+    if (counts.analyses > maximum_safe_javascript_integer - counts.units) {
+        throw std::overflow_error{
+            "benchmark checksum exceeds JavaScript safe integer"};
+    }
+}
+
+[[nodiscard]] BrowserBenchmarkResult
+browser_benchmark_result(const BenchmarkCounts counts) {
+    validate_benchmark_checksum(counts);
+    return BrowserBenchmarkResult{
+        .checksum = static_cast<double>(counts.units + counts.analyses),
+        .units = static_cast<double>(counts.units),
+        .analyses = static_cast<double>(counts.analyses),
+    };
+}
+
+[[nodiscard]] BrowserHeapSnapshot browser_heap_snapshot() noexcept {
+    const auto allocation = mallinfo();
+    return BrowserHeapSnapshot{
+        .linear_memory_bytes =
+            static_cast<double>(emscripten_get_heap_size()),
+        .dynamic_top_bytes =
+            static_cast<double>(*emscripten_get_sbrk_ptr()),
+        .arena_bytes = static_cast<double>(allocation.arena),
+        .allocated_bytes = static_cast<double>(allocation.uordblks),
+        .free_bytes = static_cast<double>(allocation.fordblks),
+        .releasable_bytes = static_cast<double>(allocation.keepcost),
+        .free_chunks = static_cast<double>(allocation.ordblks),
+    };
+}
+#endif
 
 struct BrowserQuery final {
     std::string text;
@@ -880,47 +967,54 @@ class BrowserAnalysisEngine final {
     [[nodiscard]] BrowserBenchmarkResult
     benchmark_corpus(const std::string &utf8, const std::uint32_t iterations,
                      const bool two_words) const {
-        require_ready();
-        if (!engine_->supports_full_analysis()) {
-            throw std::logic_error{
-                "analysis requires a full WWDB with meanings"};
-        }
-        if (iterations == 0U) {
-            throw std::invalid_argument{
-                "benchmark iterations must be positive"};
-        }
-
-        std::uint64_t units{};
-        std::uint64_t analyses{};
-        constexpr auto maximum_safe_javascript_integer =
-            (std::uint64_t{1U} << 53U) - 1U;
-        const auto add_count = [](std::uint64_t &total,
-                                  const std::size_t count) {
-            constexpr auto maximum = (std::uint64_t{1U} << 53U) - 1U;
-            if (count > maximum - total) {
-                throw std::overflow_error{
-                    "benchmark count exceeds JavaScript safe integer"};
-            }
-            total += static_cast<std::uint64_t>(count);
-        };
+        require_benchmark_ready(iterations);
+        BenchmarkCounts counts;
         const auto options = analysis_options(two_words);
         for (std::uint32_t iteration{}; iteration < iterations; ++iteration) {
             const auto results = engine_->analyze_line(utf8, options);
-            add_count(units, results.size());
-            for (const auto &result : results) {
-                add_count(analyses, result.analyses.size());
-                add_count(analyses, result.compound_analyses.size());
-                add_count(analyses, result.artificial_analyses.size());
+            consume_benchmark_results(results, counts);
+        }
+        return browser_benchmark_result(counts);
+    }
+
+    [[nodiscard]] BrowserHeapSnapshot heap_snapshot() const {
+        require_ready();
+        return browser_heap_snapshot();
+    }
+
+    [[nodiscard]] BrowserMemoryBenchmarkResult
+    benchmark_corpus_memory(const std::string &utf8,
+                            const std::uint32_t iterations,
+                            const bool two_words) const {
+        require_benchmark_ready(iterations);
+        const auto before = browser_heap_snapshot();
+        auto peak_results_live = before;
+        auto maximum_linear_memory_bytes = before.linear_memory_bytes;
+        BenchmarkCounts counts;
+        const auto options = analysis_options(two_words);
+        for (std::uint32_t iteration{}; iteration < iterations; ++iteration) {
+            const auto results = engine_->analyze_line(utf8, options);
+            consume_benchmark_results(results, counts);
+            const auto results_live = browser_heap_snapshot();
+            if (results_live.allocated_bytes >
+                peak_results_live.allocated_bytes) {
+                peak_results_live = results_live;
             }
+            maximum_linear_memory_bytes = std::max(
+                maximum_linear_memory_bytes, results_live.linear_memory_bytes);
         }
-        if (analyses > maximum_safe_javascript_integer - units) {
-            throw std::overflow_error{
-                "benchmark checksum exceeds JavaScript safe integer"};
-        }
-        return BrowserBenchmarkResult{
-            .checksum = static_cast<double>(units + analyses),
-            .units = static_cast<double>(units),
-            .analyses = static_cast<double>(analyses),
+        const auto after = browser_heap_snapshot();
+        maximum_linear_memory_bytes =
+            std::max(maximum_linear_memory_bytes, after.linear_memory_bytes);
+        const auto result = browser_benchmark_result(counts);
+        return BrowserMemoryBenchmarkResult{
+            .checksum = result.checksum,
+            .units = result.units,
+            .analyses = result.analyses,
+            .before = before,
+            .peak_results_live = peak_results_live,
+            .after = after,
+            .maximum_linear_memory_bytes = maximum_linear_memory_bytes,
         };
     }
 #endif
@@ -946,6 +1040,20 @@ class BrowserAnalysisEngine final {
             two_words ? words::TwoWordsMode::legacy_first_match
                       : words::TwoWordsMode::disabled};
     }
+
+#if defined(WORDS_WASM_PROFILING)
+    void require_benchmark_ready(const std::uint32_t iterations) const {
+        require_ready();
+        if (!engine_->supports_full_analysis()) {
+            throw std::logic_error{
+                "analysis requires a full WWDB with meanings"};
+        }
+        if (iterations == 0U) {
+            throw std::invalid_argument{
+                "benchmark iterations must be positive"};
+        }
+    }
+#endif
 
     void require_ready() const {
         if (!engine_) {
@@ -979,6 +1087,27 @@ EMSCRIPTEN_BINDINGS(words_analysis_engine) {
         .field("checksum", &BrowserBenchmarkResult::checksum)
         .field("units", &BrowserBenchmarkResult::units)
         .field("analyses", &BrowserBenchmarkResult::analyses);
+
+    emscripten::value_object<BrowserHeapSnapshot>("HeapSnapshot")
+        .field("linearMemoryBytes", &BrowserHeapSnapshot::linear_memory_bytes)
+        .field("dynamicTopBytes", &BrowserHeapSnapshot::dynamic_top_bytes)
+        .field("arenaBytes", &BrowserHeapSnapshot::arena_bytes)
+        .field("allocatedBytes", &BrowserHeapSnapshot::allocated_bytes)
+        .field("freeBytes", &BrowserHeapSnapshot::free_bytes)
+        .field("releasableBytes", &BrowserHeapSnapshot::releasable_bytes)
+        .field("freeChunks", &BrowserHeapSnapshot::free_chunks);
+
+    emscripten::value_object<BrowserMemoryBenchmarkResult>(
+        "MemoryBenchmarkResult")
+        .field("checksum", &BrowserMemoryBenchmarkResult::checksum)
+        .field("units", &BrowserMemoryBenchmarkResult::units)
+        .field("analyses", &BrowserMemoryBenchmarkResult::analyses)
+        .field("before", &BrowserMemoryBenchmarkResult::before)
+        .field("peakResultsLive",
+               &BrowserMemoryBenchmarkResult::peak_results_live)
+        .field("after", &BrowserMemoryBenchmarkResult::after)
+        .field("maximumLinearMemoryBytes",
+               &BrowserMemoryBenchmarkResult::maximum_linear_memory_bytes);
 #endif
 
     emscripten::value_object<BrowserQuery>("SearchQuery")
@@ -1149,6 +1278,9 @@ EMSCRIPTEN_BINDINGS(words_analysis_engine) {
         .function("searchLine", &BrowserAnalysisEngine::search_line)
 #if defined(WORDS_WASM_PROFILING)
         .function("benchmarkCorpus", &BrowserAnalysisEngine::benchmark_corpus)
+        .function("heapSnapshot", &BrowserAnalysisEngine::heap_snapshot)
+        .function("benchmarkCorpusMemory",
+                  &BrowserAnalysisEngine::benchmark_corpus_memory)
 #endif
         .function("reset", &BrowserAnalysisEngine::reset);
 }
