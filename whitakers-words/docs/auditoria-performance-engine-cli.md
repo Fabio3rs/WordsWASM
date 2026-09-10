@@ -1936,6 +1936,410 @@ canônicos da engine. Tempos devem ser acompanhados por instruções, alocaçõe
 RSS e tamanho de `.text`/`.rodata`; uma melhora em apenas uma dessas dimensões
 não justifica regressão desproporcional nas demais.
 
+## Reperfil global pós-F-05b (2026-09-10)
+
+Uma nova rodada foi feita depois do comparador assimétrico e da arena canônica,
+usando a Eneida IV como corpus. O objetivo foi verificar se a redução já obtida
+revelou algum ofensor global oculto e separar custo da engine, custo do CLI e
+custo dos testes de integração. O executável `words_engine_benchmark` foi
+medido em `RelWithDebInfo`; Callgrind, DHAT e `strace` foram executados no
+NativeLab. Os artefatos principais ficaram em
+`build/perf-investigation-clang/profiles/`.
+
+### Engine sem JSON
+
+Em cinco amostras de 20 iterações, uma passagem pela Eneida levou medianamente:
+
+| Modo | Mediana por corpus | Checksum | O que mantém vivo |
+| --- | ---: | ---: | --- |
+| uma chamada a `analyze_line` por verso | 48,785 ms | 22.723 | só o resultado do verso atual |
+| uma chamada a `analyze_line` para o corpus inteiro | 51,091 ms | 22.723 | o vetor de resultados de todo o corpus |
+
+O modo de corpus inteiro ficou 4,73% mais lento. Isso não mede diretamente uma
+API sink, mas confirma que retenção e crescimento do vetor têm custo observável
+mesmo sem JSON. O modo `queries` não deve receber os versos crus: cada verso
+tem mais de duas palavras e vira erro. Para medir consultas independentes foi
+gerado `aeneid-iv-tokens.txt`, com 4.573 tokens e 2.726 formas distintas.
+
+O Callgrind de uma passagem por versos contou 503.220.311 instruções. O perfil
+é praticamente uma repetição do perfil F-05b, não uma nova regressão:
+
+| Caminho inclusivo | Instruções | Parcela |
+| --- | ---: | ---: |
+| `analyze_lexical_surface` | 360.034.232 | 71,55% |
+| `append_word_analyses` | 301.526.126 | 59,92% |
+| `analyze_syncope` | 237.330.263 | 47,16% |
+| `analyze_orthography` | 122.910.606 | 24,42% |
+| `append_regular_analyses` | 74.633.938 | 14,83% |
+| `LatinLexer::lex` | 59.105.229 | 11,75% |
+| `rewrite_attempts` | 47.941.773 | 9,53% |
+| `lookup_prefix` | 45.375.879 | 9,02% |
+| `append_tackon_analyses` | 41.028.280 | 8,15% |
+| `utf8proc_map` | 39.570.726 | 7,86% |
+| `lookup_stem` | 35.674.708 | 7,09% |
+| `lookup_suffix` | 29.445.999 | 5,85% |
+| `enumerate_candidates` | 21.592.217 | 4,29% |
+| `lookup_ending` | 19.666.472 | 3,91% |
+| `sort_and_deduplicate_analyses` | 17.810.251 | 3,54% |
+
+Assim, a trie reversa de endings e o sort final não são o próximo alvo global.
+Depois do range lazy, `enumerate_candidates` já é menor que lexer, rewrites e
+lookups de addons/stems. Também não apareceu comportamento exponencial: o que
+resta é repetição linear com constantes relevantes.
+
+O perfil instrumentado do LLVM tornou a repetição do scheduler explícita:
+
+- `rewrite_attempts` foi chamado cerca de 26,2 mil vezes e percorreu 4,45
+  milhões de regras;
+- aproximadamente 4,37 milhões dessas visitas, 98,1%, foram descartadas
+  imediatamente por `kind`, `stage` ou `priority`;
+- `analyze_syncope` foi chamado 5,06 mil vezes, percorreu as 170 regras para
+  montar o conjunto de prioridades e depois fez 1,28 milhão de passos pelo
+  domínio fixo de 256 prioridades;
+- o banco possui somente 11 grupos não vazios de
+  `(kind, stage, priority)` para as 170 regras atuais.
+
+Esse é o melhor argumento novo a favor de ranges de rewrite preparados no
+load: um índice estável de `RuleId` mais 11 descritores eliminaria tanto o scan
+de regras incompatíveis quanto o scan de prioridades vazias. A implementação
+deve manter juntas todas as regras de uma mesma prioridade; quebrar o grupo
+pode alterar o sort por `scan_reverse`, posição e ID e, com isso, qual tentativa
+é aceita primeiro.
+
+#### Forma atual dos rewrites e opções de pré-processamento
+
+No WWDB, rewrite é uma seção plana. Cada registro guarda IDs para `before`,
+`after`, nome e significado, mais metadata compactada com kind, stage,
+priority, scope, direção, operação, restrições e era. O loader decodifica isso
+para um único `std::vector<RewriteRule>` de 170 elementos; não existe índice ou
+agenda auxiliar. `Database::rewrites()` apenas expõe um `span` desse vetor.
+
+O scheduler atual aplica três algoritmos sucessivos a cada chamada:
+
+1. percorre as 170 regras e monta um bitmap local de 256 prioridades;
+2. percorre as 256 posições do bitmap e, para cada prioridade ativa, chama
+   `rewrite_attempts`;
+3. `rewrite_attempts` percorre novamente as 170 regras, descarta as de outro
+   kind/stage/priority, procura ocorrências no texto, materializa um vetor de
+   tentativas e o ordena por direção, posição e `RewriteId`.
+
+A forma concreta dos dados é muito mais estruturada que o algoritmo genérico:
+
+| Rota | Prioridade | Regras | Operação/escopo/direção |
+| --- | ---: | ---: | --- |
+| síncope/main | 0–4 | 1, 4, 3, 1, 2 | literal, internal, reverse |
+| ortografia/early | 0 | 29 | 25 literal + 4 slur, initial, forward |
+| ortografia/fallback | 0 | 88 | literal, initial, forward |
+| ortografia/fallback | 1 | 12 | literal, internal, forward |
+| ortografia/fallback | 2 | 1 | literal, final, forward |
+| ortografia/fallback | 3 | 28 | literal, internal, forward, medieval |
+| ortografia/fallback | 4 | 1 | double-consonant, internal, forward, medieval |
+
+São 165 regras literais, quatro slurs e um double-consonant; 117 regras são
+initial, 52 internal e uma final. As 11 regras de síncope são reverse e todas
+as 159 ortográficas são forward. O `REWRITES.LAT` atual já está fisicamente
+agrupado por rota e prioridade, mas isso ainda não é um invariante público do
+formato.
+
+O primeiro experimento não precisa alterar o WWDB. Depois de carregar o vetor,
+o `Database` pode construir e possuir uma agenda imutável:
+
+```cpp
+struct RewriteGroup {
+    RewriteKind kind;
+    RewriteStage stage;
+    std::uint8_t priority;
+    std::size_t first;
+    std::size_t count;
+};
+
+struct RewriteRoute {
+    std::size_t first_group;
+    std::size_t group_count;
+};
+```
+
+Uma rota corresponde a `(kind, stage)` e expõe somente seus grupos não vazios,
+já em prioridade crescente. Se a ordem contígua do arquivo for validada pelo
+packer/loader, `first/count` pode apontar diretamente para `rewrites_`: seriam
+somente 11 descritores e nenhuma cópia das regras. A alternativa mais robusta,
+que aceita regras desordenadas no arquivo, é um vetor plano de 170 referências
+ordenadas estavelmente por `(kind, stage, priority)`; cada grupo vira um span
+desse vetor. Seu custo é pequeno e é pago uma vez no load.
+
+O loop por consulta então se reduz conceitualmente a:
+
+```cpp
+for (const auto group : database.rewrite_groups(kind, stage)) {
+    for (const auto attempt : rewrite_attempts(word, group.rules(), mode)) {
+        if (analyze(attempt)) {
+            return result;
+        }
+    }
+}
+```
+
+Isso remove o bitmap, o domínio artificial de 256 prioridades e os três testes
+`kind/stage/priority` por regra. O teste de era pode continuar dentro do grupo;
+com os dados atuais, as regras medievais ocupam grupos próprios e esses grupos
+podem ser pulados inteiros no modo classical-only. A agenda pertence ao
+`Database`, que é imutável e compartilhado, portanto é naturalmente reutilizada
+por todas as palavras e é segura para threads sem cache mutável.
+
+Há um segundo nível possível, a medir somente depois desse A/B. As 113 regras
+literal/initial hoje percorrem inutilmente todas as posições da palavra, embora
+somente a posição zero possa casar. O grupo fallback/priority-0 contém 88
+dessas regras. Separar o matcher por escopo permite `starts_with` para initial,
+`ends_with` para final e scan apenas para internal. Buckets pela primeira letra
+reduziriam as 88 comparações para no máximo 15 com o banco atual, e para zero
+quando a inicial não está nos 18 buckets existentes. O grupo early cairia de
+25 regras literais para no máximo dez.
+
+Também é possível eliminar o vetor e o sort de tentativas com uma enumeração
+lazy na própria ordem do comparador: primeiro regras reverse com posições
+decrescentes, depois forward com posições crescentes, e em cada posição IDs
+crescentes. Isso evita materializar tentativas que nunca serão usadas depois
+do primeiro resultado aceito. É uma alteração de controle mais delicada que os
+ranges, especialmente para slur e double-consonant, e deve ser um experimento
+separado.
+
+Um trie ou Aho–Corasick poderia localizar os padrões internos em uma passagem,
+mas os dados atuais têm somente 51 regras internal e palavras latinas curtas.
+O custo de código, tabelas e preservação da ordem provavelmente não compensa
+antes de ranges, especialização de scope e buckets da inicial. Pelo mesmo
+motivo, memoizar tentativas por palavra não é a primeira forma de reutilização:
+exigiria chave por rota/modo, ownership e limite de cache, enquanto uma agenda
+imutável é global, pequena e determinística. Se repetição de palavras for o
+alvo, um LRU do resultado completo no CLI evita também lexer e análise, não
+apenas o matching de rewrite.
+
+Pitfalls que precisam ficar fixos em testes antes da agenda:
+
+- prioridade crescente continua encerrando a busca no primeiro grupo que
+  produz análise aceita;
+- todas as regras da mesma prioridade participam da ordenação conjunta;
+- reverse precede forward, posição segue a direção e ID desempata;
+- classical-only ignora regras medievais sem mudar a ordem das clássicas;
+- os 170 IDs aparecem exatamente uma vez no índice e resolvem para a regra
+  original;
+- agenda vazia, prioridade 0/255 e grupos intercalados ou rejeitados pelo
+  formato ficam definidos explicitamente.
+
+Os 98,1% representam regras visitadas e descartadas, não 98,1% do tempo total.
+O teto inclusivo de `rewrite_attempts` é 9,53% e sua parcela exclusiva medida
+é aproximadamente 5,5%; portanto a expectativa prudente para os ranges é um
+ganho de poucos pontos percentuais no corpus, a ser confirmado por A/B.
+
+#### Resultado do experimento: agenda imutável de rewrites
+
+Os guardrails foram adicionados antes da alteração. A cobertura de síncope
+agora tem testemunhas para todas as prioridades presentes no banco:
+
+| Palavra | Prioridade | Regra esperada |
+| --- | ---: | --- |
+| `audiisti` | 0 | `perfect-ivi-uncontracted` |
+| `amasti`, `audisti` | 1 | `perfect-v-contraction` |
+| `amarunt` | 2 | `perfect-v-before-r` |
+| `audierunt` | 3 | `perfect-ier` |
+| `scripsti` | 4 | `perfect-is-after-s-x` |
+
+As famílias ortográficas já cobriam os outros eixos relevantes: `pretor`
+(initial/classical/early), `philosofus` (internal/classical/fallback),
+`teologia` (internal/medieval), `literatura` (double-consonant/medieval),
+`obpono` (slur/early) e `propris` (final/fallback). Um teste estrutural novo
+confere os 11 grupos, suas contagens, prioridade crescente e que os 170 IDs
+aparecem exatamente uma vez e continuam apontando para suas regras originais.
+
+O `Database` passou a construir uma agenda imutável ao carregar o WWDB. A
+construção usa contagem por 1.536 buckets possíveis
+(`2 kinds * 3 stages * 256 priorities`) e preenchimento estável em duas
+passagens sobre as 170 regras. O custo é `O(R + 1536)`, uma vez por banco, sem
+sort por comparação. As rotas expõem spans dos 11 grupos não vazios e cada
+grupo expõe um span de ponteiros para regras. A engine percorre diretamente
+esses spans; o bitmap local, o scan das 256 prioridades e os testes repetidos
+de kind/stage/priority desapareceram.
+
+Uma primeira versão apontava grupos diretamente para o vetor de regras porque
+o WWDB atual já está ordenado. Ela foi descartada: isso transformaria a ordem
+física dos registros em um requisito silencioso para arquivos 1.6--1.9 já
+existentes. O índice indireto preserva compatibilidade com regras intercaladas,
+mantém a ordem original dentro de cada grupo e não altera o formato do banco.
+Os ponteiros são estáveis porque o vetor de regras está completo antes da
+construção e o `Database` é imutável depois do load.
+
+O LLVM instrumentado, com uma passagem de warmup e uma medida, mostrou 166.018
+iterações no loop de regras de `rewrite_attempts`, ou 83.009 por corpus. Antes
+eram aproximadamente 4,45 milhões por corpus. As chamadas do scheduler
+continuam existindo, mas cada uma recebe somente o grupo relevante: a redução
+de cerca de 98,1% ocorreu exatamente nas visitas previstas pelo experimento.
+O HTML navegável desta execução ficou em
+`build/profile-instr/coverage-html-rewrite-schedule-final/index.html`.
+
+O A/B nativo usou executáveis do mesmo commit-base e flags equivalentes. O
+tempo de parede foi intercalado no NativeLab em três amostras de 100 passagens;
+Callgrind e DHAT usaram uma passagem por versos da Eneida IV.
+
+| Métrica da engine | Antes | Depois | Variação |
+| --- | ---: | ---: | ---: |
+| mediana por corpus | 49,988 ms | 48,034 ms | -3,91% |
+| instruções | 503.220.311 | 464.323.178 | -7,73% |
+| referências de dados | 187.087.341 | 171.187.786 | -8,50% |
+| branches | 71.968.376 | 58.220.419 | -19,10% |
+| mispredicts absolutos | 4.668.850 | 4.546.782 | -2,62% |
+| misses D1 | 1.718.573 | 1.323.496 | -22,99% |
+
+A taxa de mispredict sobe de 6,5% para 7,8% porque o denominador perdeu 13,75
+milhões de branches previsíveis; o número absoluto de erros caiu. Os números
+de último nível não foram usados na comparação porque o cache LL simulado é
+direct-mapped e ficou sensível ao novo layout de endereços.
+
+No DHAT, o total passou de 35.363.992 bytes/113.352 blocos para
+35.365.760 bytes/113.354 blocos: +1.768 bytes e +2 blocos, ambos pertencentes
+à agenda no load. O pico cresceu pelos mesmos 1.768 bytes, não restou memória
+viva no fim e nenhuma alocação foi adicionada ao hotpath. As leituras de heap
+caíram 2,08%, de 239.445.283 para 234.460.803 bytes.
+
+O custo de código ficou contido: `text` do benchmark nativo cresceu 1.272 bytes
+(+0,185%) e `words_wasm.wasm` cresceu 1.711 bytes (+0,204%). No CLI batch com
+4.573 tokens, o Callgrind caiu de 3.949.287.634 para 3.909.250.870 instruções
+em `analysis` (-1,01%) e de 1.304.218.658 para 1.264.719.400 em `search`
+(-3,03%). A diluição é esperada: serialização/projeção domina `analysis`, e o
+loader é proporcionalmente maior em `search`.
+
+A versão final passou nos 117 testes regulares, nos 103 testes unitários sob
+ASan/UBSan no NativeLab e no build WebAssembly. Os artefatos finais estão em
+`build/perf-investigation-clang/profiles/rewrite-schedule-final3-2026-09-10.callgrind`,
+`rewrite-schedule-final2-2026-09-10.dhat.json` e nos dois arquivos
+`cli-*-rewrite-schedule-final.callgrind` do mesmo diretório.
+
+As ablações abaixo são limites superiores, não speedups previstos: cada flag
+remove trabalho e também muda o resultado, e as parcelas se sobrepõem.
+
+| Configuração | Mediana por corpus | Variação | Checksum |
+| --- | ---: | ---: | ---: |
+| padrão | 49,381 ms | — | 227.230 |
+| sem síncope | 27,773 ms | -43,76% | 226.600 |
+| sem ortografia | 39,205 ms | -20,61% | 226.950 |
+| sem sufixos | 36,165 ms | -26,77% | 226.830 |
+| sem `fixes` | 33,390 ms | -32,38% | 226.800 |
+| sem prefixos | 47,502 ms | -3,80% | 227.200 |
+| sem compostos verbais | 49,221 ms | dentro do ruído | 227.680 |
+
+O caminho de compostos verbais não é ofensor global nesse corpus. Já os
+caminhos de recuperação continuam amplificando o lexer e os lookups, por isso
+otimizar a infraestrutura compartilhada é preferível a simplesmente remover
+mecanismos semânticos.
+
+### Alocações atuais
+
+O DHAT sem warmup contou 35.363.992 bytes cumulativos em 113.352 blocos, pico
+de 9.753.019 bytes e nenhum bloco vivo ao final. A classificação pelo primeiro
+frame de container/alocador relevante foi:
+
+| Origem | Bytes | Blocos | Leitura principal |
+| --- | ---: | ---: | --- |
+| vetores de `AnalysisIR` | 14.355.432 | 12.876 | 40,59% dos bytes |
+| vetor de `QueryResult` | 8.947.816 | 2.834 | 25,30% dos bytes |
+| carga do banco | 6.933.998 | 89 | custo de startup, poucas alocações grandes |
+| utf8proc | 616.312 | 32.092 | 28,31% dos blocos |
+| estruturas próprias do lexer | 441.046 | 24.069 | 21,23% dos blocos |
+| vetores de `AddonId` | 415.464 | 30.099 | 26,55% dos blocos |
+| cópias de `DatasetIdentity` | 329.256 | 4.573 | uma por consulta nesse workload |
+
+Lexer mais utf8proc respondem por 49,54% das alocações; somados aos pequenos
+vetores de addons chegam a aproximadamente 76,1% dos blocos. Em bytes, porém,
+os resultados materializados dominam. Isso reforça duas frentes diferentes:
+fast path ASCII e small buffers reduzem frequência; sink e representação de
+`AnalysisIR` reduzem volume e memória viva.
+
+Uma otimização pequena adicional é armazenar o digest SHA-256 já decodificado
+inline em `DatasetIdentity`, preservando a igualdade por dataset. Trocar isso
+por identidade de ponteiro seria incorreto: duas instâncias carregadas com o
+mesmo dataset devem continuar compatíveis em `Engine::owns`. Antes do A/B,
+convém adicionar um teste explícito para engines distintas com o mesmo ID,
+além do teste já existente que rejeita datasets diferentes.
+
+### CLI e o que o usuário realmente paga
+
+No modo batch com os 4.573 tokens, a mediana de tempo de parede foi 0,11 s para
+`search` e 0,31 s para `analysis`. O Callgrind mostra cargas bem diferentes:
+
+| Formato | Instruções | Principais custos inclusivos |
+| --- | ---: | --- |
+| `analysis` | 3.949.287.634 | escrita/projeção do resultado 78,24%; serializador `dump` 53,71%; engine 13,05%; carga do banco 8,34% |
+| `search` | 1.304.218.658 | engine 38,24%; escrita/projeção 35,35%; carga do banco 25,26% |
+
+Logo, o maior ofensor global do produto no formato completo continua sendo o
+DOM/writer JSON, não um loop recém-descoberto na engine. Para consultas curtas
+ou `search`, startup e engine são proporcionalmente importantes. O perfil de
+`analysis` caiu aproximadamente 6,5% em instruções em relação à medição
+anterior, e `search` caiu aproximadamente 17,5%, coerente com os ganhos já
+implementados.
+
+Vinte processos vazios do CLI custaram cerca de 33 ms cada em Release e
+208,5 ms cada no Debug usado pelo `ctest`. O loader ainda cria e ordena 62.086
+referências de stem em cada processo. Persistir índices canônicos já ordenados
+no WWDB continua sendo uma hipótese forte para startup, mas é uma mudança de
+formato com risco bem maior que fast path ou buckets de rewrite.
+
+### Por que os quatro testes de integração demoram
+
+Os tempos do `ctest -j24` não medem somente a engine. Em execução isolada, o
+Debug reproduziu aproximadamente 2,22 s em `words_differential`, 2,06 s em
+`words_configured_oracle`, 10,44 s em `words_aeneid_corpus` e 3,19 s em
+`words_lexeme_import_integration`. A concorrência com outros 23 testes explica
+a diferença restante para 3,65 s, 3,51 s, 11,59 s e 4,54 s.
+
+| Teste | Processos filhos | Motivo dominante |
+| --- | ---: | --- |
+| `words_differential` | 101 | 94 invocações Ada unitárias, 6 invocações do CLI C++ e 1 verificação do importador |
+| `words_configured_oracle` | 18 | 9 configurações, cada uma iniciando um batch Ada e um batch C++ |
+| `words_aeneid_corpus` | 4 produtores | depois de cerca de 1,4 s produzindo resultados, Python valida 5.548 documentos individualmente com `jsonschema` |
+| `words_lexeme_import_integration` | 13 | recompilação/validações do fixture, 2 packers válidos, 2 packers que devem falhar e 8 CLIs |
+
+No teste da Eneida, os produtores isolados em Release custaram cerca de 1,17 s
+para Ada, 0,22 s para análise nativa e 0,08–0,09 s para os dois modos search.
+Eles rodam concorrentemente. Um `cProfile`, embora perturbando o tempo absoluto,
+atribuiu 22,35 s de 25,22 s instrumentados a `jsonschema.iter_errors`, com 2,62
+milhões de chamadas recursivas. As 5.548 validações vêm de 2.726 documentos de
+analysis, 2.726 de search e cerca de 96 documentos Ada validados separadamente
+quando divergem da projeção nativa. Portanto, os 11,59 s desse teste não são
+evidência de um hotpath oculto da engine.
+
+Há melhorias possíveis no harness — agrupar consultas Ada do diferencial,
+reduzir execuções redundantes do CLI de integração e separar validação extensa
+de schema da comparação semântica do corpus —, mas elas apenas encurtam a
+suíte. Devem permanecer numa trilha de infraestrutura para não serem
+interpretadas como ganho de runtime da biblioteca.
+
+### Prioridade global revisada
+
+Há agora três filas independentes. A ordem abaixo evita escolher uma mudança
+de API ou formato para resolver um custo que pertence a outra camada.
+
+| Ordem | Engine steady-state | Custo de código | Benefício esperado | Evidência/guardrail decisivo |
+| ---: | --- | --- | --- | --- |
+| 1 | fast path ASCII no lexer, mantendo utf8proc como fallback | S–M | alto em alocações e moderado em CPU | 49,54% dos blocos no lexer/utf8proc; matriz UTF-8 e propriedades completas de `SurfaceForm` |
+| 2 | **Concluído:** agenda do scheduler por `(kind, stage, priority)` | S–M | -7,73% de instruções e -3,91% de parede na engine | 83.009 visitas em vez de 4,45 milhões; 170 IDs e ordem semântica cobertos |
+| 3 | sink de `analyze_line` com wrapper materializador | M | alto em memória para documentos grandes, pequeno/moderado em CPU | `QueryResult` acumulou 8,95 MB; paridade completa wrapper/sink em lookahead, compostos, erros e Unicode |
+| 4 | digest inline em `DatasetIdentity` | S | pequeno em CPU, moderado na contagem de blocos | 4.573 blocos; preservar igualdade entre engines do mesmo dataset |
+| 5 | small buffer para `AddonId` | S–M | moderado em blocos, baixo em bytes | 30.099 blocos/415 KB; cobrir transição inline→heap e move |
+| 6 | descritores compactos/materialização tardia de `AnalysisIR` | L | potencialmente muito alto em bytes | 14,36 MB; risco semântico e de lifetime alto, exige A/B forte |
+
+Para o produto/CLI, a ordem continua: writer JSON incremental; sink na projeção
+WASM; cache limitado por bytes quando houver repetição; e somente depois uma
+mudança de formato para índices WWDB pré-ordenados. Para a infraestrutura de
+testes, `jsonschema` na Eneida é o primeiro alvo caso o objetivo seja diminuir
+tempo de CI. Trie reversa e sort indireto permanecem hipóteses válidas, mas os
+perfis atuais não justificam colocá-los antes dos itens acima.
+
+O próximo experimento recomendado é isolar o fast path ASCII, medir tempo,
+Callgrind, DHAT, tamanho nativo/WASM e equivalência semântica. Depois dele,
+convém reperfilar a engine: a agenda resolveu o desperdício estrutural mais
+óbvio dos rewrites, mas preservou deliberadamente o vetor e o sort de
+tentativas para que especialização por escopo ou enumeração lazy sejam
+experimentos independentes.
+
 ## Limitações
 
 - Os números caracterizam este snapshot, compilador e WWDB; mudanças no banco

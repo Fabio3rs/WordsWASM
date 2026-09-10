@@ -947,6 +947,61 @@ Database::load_poc(std::vector<std::byte> image) try {
         database->rewrites_.push_back(rewrite);
     }
 
+    std::array<std::uint32_t, Database::rewrite_bucket_count> bucket_counts{};
+    std::size_t rewrite_group_count{};
+    for (const auto &rewrite : database->rewrites_) {
+        const auto route =
+            Database::rewrite_route_index(rewrite.kind, rewrite.stage);
+        const auto bucket =
+            route * Database::rewrite_priority_count + rewrite.priority;
+        if (bucket_counts.at(bucket)++ == 0U) {
+            ++rewrite_group_count;
+        }
+    }
+    database->rewrite_schedule_.resize(database->rewrites_.size());
+    database->rewrite_groups_.reserve(rewrite_group_count);
+
+    std::array<std::uint32_t, Database::rewrite_bucket_count> bucket_offsets{};
+    std::size_t rewrite_index{};
+    for (std::size_t route = 0U; route < Database::rewrite_route_count;
+         ++route) {
+        const auto first_group = database->rewrite_groups_.size();
+        for (std::size_t priority = 0U;
+             priority < Database::rewrite_priority_count; ++priority) {
+            const auto bucket =
+                route * Database::rewrite_priority_count + priority;
+            bucket_offsets.at(bucket) =
+                static_cast<std::uint32_t>(rewrite_index);
+            const auto count = bucket_counts.at(bucket);
+            if (count == 0U) {
+                continue;
+            }
+            database->rewrite_groups_.push_back({
+                .kind = static_cast<RewriteKind>(
+                    route / Database::rewrite_stage_count + 1U),
+                .stage = static_cast<RewriteStage>(
+                    route % Database::rewrite_stage_count + 1U),
+                .priority = static_cast<std::uint8_t>(priority),
+                .first = rewrite_index,
+                .count = count,
+            });
+            rewrite_index += count;
+        }
+        database->rewrite_routes_[route] = {
+            .first = first_group,
+            .count = database->rewrite_groups_.size() - first_group,
+        };
+    }
+    assert(rewrite_index == database->rewrite_schedule_.size());
+
+    for (const auto &rewrite : database->rewrites_) {
+        const auto route =
+            Database::rewrite_route_index(rewrite.kind, rewrite.stage);
+        const auto bucket =
+            route * Database::rewrite_priority_count + rewrite.priority;
+        database->rewrite_schedule_.at(bucket_offsets.at(bucket)++) = &rewrite;
+    }
+
     const RecordView lexeme_records{section_bytes(owned_bytes, lexeme_section),
                                     lexeme_section};
     database->lexemes_.reserve(static_cast<std::size_t>(lexeme_section.count) +
@@ -2317,6 +2372,43 @@ const TackonRule &Database::tackon(const AddonId id) const {
 
 const RewriteRule &Database::rewrite(const RewriteId id) const {
     return rewrites_.at(id.value());
+}
+
+std::size_t Database::rewrite_route_index(const RewriteKind kind,
+                                          const RewriteStage stage) noexcept {
+    const auto kind_value = std::to_underlying(kind);
+    const auto stage_value = std::to_underlying(stage);
+    if (kind_value < std::to_underlying(RewriteKind::syncope) ||
+        kind_value > std::to_underlying(RewriteKind::orthographic) ||
+        stage_value < std::to_underlying(RewriteStage::main) ||
+        stage_value > std::to_underlying(RewriteStage::fallback)) {
+        return rewrite_route_count;
+    }
+    const auto kind_index = static_cast<std::size_t>(kind_value) - 1U;
+    const auto stage_index = static_cast<std::size_t>(stage_value) - 1U;
+    return kind_index * rewrite_stage_count + stage_index;
+}
+
+std::span<const RewriteGroup>
+Database::rewrite_groups(const RewriteKind kind,
+                         const RewriteStage stage) const noexcept {
+    const auto route = rewrite_route_index(kind, stage);
+    if (route >= rewrite_routes_.size()) {
+        return {};
+    }
+    const auto &range = rewrite_routes_[route];
+    return std::span<const RewriteGroup>{rewrite_groups_}.subspan(range.first,
+                                                                  range.count);
+}
+
+std::span<const RewriteRule *const>
+Database::rewrite_rules(const RewriteGroup group) const noexcept {
+    if (group.first > rewrite_schedule_.size() ||
+        group.count > rewrite_schedule_.size() - group.first) {
+        return {};
+    }
+    return std::span<const RewriteRule *const>{rewrite_schedule_}.subspan(
+        group.first, group.count);
 }
 
 AddonKind Database::addon_kind(const AddonId id) const {

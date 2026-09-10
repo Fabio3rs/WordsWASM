@@ -914,6 +914,74 @@ TEST(DatabaseTest, LoadsTypedRewriteMicroRules) {
     ASSERT_NE(slur, rules.end());
     EXPECT_EQ(slur->operation, RewriteOperation::slur);
     EXPECT_EQ(slur->stage, RewriteStage::early);
+
+    struct ExpectedGroup final {
+        RewriteKind kind;
+        RewriteStage stage;
+        std::uint8_t priority;
+        std::size_t count;
+        bool medieval;
+    };
+    constexpr std::array expected_groups{
+        ExpectedGroup{RewriteKind::syncope, RewriteStage::main, 0U, 1U, false},
+        ExpectedGroup{RewriteKind::syncope, RewriteStage::main, 1U, 4U, false},
+        ExpectedGroup{RewriteKind::syncope, RewriteStage::main, 2U, 3U, false},
+        ExpectedGroup{RewriteKind::syncope, RewriteStage::main, 3U, 1U, false},
+        ExpectedGroup{RewriteKind::syncope, RewriteStage::main, 4U, 2U, false},
+        ExpectedGroup{RewriteKind::orthographic, RewriteStage::early, 0U, 29U,
+                      false},
+        ExpectedGroup{RewriteKind::orthographic, RewriteStage::fallback, 0U,
+                      88U, false},
+        ExpectedGroup{RewriteKind::orthographic, RewriteStage::fallback, 1U,
+                      12U, false},
+        ExpectedGroup{RewriteKind::orthographic, RewriteStage::fallback, 2U, 1U,
+                      false},
+        ExpectedGroup{RewriteKind::orthographic, RewriteStage::fallback, 3U,
+                      28U, true},
+        ExpectedGroup{RewriteKind::orthographic, RewriteStage::fallback, 4U, 1U,
+                      true},
+    };
+
+    constexpr std::array kinds{RewriteKind::syncope, RewriteKind::orthographic};
+    constexpr std::array stages{RewriteStage::main, RewriteStage::early,
+                                RewriteStage::fallback};
+    std::array<bool, 170U> scheduled_ids{};
+    std::size_t indexed_group{};
+    std::size_t indexed_rules{};
+    for (const auto kind : kinds) {
+        for (const auto stage : stages) {
+            for (const auto group :
+                 test::engine().database().rewrite_groups(kind, stage)) {
+                ASSERT_LT(indexed_group, expected_groups.size());
+                const auto &expected = expected_groups[indexed_group];
+                EXPECT_EQ(group.kind, expected.kind);
+                EXPECT_EQ(group.stage, expected.stage);
+                EXPECT_EQ(group.priority, expected.priority);
+                EXPECT_EQ(group.count, expected.count);
+
+                const auto group_rules =
+                    test::engine().database().rewrite_rules(group);
+                ASSERT_EQ(group_rules.size(), expected.count);
+                ASSERT_FALSE(group_rules.empty());
+                for (const auto *const rule : group_rules) {
+                    ASSERT_NE(rule, nullptr);
+                    ASSERT_LT(rule->id.value(), scheduled_ids.size());
+                    EXPECT_FALSE(scheduled_ids[rule->id.value()]);
+                    scheduled_ids[rule->id.value()] = true;
+                    EXPECT_EQ(rule->kind, expected.kind);
+                    EXPECT_EQ(rule->stage, expected.stage);
+                    EXPECT_EQ(rule->priority, expected.priority);
+                    EXPECT_EQ(rule->medieval, expected.medieval);
+                }
+                indexed_rules += group_rules.size();
+                ++indexed_group;
+            }
+        }
+    }
+    EXPECT_EQ(indexed_group, expected_groups.size());
+    EXPECT_EQ(indexed_rules, rules.size());
+    EXPECT_TRUE(std::ranges::all_of(
+        scheduled_ids, [](const bool present) { return present; }));
 }
 
 TEST(DatabaseTest, LoadsAndIndexesSuffixRules) {

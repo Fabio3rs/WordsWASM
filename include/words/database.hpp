@@ -144,6 +144,14 @@ struct RewriteRule final {
     RewriteConstraint constraint{RewriteConstraint::none};
 };
 
+struct RewriteGroup final {
+    RewriteKind kind{RewriteKind::syncope};
+    RewriteStage stage{RewriteStage::main};
+    std::uint8_t priority{};
+    std::size_t first{};
+    std::size_t count{};
+};
+
 class Database final {
   public:
     [[nodiscard]] static std::expected<std::unique_ptr<const Database>,
@@ -229,6 +237,11 @@ class Database final {
     rewrites() const noexcept WORDS_LIFETIMEBOUND {
         return rewrites_;
     }
+    [[nodiscard]] std::span<const RewriteGroup>
+    rewrite_groups(RewriteKind kind,
+                   RewriteStage stage) const noexcept WORDS_LIFETIMEBOUND;
+    [[nodiscard]] std::span<const RewriteRule *const>
+    rewrite_rules(RewriteGroup group) const noexcept WORDS_LIFETIMEBOUND;
     [[nodiscard]] AddonKind addon_kind(AddonId id) const;
     [[nodiscard]] std::string_view stem_string(StringId id) const;
     [[nodiscard]] std::string_view meaning(StringId id) const;
@@ -279,6 +292,22 @@ class Database final {
         MorphologicalNoticeSet notices{};
     };
 
+    struct RewriteRoute final {
+        std::size_t first{};
+        std::size_t count{};
+    };
+
+    static constexpr std::size_t rewrite_kind_count{2U};
+    static constexpr std::size_t rewrite_stage_count{3U};
+    static constexpr std::size_t rewrite_route_count =
+        rewrite_kind_count * rewrite_stage_count;
+    static constexpr std::size_t rewrite_priority_count{256U};
+    static constexpr std::size_t rewrite_bucket_count =
+        rewrite_route_count * rewrite_priority_count;
+
+    [[nodiscard]] static std::size_t
+    rewrite_route_index(RewriteKind kind, RewriteStage stage) noexcept;
+
     explicit Database(std::vector<std::byte> image, DatabaseContent content)
         : image_{std::move(image)}, content_{content} {}
 
@@ -306,6 +335,9 @@ class Database final {
     std::vector<PrefixRule> prefixes_;
     std::vector<TackonRule> tackons_;
     std::vector<RewriteRule> rewrites_;
+    std::vector<const RewriteRule *> rewrite_schedule_;
+    std::vector<RewriteGroup> rewrite_groups_;
+    std::array<RewriteRoute, rewrite_route_count> rewrite_routes_{};
     std::vector<AddonReference> addon_references_;
     // Owns canonical copies only for lookup keys whose source spelling is not
     // already lowercase with j/i and v/u folded. Public string pools keep the

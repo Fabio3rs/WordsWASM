@@ -924,20 +924,32 @@ TEST(EngineTest, KeepsRomanHomographsAndMarksIllFormedFallbacks) {
 }
 
 TEST(EngineTest, AppliesDataDrivenPerfectSyncopeByPriority) {
-    constexpr std::array<std::pair<std::string_view, std::string_view>, 4>
-        fixtures{{
-            {"amasti", "perfect-v-contraction"},
-            {"amarunt", "perfect-v-before-r"},
-            {"audisti", "perfect-v-contraction"},
-            {"audiisti", "perfect-ivi-uncontracted"},
-        }};
-    for (const auto &[word, rule_name] : fixtures) {
+    struct Fixture final {
+        std::string_view word;
+        std::string_view rule_name;
+        std::uint8_t priority;
+    };
+    constexpr std::array fixtures{
+        Fixture{"audiisti", "perfect-ivi-uncontracted", 0U},
+        Fixture{"amasti", "perfect-v-contraction", 1U},
+        Fixture{"audisti", "perfect-v-contraction", 1U},
+        Fixture{"amarunt", "perfect-v-before-r", 2U},
+        Fixture{"audierunt", "perfect-ier", 3U},
+        Fixture{"scripsti", "perfect-is-after-s-x", 4U},
+    };
+    for (const auto &[word, rule_name, priority] : fixtures) {
         const auto result = test::engine().analyze(word);
         ASSERT_EQ(result.status, QueryStatus::analyzed) << word;
         ASSERT_EQ(result.analyses.size(), 1U) << word;
         const auto &rewritten =
             result.analyses.front().derivation.rewritten_form;
         ASSERT_TRUE(rewritten.has_value()) << word;
+        EXPECT_EQ(test::engine()
+                      .database()
+                      .rewrite(rewritten->rules.front())
+                      .priority,
+                  priority)
+            << word;
 
         const auto full = Json::parse(analysis_json(test::engine(), result));
         const auto &derivation = full.at("analyses").front().at("derivation");

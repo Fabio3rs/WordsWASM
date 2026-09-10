@@ -50,8 +50,6 @@ enum class MorphologyKeyKind : std::uint8_t {
     invariable,
 };
 
-constexpr std::size_t rewrite_priority_count =
-    static_cast<std::size_t>(std::numeric_limits<std::uint8_t>::max()) + 1U;
 constexpr std::size_t maximum_ending_length{7U};
 constexpr std::size_t ending_length_count{maximum_ending_length + 1U};
 
@@ -2075,20 +2073,14 @@ replace_logical_surface(const SurfaceForm &surface, const std::size_t position,
 
 [[nodiscard]] std::vector<RewriteAttempt>
 rewrite_attempts(const Database &database, const std::string_view word,
-                 const RewriteKind kind, const RewriteStage stage,
-                 const std::uint8_t priority,
+                 const std::span<const RewriteRule *const> rules,
                  const OrthographyMode orthography =
                      OrthographyMode::classical_and_medieval) {
     std::vector<RewriteAttempt> attempts;
-    for (const auto &rule : database.rewrites()) {
-        if (rule.kind != kind || rule.stage != stage ||
-            rule.priority != priority) {
-            continue;
-        }
-        if (kind == RewriteKind::orthographic &&
-            (orthography == OrthographyMode::disabled ||
-             (orthography == OrthographyMode::classical_only &&
-              rule.medieval))) {
+    for (const auto *const rule_pointer : rules) {
+        const auto &rule = *rule_pointer;
+        if (orthography == OrthographyMode::disabled ||
+            (orthography == OrthographyMode::classical_only && rule.medieval)) {
             continue;
         }
         const auto before = database.rewrite_string(rule.before);
@@ -2166,23 +2158,11 @@ rewrite_attempts(const Database &database, const std::string_view word,
 analyze_syncope(const Database &database, const LatinLexer &lexer,
                 const SurfaceForm &surface,
                 const MorphologicalMechanisms &mechanisms) {
-    std::array<bool, rewrite_priority_count> priorities{};
-    for (const auto &rewrite : database.rewrites()) {
-        if (rewrite.kind == RewriteKind::syncope) {
-            priorities.at(rewrite.priority) = true;
-        }
-    }
-
     const std::string_view word = surface.lookup_ascii;
-    // A small stack bitmap avoids both a per-query allocation and invoking the
-    // scheduler for the 251 priority values absent from the current rule block.
-    for (std::size_t priority = 0U; priority < priorities.size(); ++priority) {
-        if (!priorities.at(priority)) {
-            continue;
-        }
-        for (const auto &attempt : rewrite_attempts(
-                 database, word, RewriteKind::syncope, RewriteStage::main,
-                 static_cast<std::uint8_t>(priority))) {
+    for (const auto group :
+         database.rewrite_groups(RewriteKind::syncope, RewriteStage::main)) {
+        for (const auto &attempt :
+             rewrite_attempts(database, word, database.rewrite_rules(group))) {
             const auto &rewrite = *attempt.rule;
             const auto transformed = replace_logical_surface(
                 surface, attempt.position, attempt.remove_count,
@@ -2292,26 +2272,15 @@ analyze_syncope(const Database &database, const LatinLexer &lexer,
 analyze_orthography(const Database &database, const LatinLexer &lexer,
                     const SurfaceForm &surface, const RewriteStage stage,
                     const AnalysisOptions &options) {
-    std::array<bool, rewrite_priority_count> priorities{};
-    for (const auto &rewrite : database.rewrites()) {
-        if (rewrite.kind == RewriteKind::orthographic &&
-            rewrite.stage == stage &&
-            options.orthography != OrthographyMode::disabled &&
-            (options.orthography ==
-                 OrthographyMode::classical_and_medieval ||
-             !rewrite.medieval)) {
-            priorities.at(rewrite.priority) = true;
-        }
+    if (options.orthography == OrthographyMode::disabled) {
+        return {};
     }
 
     const std::string_view word = surface.orthography_ascii;
-    for (std::size_t priority = 0U; priority < priorities.size(); ++priority) {
-        if (!priorities.at(priority)) {
-            continue;
-        }
+    for (const auto group :
+         database.rewrite_groups(RewriteKind::orthographic, stage)) {
         for (const auto &attempt :
-             rewrite_attempts(database, word, RewriteKind::orthographic, stage,
-                              static_cast<std::uint8_t>(priority),
+             rewrite_attempts(database, word, database.rewrite_rules(group),
                               options.orthography)) {
             const auto transformed = replace_logical_surface(
                 surface, attempt.position, attempt.remove_count,
