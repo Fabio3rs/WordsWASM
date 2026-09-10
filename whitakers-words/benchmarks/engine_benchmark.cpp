@@ -48,16 +48,18 @@ struct Options final {
 
 struct Counts final {
     std::uint64_t units{};
+    std::uint64_t tokens{};
     std::uint64_t analyses{};
 
     Counts &operator+=(const Counts &other) noexcept {
         units += other.units;
+        tokens += other.tokens;
         analyses += other.analyses;
         return *this;
     }
 
     [[nodiscard]] std::uint64_t checksum() const noexcept {
-        return units + analyses;
+        return units + tokens + analyses;
     }
 };
 
@@ -273,22 +275,15 @@ nonempty_lines(const std::string_view corpus) {
 
 void consume(const words::QueryResult &result, Counts &counts) noexcept {
     ++counts.units;
-    counts.analyses += static_cast<std::uint64_t>(result.analyses.size());
-    counts.analyses +=
-        static_cast<std::uint64_t>(result.compound_analyses.size());
-    counts.analyses +=
-        static_cast<std::uint64_t>(result.artificial_analyses.size());
+    counts.analyses += static_cast<std::uint64_t>(result.total_analyses());
+    counts.tokens +=
+        static_cast<std::uint64_t>(result.independent_tokens.size());
 }
 
 void consume(const std::vector<words::QueryResult> &results,
              Counts &counts) noexcept {
-    counts.units += static_cast<std::uint64_t>(results.size());
     for (const auto &result : results) {
-        counts.analyses += static_cast<std::uint64_t>(result.analyses.size());
-        counts.analyses +=
-            static_cast<std::uint64_t>(result.compound_analyses.size());
-        counts.analyses +=
-            static_cast<std::uint64_t>(result.artificial_analyses.size());
+        consume(result, counts);
     }
 }
 
@@ -399,9 +394,10 @@ int main(const int argc, char *argv[]) try {
                  "source_lines={}",
                  mode_name(options->mode), options->iterations,
                  options->warmup, corpus->size(), lines.size());
-    std::println("checksum={} units={} analyses={} warmup_checksum={}",
-                 measured.checksum(), measured.units, measured.analyses,
-                 warmup.checksum());
+    std::println(
+        "checksum={} units={} tokens={} analyses={} warmup_checksum={}",
+        measured.checksum(), measured.units, measured.tokens, measured.analyses,
+        warmup.checksum());
     std::println("elapsed_ns={} ns_per_unit={}", elapsed_ns,
                  nanoseconds_per_unit);
     return 0;

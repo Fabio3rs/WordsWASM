@@ -2620,6 +2620,17 @@ independent_token(const QueryResult &result) {
     };
 }
 
+[[nodiscard]] IndependentTokenAnalysisIR
+independent_token(QueryResult &&result) noexcept {
+    return IndependentTokenAnalysisIR{
+        .surface = std::move(result.surface),
+        .status = result.status,
+        .analyses = std::move(result.analyses),
+        .artificial_analyses = std::move(result.artificial_analyses),
+        .diagnostics = std::move(result.diagnostics),
+    };
+}
+
 void annotate_period_abbreviation_conflict(const TextToken &token,
                                             QueryResult &result) {
     constexpr std::string_view roman_abbreviation_letters{"ACDLM"};
@@ -2650,16 +2661,18 @@ void annotate_period_abbreviation_conflict(const TextToken &token,
     }
 }
 
-void preserve_independent_tokens(QueryResult &result,
-                                 const QueryResult &auxiliary) {
-    result.independent_tokens = {independent_token(result),
-                                 independent_token(auxiliary)};
+void preserve_independent_tokens(QueryResult &result, QueryResult &&auxiliary) {
+    result.independent_tokens.clear();
+    result.independent_tokens.reserve(2U);
+    result.independent_tokens.push_back(independent_token(result));
+    result.independent_tokens.push_back(
+        independent_token(std::move(auxiliary)));
 }
 
 [[nodiscard]] bool try_compound_query(const Database &database,
                                       const std::string_view original_utf8,
                                       QueryResult &result,
-                                      const QueryResult &auxiliary) {
+                                      QueryResult &auxiliary) {
     if (result.status == QueryStatus::error ||
         auxiliary.status == QueryStatus::error ||
         !analyze_compound(database, result, auxiliary)) {
@@ -2673,7 +2686,7 @@ void preserve_independent_tokens(QueryResult &result,
         .original_utf8 = std::string{original_utf8},
         .normalized_nfc = std::move(normalized),
     };
-    preserve_independent_tokens(result, auxiliary);
+    preserve_independent_tokens(result, std::move(auxiliary));
     result.artificial_analyses.clear();
     result.status = QueryStatus::analyzed;
     result.diagnostics.clear();
@@ -2964,7 +2977,7 @@ QueryResult Engine::analyze_text(const std::string_view utf8,
                                .part_of_speech = std::nullopt}};
         return result;
     }
-    preserve_independent_tokens(result, auxiliary);
+    preserve_independent_tokens(result, std::move(auxiliary));
     result.status = QueryStatus::analyzed;
     result.diagnostics.clear();
     return result;

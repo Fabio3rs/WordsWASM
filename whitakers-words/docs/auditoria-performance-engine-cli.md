@@ -126,15 +126,18 @@ um ou dois tokens. Textos arbitrários devem usar `analyze_line`.
 
 `--iterations N` repete somente a operação selecionada. `--warmup N` executa o
 mesmo caminho antes da medição e imprime um checksum separado. O checksum
-medido é:
+medido na versão atual é:
 
 ```text
-quantidade de QueryResult + análises lexicais + compostas + artificiais
+QueryResult + snapshots de tokens independentes + todas as análises de ambos
 ```
 
-Ele torna o resultado observável sem percorrer a projeção JSON. O executável
-também aceita os flags de ablação `--no-*` e os três modos de ortografia usados
-pelo CLI.
+`QueryResult::total_analyses()` centraliza a contagem das análises lexicais,
+compostas e artificiais de primeiro nível e das análises lexicais/artificiais
+dos snapshots. A saída separa `units`, `tokens` e `analyses`, de modo que uma
+colisão acidental na soma também seja visível. Ele torna o resultado observável
+sem percorrer a projeção JSON. O executável também aceita os flags de ablação
+`--no-*` e os três modos de ortografia usados pelo CLI.
 
 Quando os headers de Valgrind estão disponíveis, client requests zeram e
 iniciam Callgrind imediatamente antes das iterações medidas e interrompem a
@@ -173,7 +176,8 @@ strace -c \
 
 ### Validação inicial do harness
 
-Os modos `lines` e `corpus` produziram o mesmo resultado sobre o arquivo bruto:
+Na validação inicial, anterior ao resultado multi-token lossless, os modos
+`lines` e `corpus` produziram o mesmo resultado sobre o arquivo bruto:
 
 ```text
 checksum=22723 units=4570 analyses=18153
@@ -189,6 +193,16 @@ checksum=22768 units=4573 analyses=18195
 
 Com três iterações, o checksum de `lines` foi exatamente `68169`, três vezes o
 valor de uma iteração.
+
+No HEAD lossless atual, uma passagem por `lines` produz:
+
+```text
+checksum=22821 units=4570 tokens=6 analyses=18245
+```
+
+Os seis tokens e as 52 análises aninhadas pertencem aos três compostos aceitos
+na Eneida. O checksum anterior desse mesmo HEAD era 22.763 porque somava as 40
+análises de primeiro nível preservadas, mas não observava os snapshots.
 
 ### Primeiro perfil isolado
 
@@ -2339,6 +2353,165 @@ convém reperfilar a engine: a agenda resolveu o desperdício estrutural mais
 óbvio dos rewrites, mas preservou deliberadamente o vetor e o sort de
 tentativas para que especialização por escopo ou enumeração lazy sejam
 experimentos independentes.
+
+### Validade dos perfis após a análise multi-token lossless
+
+Os números da agenda de rewrites foram produzidos e registrados em `c402fca`.
+Depois dele, `77a0ce1` tornou a hipótese de composto aditiva, em vez de
+substituir as análises independentes do primeiro token, e `32f599d` adicionou
+snapshots próprios dos dois tokens, assessments e projeções JSON/WASM. O A/B
+histórico da agenda continua válido para aquela revisão, mas seus artefatos não
+devem ser tratados como baseline do HEAD `32f599d`.
+
+Há quatro efeitos de performance distintos:
+
+- `QueryResult` cresceu de 824 para 848 bytes (+24; +2,91%) porque todo
+  resultado agora contém o vetor `independent_tokens`, mesmo vazio;
+- `RomanNumeralIR` cresceu de 264 para 280 bytes com o assessment;
+- `assess_morphology` ganhou uma condição executada para análises verbais e o
+  fechamento de todo token chama a nova checagem de abreviação com ponto;
+- em compostos aceitos, as análises independentes permanecem no resultado e
+  os dois snapshots fazem cópias profundas de `SurfaceForm`, análises,
+  artificiais e diagnósticos.
+
+A Eneida IV encontrou três resultados compostos nesse caminho. O checksum do
+harness mudou de 22.723 para 22.763 porque 40 análises do primeiro token agora
+são preservadas. Naquele ponto, o checksum ainda ignorava
+`independent_tokens`; portanto não protegia o custo nem a completude dos
+snapshots. Antes do próximo A/B convinha
+somar também quantidade de tokens e análises aninhadas, tanto no benchmark
+nativo quanto no binding de profiling WASM, e manter um corpus pequeno
+específico de compostos além da Eneida.
+
+Uma mudança compensa parte do novo custo: o antigo `analyze_compound` alocava
+`source_indices` mesmo para hipóteses rejeitadas e depois materializava outro
+vetor de fontes. No DHAT isso representava 110.800 bytes em 3.222 blocos. A
+remoção explica por que o HEAD faz mais trabalho sem aumentar a contagem total
+de alocações.
+
+O `preserve_independent_tokens` de `32f599d` usava atribuição por
+`initializer_list`:
+
+```cpp
+result.independent_tokens = {independent_token(result),
+                             independent_token(auxiliary)};
+```
+
+Como os elementos do `initializer_list` são `const`, os temporários já
+copiados são copiados novamente para o vetor. O DHAT atribuiu 34.332 bytes/39
+blocos ao caminho dos snapshots; pelo menos 16.398 bytes/18 blocos são essa
+segunda cópia e poderiam ser eliminados com `reserve(2)` seguido de `push_back`
+ou `emplace_back`. Um passo posterior poderia mover o snapshot do auxiliar,
+que não é mais usado quando o composto é aceito, mantendo apenas a cópia
+necessária do primeiro token.
+
+Uma nova medição no NativeLab comparou o executável exato de `c402fca` com o
+HEAD:
+
+| Métrica | `c402fca` | `32f599d` | Delta |
+| --- | ---: | ---: | ---: |
+| checksum da engine | 22.723 | 22.763 | +40 |
+| instruções da engine | 464.323.178 | 464.284.431 | -0,008% |
+| bytes alocados | 35.365.760 | 35.549.955 | +0,52% |
+| blocos alocados | 113.354 | 110.171 | -2,81% |
+| `.text` do benchmark nativo | 690.495 | 699.567 | +1,31% |
+| `words_wasm.wasm` | 840.795 | 857.625 | +2,00% |
+| CLI `analysis`, instruções | 3.909.250.870 | 3.909.302.110 | +0,001% |
+| CLI `search`, instruções | 1.264.719.400 | 1.264.916.369 | +0,016% |
+
+Em três pares intercalados de 100 passagens, com flags idênticas, a mediana foi
+44,878 ms por corpus em `c402fca` e 44,810 ms no HEAD (-0,15%). A dispersão
+dentro de cada trio é maior que essa diferença, então o tempo de parede é
+inconclusivo; o Callgrind indica CPU total essencialmente neutra. Cache misses
+não devem ser comparados diretamente porque o novo campo alterou layout e
+tamanho dos objetos.
+
+O CLI acima usa 4.573 consultas unitárias e, por isso, não exercita snapshots
+de compostos. Já os perfis de `analyze_line`, corpus inteiro, heap C++ WASM e
+browser end-to-end exercitam o novo ownership e precisam ser refeitos antes de
+avaliar sink ou materialização. O custo de JSON/WASM também mudou
+qualitativamente: as projeções agora percorrem os tokens aninhados, e o JSON
+v2 chega a serializar e fazer parse de cada documento de token para remontar o
+documento pai.
+
+Os artefatos desta checagem estão em
+`build/perf-investigation-clang/profiles/post-lossless-head-2026-09-10.callgrind`,
+`post-lossless-head-2026-09-10.dhat.json` e
+`cli-*-post-lossless-head.callgrind`.
+
+### Resultado: checksum lossless e cópias dos snapshots de compostos
+
+O harness nativo e os dois modos do harness Wasm passaram a contabilizar
+separadamente unidades, snapshots de tokens e todas as análises aninhadas. O
+comparador Wasm também exige igualdade dos três componentes por iteração, não
+apenas da soma. Isso transforma a representação lossless em guardrail de A/B:
+
+| Corpus | Unidades | Snapshots | Análises | Checksum |
+| --- | ---: | ---: | ---: | ---: |
+| 12 compostos aceitos | 12 | 24 | 253 | 289 |
+| Eneida IV | 4.570 | 6 | 18.245 | 22.821 |
+
+O microcorpus está em `whitakers-words/benchmarks/compound-corpus.txt` e contém
+formas com `sum` em tempos, números e gêneros distintos, além de enclítico. O
+teste `CompoundAnalysisPreservesEveryIndependentToken` confere que
+`QueryResult::total_analyses()` inclui exatamente os snapshots equivalentes às
+consultas isoladas. Os testes existentes continuam cobrindo rejeição por
+concordância, lookahead rejeitado e preservação das derivações do auxiliar.
+
+A atribuição por `initializer_list` foi substituída por um vetor reservado para
+dois elementos. O primeiro token ainda precisa ser copiado porque também
+permanece no resultado principal; o auxiliar é movido somente depois de o
+composto ter sido aceito e não ser mais consultado. Falhas de lookahead não
+movem o auxiliar.
+
+Foram medidas três variantes no NativeLab, com 100 passagens pelo microcorpus
+sob Callgrind e uma passagem sob DHAT:
+
+| Variante | Instruções | Bytes DHAT | Blocos DHAT | Wasm de profiling |
+| --- | ---: | ---: | ---: | ---: |
+| `initializer_list` | 110.054.776 | 9.983.483 | 649 | 1.052.081 B |
+| cópia única dos dois tokens | 107.190.724 | 9.941.276 | 577 | 1.053.258 B |
+| cópia do primeiro + move do auxiliar | 106.030.885 | 9.930.375 | 541 | 1.053.558 B |
+
+A variante final reduz 3,66% das instruções, 53.108 bytes e 108 alocações no
+corpus focado. Cinco pares intercalados nativos deram medianas de 87,893 para
+80,448 microssegundos por passagem (-8,47%). Em relação à variante intermediária,
+o move custa mais 300 bytes no Wasm de profiling, mas evita outras 36 alocações,
+10.901 bytes de churn e 1,08% das instruções do baseline.
+
+Na Eneida, que contém somente três compostos aceitos, a redução naturalmente se
+dilui: 463.723.693 para 463.522.198 instruções (-0,043%), 35.549.965 para
+35.531.311 bytes e 110.171 para 110.144 blocos. A mediana de três pares de 100
+passagens caiu 1,42%, mas a dispersão e um par invertido tornam tempo de parede
+global inconclusivo; Callgrind é a evidência adequada para esse sinal pequeno.
+
+No Wasm, três amostras do core sobre o corpus focado deram medianas de 178,681
+para 169,919 microssegundos (-4,90%); o end-to-end caiu 1,18%. Na Eneida, o
+end-to-end ficou essencialmente neutro e o core amostral variou para os dois
+lados, com mediana pareada 2,37% pior. Isso não acompanha a contagem de
+instruções nativa e deve ser tratado como sensibilidade de layout/JIT, não como
+speedup global demonstrado. O Wasm Release cresceu de 857.625 para 859.224
+bytes (+1.599; +0,186%), e a build com nomes de profiling cresceu 1.477 bytes
+(+0,140%). O `.text` do benchmark nativo fez o oposto: caiu de 699.703 para
+695.959 bytes (-3.744; -0,535%). Essa divergência reforça que tamanho e layout
+precisam ser medidos separadamente em cada backend.
+
+O binding de heap Wasm mede memória viva depois de cada resultado, não churn.
+Por isso ele não substitui DHAT neste experimento: mover os vetores preserva a
+capacidade do auxiliar e elevou o snapshot vivo do microcorpus em 1.944 bytes,
+embora elimine cópias transitórias. Na Eneida a diferença viva foi 40 bytes.
+Em ambos os casos, `afterAllocatedDeltaBytes` e crescimento da memória linear
+continuaram zero. Esse detalhe é relevante para a futura API sink: projeção e
+destruição imediatas favorecem o move; retenção longa de muitos compostos pode
+preferir compactação deliberada.
+
+A variante final passou nos 129 testes regulares, nos 111 testes unitários sob
+ASan/UBSan no NativeLab e nos builds WebAssembly Release e de profiling.
+
+Artefatos: `snapshot-copy-{before,after,single-copy}-{compound,aeneid}.*` em
+`build/perf-investigation-clang/profiles/`, os módulos congelados em
+`build/wasm-profile/snapshot-copy-*` e os summaries `snapshot-copy-*` e
+`ab-repeat-*` em `build/wasm-profile/profiles/`.
 
 ## Limitações
 

@@ -100,6 +100,7 @@ function parseArguments(arguments_) {
 function addCounts(left, right) {
   const result = {
     units: left.units + right.units,
+    tokens: left.tokens + right.tokens,
     analyses: left.analyses + right.analyses,
     checksum: left.checksum + right.checksum,
   };
@@ -111,16 +112,23 @@ function addCounts(left, right) {
 
 function countResults(results) {
   let analyses = 0;
-  for (const result of results) analyses += result.hits.length;
+  let tokens = 0;
+  for (const result of results) {
+    analyses += result.hits.length;
+    const independentTokens = result.tokens ?? [];
+    tokens += independentTokens.length;
+    for (const token of independentTokens) analyses += token.hits.length;
+  }
   return {
     units: results.length,
+    tokens,
     analyses,
-    checksum: results.length + analyses,
+    checksum: results.length + tokens + analyses,
   };
 }
 
 function runEndToEnd(engine, corpus, iterations, twoWords) {
-  let total = {units: 0, analyses: 0, checksum: 0};
+  let total = {units: 0, tokens: 0, analyses: 0, checksum: 0};
   for (let iteration = 0; iteration < iterations; ++iteration) {
     total = addCounts(
       total,
@@ -228,7 +236,7 @@ async function main() {
   let session;
   try {
     const warmup = options.warmup === 0
-      ? {units: 0, analyses: 0, checksum: 0}
+      ? {units: 0, tokens: 0, analyses: 0, checksum: 0}
       : run(options.warmup);
 
     if (options.profiler === "inspector") {
@@ -270,6 +278,7 @@ async function main() {
       measureCppHeap: options.measureHeap,
       checksum: measured.checksum,
       units: measured.units,
+      tokens: measured.tokens,
       analyses: measured.analyses,
       warmupChecksum: warmup.checksum,
       elapsedNs: Number(elapsedNs),

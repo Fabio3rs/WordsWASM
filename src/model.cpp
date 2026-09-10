@@ -18,4 +18,13 @@ std::string_view SurfaceForm::slice(const SurfaceRange range) const noexcept {
                                                    last_byte - first_byte);
 }
 
+std::size_t QueryResult::total_analyses() const noexcept {
+    auto total =
+        analyses.size() + compound_analyses.size() + artificial_analyses.size();
+    for (const auto &token : independent_tokens) {
+        total += token.analyses.size() + token.artificial_analyses.size();
+    }
+    return total;
+}
+
 } // namespace words

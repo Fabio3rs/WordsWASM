@@ -43,6 +43,7 @@ struct LoadResult final {
 struct BrowserBenchmarkResult final {
     double checksum{};
     double units{};
+    double tokens{};
     double analyses{};
 };
 
@@ -59,6 +60,7 @@ struct BrowserHeapSnapshot final {
 struct BrowserMemoryBenchmarkResult final {
     double checksum{};
     double units{};
+    double tokens{};
     double analyses{};
     BrowserHeapSnapshot before;
     BrowserHeapSnapshot peak_results_live;
@@ -76,6 +78,7 @@ constexpr auto maximum_safe_javascript_integer =
 
 struct BenchmarkCounts final {
     std::uint64_t units{};
+    std::uint64_t tokens{};
     std::uint64_t analyses{};
 };
 
@@ -91,16 +94,15 @@ void consume_benchmark_results(const std::vector<words::QueryResult> &results,
                                BenchmarkCounts &counts) {
     add_benchmark_count(counts.units, results.size());
     for (const auto &result : results) {
-        add_benchmark_count(counts.analyses, result.analyses.size());
-        add_benchmark_count(counts.analyses,
-                            result.compound_analyses.size());
-        add_benchmark_count(counts.analyses,
-                            result.artificial_analyses.size());
+        add_benchmark_count(counts.analyses, result.total_analyses());
+        add_benchmark_count(counts.tokens, result.independent_tokens.size());
     }
 }
 
 void validate_benchmark_checksum(const BenchmarkCounts counts) {
-    if (counts.analyses > maximum_safe_javascript_integer - counts.units) {
+    if (counts.tokens > maximum_safe_javascript_integer - counts.units ||
+        counts.analyses >
+            maximum_safe_javascript_integer - counts.units - counts.tokens) {
         throw std::overflow_error{
             "benchmark checksum exceeds JavaScript safe integer"};
     }
@@ -110,8 +112,10 @@ void validate_benchmark_checksum(const BenchmarkCounts counts) {
 browser_benchmark_result(const BenchmarkCounts counts) {
     validate_benchmark_checksum(counts);
     return BrowserBenchmarkResult{
-        .checksum = static_cast<double>(counts.units + counts.analyses),
+        .checksum =
+            static_cast<double>(counts.units + counts.tokens + counts.analyses),
         .units = static_cast<double>(counts.units),
+        .tokens = static_cast<double>(counts.tokens),
         .analyses = static_cast<double>(counts.analyses),
     };
 }
@@ -1037,6 +1041,7 @@ class BrowserAnalysisEngine final {
         return BrowserMemoryBenchmarkResult{
             .checksum = result.checksum,
             .units = result.units,
+            .tokens = result.tokens,
             .analyses = result.analyses,
             .before = before,
             .peak_results_live = peak_results_live,
@@ -1113,6 +1118,7 @@ EMSCRIPTEN_BINDINGS(words_analysis_engine) {
     emscripten::value_object<BrowserBenchmarkResult>("BenchmarkResult")
         .field("checksum", &BrowserBenchmarkResult::checksum)
         .field("units", &BrowserBenchmarkResult::units)
+        .field("tokens", &BrowserBenchmarkResult::tokens)
         .field("analyses", &BrowserBenchmarkResult::analyses);
 
     emscripten::value_object<BrowserHeapSnapshot>("HeapSnapshot")
@@ -1128,6 +1134,7 @@ EMSCRIPTEN_BINDINGS(words_analysis_engine) {
         "MemoryBenchmarkResult")
         .field("checksum", &BrowserMemoryBenchmarkResult::checksum)
         .field("units", &BrowserMemoryBenchmarkResult::units)
+        .field("tokens", &BrowserMemoryBenchmarkResult::tokens)
         .field("analyses", &BrowserMemoryBenchmarkResult::analyses)
         .field("before", &BrowserMemoryBenchmarkResult::before)
         .field("peakResultsLive",

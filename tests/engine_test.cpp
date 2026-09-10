@@ -1435,6 +1435,12 @@ TEST(EngineTest, CompoundAnalysisPreservesEveryIndependentToken) {
             semantic_signatures(result.independent_tokens[1].analyses),
             semantic_signatures(isolated_second.analyses))
             << fixture.phrase;
+        EXPECT_EQ(result.total_analyses(),
+                  result.analyses.size() + result.compound_analyses.size() +
+                      result.artificial_analyses.size() +
+                      isolated_first.total_analyses() +
+                      isolated_second.total_analyses())
+            << fixture.phrase;
 
         const auto full =
             Json::parse(analysis_json_v2(test::engine(), result));

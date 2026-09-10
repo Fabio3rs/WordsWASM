@@ -64,9 +64,23 @@ if (baselinePath === undefined || candidatePath === undefined ||
     );
   }
 
+  const countProperties = ["units", "tokens", "analyses"];
+  const countsPerIteration = {};
+  for (const property of countProperties) {
+    const before = baseline[property] / baseline.iterations;
+    const after = candidate[property] / candidate.iterations;
+    if (!Number.isSafeInteger(before) || before !== after) {
+      throw new Error(
+        `${property} per iteration differs: ${before} != ${after}`,
+      );
+    }
+    countsPerIteration[property] = before;
+  }
+
   const comparison = {
     mode: baseline.mode,
     checksumPerIteration: baselineChecksum,
+    countsPerIteration,
     runtime: {
       executable: baseline.runtime.executable,
       node: baseline.runtime.node,

@@ -772,6 +772,10 @@ struct QueryResult final {
     explicit QueryResult(DatasetIdentity result_origin)
         : origin{std::move(result_origin)} {}
 
+    // Counts every materialized interpretation, including the owned token
+    // snapshots carried by a lossless compound result.
+    [[nodiscard]] std::size_t total_analyses() const noexcept;
+
     DatasetIdentity origin;
     AnalysisOptions options;
     SurfaceForm surface;
