@@ -171,6 +171,24 @@ TEST(DatabaseTest, CanonicalLookupIndexesRemainInternallyConsistent) {
     }
 }
 
+TEST(DatabaseTest, CanonicalLookupKeysPreserveSourceSpellings) {
+    const auto &database = test::engine().database();
+    const auto resolves_source_spelling = [&database](
+                                              const std::string_view canonical,
+                                              const std::string_view source) {
+        const auto references = database.lookup_stem(canonical);
+        return std::ranges::any_of(
+            references, [&database, source](const StemReference &reference) {
+                const auto &lexeme = database.lexeme(reference.lexeme);
+                return database.stem_string(
+                           lexeme.stems.at(reference.lexical_slot)) == source;
+            });
+    };
+
+    EXPECT_TRUE(resolves_source_spelling("iupiter", "Jupiter"));
+    EXPECT_TRUE(resolves_source_spelling("uulcan", "Vulcan"));
+}
+
 TEST(DatabaseTest, LoadsColumnarSearchPocWithoutMeaningPools) {
     auto database = Database::load_poc(test::read_search_database());
     ASSERT_TRUE(database) << database.error().message;

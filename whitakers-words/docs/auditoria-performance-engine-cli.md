@@ -1,9 +1,10 @@
 # Auditoria de performance da engine e do CLI C++23
 
 Executada em 10 de setembro de 2026. A primeira coleta registrou somente a
-investigação e o harness de profiling. Depois dela, a hipótese F-04 foi
-implementada isoladamente e medida novamente contra o mesmo corpus, executável
-e configuração. As demais propostas continuam sendo possibilidades de estudo.
+investigação e o harness de profiling. Depois dela, F-04, F-05a e F-05b foram
+implementadas isoladamente e medidas novamente contra o mesmo corpus,
+executável e configuração. As demais propostas continuam sendo possibilidades
+de estudo.
 
 ## Resumo executivo
 
@@ -11,8 +12,9 @@ Os perfis separam três domínios de custo:
 
 1. no formato `analysis`, a construção e destruição do DOM JSON é o custo
    dominante do CLI;
-2. dentro da engine, síncope/ortografia, consultas repetidas aos índices e a
-   materialização do vetor de candidatos são os hotpaths mais promissores;
+2. dentro da engine, o scheduler de síncope/ortografia, o lexer Unicode usado
+   também por formas internas e os custos restantes de consulta aos índices
+   são os hotpaths mais promissores;
 3. na inicialização, o loader reconstrói e ordena índices que poderiam vir
    prontos do WWDB.
 
@@ -20,19 +22,28 @@ As oportunidades com melhor relação entre impacto e risco são:
 
 - escrever JSON diretamente em um buffer ou `ostream`, sem construir um DOM;
 - manter um cache limitado por consulta no modo batch;
+- canonizar uma vez somente as chaves não canônicas dos índices em uma arena
+  privada pequena, permitindo comparação por bytes no steady-state
+  (implementado e medido em F-05b);
+- adicionar um fast path ASCII ao lexer, preservando o caminho Unicode;
 - indexar regras de reescrita por tipo, estágio e prioridade;
 - percorrer os spans de terminações sem materializar `CandidateIR`
   (implementado e medido em F-04);
+- comparar a chave armazenada com a consulta já canônica sem normalizar os dois
+  lados (implementado e medido em F-05a);
 - experimentar tries compactos para stems e afixos;
 - persistir os índices já ordenados no WWDB;
 - substituir a normalização Unicode geral por um lexer de domínio latino com
   fast path ASCII e tabelas finitas para quantidade vocálica.
 
-A primeira otimização implementada substituiu o vetor transitório de
-`CandidateIR` por grupos inline e materialização por valor somente no consumo.
-No perfil isolado da engine, ela removeu 18.790.000 bytes de alocações, reduziu
-as instruções em 12,15%, os branches em 22,09% e os misses D1 em 16,75%, sem
-alterar checksums, resultados diferenciais ou aumentar `.text`.
+F-04 substituiu o vetor transitório de `CandidateIR` por grupos inline e
+materialização por valor somente no consumo, removendo 18.790.000 bytes de
+alocações. F-05a retirou a normalização do lado já canônico da consulta, e
+F-05b passou a canonizar uma vez as chaves armazenadas. Em sequência, as três
+mudanças levaram a região isolada de 788.641.095 para 503.316.489 instruções
+(-36,18%), de 137.438.204 para 72.000.199 branches (-47,61%) e de 2.037.545
+para 1.727.231 misses D1 (-15,23%), com checksum e semântica preservados. O CI
+de F-05a e as validações nativa, WASM e sanitizada de F-05b passaram.
 
 ## Ambiente e metodologia
 
@@ -470,8 +481,8 @@ uma atribuição de tempo. Para árvore de chamadas e custos inclusivos, deve-se
 abrir o arquivo Callgrind em KCachegrind; o perfil LLVM instrumentado não contém
 pilhas de chamadas.
 
-Na execução de validação, que inclui um warmup e três iterações no perfil LLVM,
-os maiores block counts foram:
+Na execução anterior a F-05a, que inclui um warmup e três iterações no perfil
+LLVM, os maiores block counts foram:
 
 - `normalized_char`: 70.183.235;
 - `normalized_compare`: 35.091.563;
@@ -480,8 +491,40 @@ os maiores block counts foram:
 - `append_suffix_analyses`: 7.363.072;
 - `analyze_syncope`: 5.133.848.
 
-Isso reforça simultaneamente F-03, sobre o scheduler de reescritas, e F-05,
-sobre normalização repetida dentro dos lookups.
+Depois de F-05a, a mesma execução foi repetida com checksum 68.169. Os pontos
+mais relevantes passaram a ser:
+
+- `normalized_char`: 39.254.539;
+- `stored_key_compare_canonical_query`: 30.928.696;
+- `rewrite_attempts`: 17.816.000;
+- `stored_key_less_canonical_query`: 16.722.004;
+- `CandidateRange::EndingMatch::candidate`: 5.627.416;
+- `analyze_syncope`: 5.133.848;
+- `normalized_compare`: 4.162.867, agora restrito principalmente ao loader.
+
+O contador de `rewrite_attempts` ficou exatamente igual, enquanto
+`normalized_compare` caiu de 35,09 milhões para 4,16 milhões e
+`normalized_char`, de 70,18 milhões para 39,25 milhões. Isso confirma que
+F-05a retirou trabalho dos lookups sem mascarar a oportunidade independente de
+F-03. O novo heatmap navegável está em
+`build/profile-instr/coverage-html-post-f05/index.html`; ele mostra frequência
+de blocos e branches, não tempo nem pilhas de chamada.
+
+Depois de F-05b, o checksum continuou em 68.169 e o mesmo perfil passou a
+mostrar:
+
+- `canonical_compare`: 30.928.696 iterações;
+- `canonical_less`: 16.722.004;
+- `normalized_char`: 9.137.900, agora fora dos lookups de steady-state;
+- `rewrite_attempts`: 17.816.000, novamente invariável;
+- `CandidateRange::EndingMatch::candidate`: 5.627.416;
+- `normalized_compare`: 4.162.867, restrito ao trabalho do loader.
+
+O total de contagens do perfil caiu de 387.297.862 depois de F-05a para
+312.182.249 depois de F-05b. O heatmap final está em
+`build/profile-instr/coverage-html-f05b/index.html`. A permanência dos números
+de rewrite e de construção lazy de candidatos reforça que o ganho veio da
+comparação dos índices, não de uma alteração no trabalho semântico realizado.
 
 ## Tempos nativos
 
@@ -1084,6 +1127,19 @@ Seções alocáveis relevantes do ELF `RelWithDebInfo`:
 | `.eh_frame` | 21.592 |
 | `.gcc_except_table` | 24.356 |
 
+Um novo snapshot depois de F-05a mediu 470.277 bytes de `.text` e 355.448 de
+`.rodata` no CLI `RelWithDebInfo`. O browser build produzido pelo Emscripten
+tem 838.304 bytes em `words_wasm.wasm` e 56.721 bytes no wrapper `.mjs`. Esses
+valores passam a ser a baseline de tamanho para os próximos A/B; não constituem
+por si sós um delta atribuível a F-05a, porque não foi preservado um artefato
+WASM imediatamente anterior com a mesma toolchain.
+
+Depois de F-05b, o CLI ficou com 468.725 bytes de `.text` (-1.552; -0,33%) e
+355.800 bytes de `.rodata` (+352; +0,10%). O WASM ficou com 839.084 bytes
+(+780; +0,09%) e o wrapper `.mjs` permaneceu em 56.721 bytes. Assim, a arena
+privada não causou crescimento relevante do artefato e a unificação do código
+dos grupos recuperou inclusive 1,5 KiB de `.text` nativo.
+
 Maiores objetos de código medidos:
 
 | Objeto | `.text` aproximado |
@@ -1193,7 +1249,7 @@ instruções, comparações repetidas e allocator churn do que para espera por R
 Como são caches simulados, a conclusão deve ser confirmada com contadores de
 hardware quando `perf` estiver disponível.
 
-## Reavaliação geral depois de F-04
+## Reavaliação geral depois de F-04, F-05a e F-05b
 
 Esta reavaliação usa somente `words_engine_benchmark`, ligado a `words_core`.
 Loader, DOM JSON, serialização e escrita do CLI ficam fora da região medida.
@@ -1215,7 +1271,7 @@ foi eliminada sem mudar API pública, WWDB ou WASM. Depois da mudança:
 Assim, o hotpath mais grave e óbvio de alocação interna foi resolvido, mas não
 todos os hotpaths relevantes da engine.
 
-### Hotpaths atuais
+### Hotpaths antes de F-05a
 
 No Callgrind pós-F-04, os custos exclusivos dos quatro lookups principais são:
 
@@ -1303,20 +1359,95 @@ Validação de F-05a:
   semântica preservados;
 - 116/116 testes com ASan/UBSan. LeakSanitizer foi desabilitado porque não
   funciona sob o `ptrace` deste ambiente, não por diagnóstico do programa;
+- CI GitHub completo: engine e oráculo Ada, CLIs Linux/Windows/macOS x86-64 e
+  macOS arm64, sanitizers GCC/Clang/MSVC e build/análise no navegador;
 - `git diff --check` limpo.
 
-Há ainda uma duplicação separada de código: os oito métodos repetem o mesmo
-`lower_bound`, teste de igualdade e recorte por `first/count`, e os tipos
-`StemGroup`, `EndingGroup`, `UniqueGroup`, `SuffixGroup`, `PrefixGroup` e
-`TackonGroup` têm o mesmo layout. Um `LookupGroup` comum permitiria extrair uma
-única busca não-template e deixar wrappers tipados apenas para formar o
-`span`. Isso pode reduzir fonte e talvez `.text`, mas não deve ser misturado ao
-A/B do comparador: um helper template ainda tende a gerar oito instanciações,
-e impedir inline à força pode trocar tamanho por custo de chamada. Primeiro se
-mede o comparador; depois se compara tamanho nativo/WASM e instruções com a
-deduplicação isolada.
+#### Resultado F-05b — arena canônica somente para chaves não canônicas
 
-Outros custos ainda claros:
+O perfil LLVM pós-F-05a ainda contou 30.928.696 iterações de
+`stored_key_compare_canonical_query` e 39.254.539 chamadas a
+`normalized_char`. O lado da consulta já não é normalizado; o custo restante
+vem da chave armazenada e, em menor parte, da construção dos índices no loader.
+
+Não é seguro canonizar `image_` ou os pools de strings em memória. Os mesmos
+bytes são retornados por `stem_string`, `ending_string` e pelos acessores de
+addons, e participam de formas de dicionário, provenance e JSON. Alterá-los
+converteria dados de apresentação como `Jupiter`/`Vulcan`, não apenas o índice.
+
+Uma inspeção com GDB no NativeLab, no ponto final do loader, mediu as chaves dos
+oito índices:
+
+| Índice | Grupos | Bytes de chave | Grupos não canônicos | Bytes a copiar |
+| --- | ---: | ---: | ---: | ---: |
+| stems | 48.463 | 381.991 | 8.495 | 66.814 |
+| endings | 459 | 1.931 | 0 | 0 |
+| uniques | 58 | 379 | 7 | 37 |
+| suffixes | 123 | 396 | 3 | 9 |
+| prefixes | 115 | 424 | 4 | 6 |
+| tickons | 6 | 18 | 0 | 0 |
+| tackons | 15 | 55 | 2 | 5 |
+| packons | 11 | 45 | 1 | 3 |
+| **total** | **49.250** | **385.239** | **8.512** | **66.874** |
+
+Depois de lowercase e `j -> i`, `v -> u`, todas as 49.250 chaves ficam em
+`[a-z]*`; a terminação vazia continua válida. A implementação não mudou o
+WWDB e passou a:
+
+1. conservar a `string_view` original para os 40.738 grupos já canônicos;
+2. somar previamente os 66.874 bytes das demais chaves;
+3. reservar uma única arena de `char`, preenchê-la sem nova realocação e
+   redirecionar somente essas views;
+4. usar um comparador lexicográfico manual de bytes nos oito lookups.
+
+O custo persistente observado é cerca de 65,3 KiB e uma alocação, não uma cópia
+dos 385 KiB nem 8.512 alocações. A arena recebe um único `resize` com o tamanho
+exato antes de qualquer `string_view` ser redirecionada e permanece imutável
+durante a vida do `Database`. Os pools de apresentação não são alterados. O
+loader rejeita bytes que não pertençam ao domínio canônico latino, e validações
+de overflow e do tamanho final protegem a construção da arena.
+
+Um primeiro A/B usou a comparação padrão de `std::string_view`, que nesta
+toolchain chamou `memcmp`. O resultado foi rejeitado: 566.199.113 instruções
+(-0,30% contra F-05a), mas 215.106.231 referências a dados (+13,87%),
+96.022.277 branches (+4,82%) e 5,30 milhões de branches indiretos, contra 1,08
+milhão na baseline. Também acrescentou 8.256 bytes de `.text` e 6.581 bytes ao
+WASM. Para estas chaves curtas e divergências precoces, a chamada genérica era
+pior que um laço byte a byte que retorna na primeira diferença.
+
+A variante final usa esse laço manual e unifica os tipos de grupo de mesmo
+layout em `LookupGroup`. Uma única rotina percorre um array de oito spans para
+construir a arena, evitando oito instanciações do mesmo código. Esse ajuste
+também eliminou o crescimento de `.text` observado no protótipo.
+
+Callgrind final, com a mesma configuração, corpus, warmup e iteração:
+
+| Métrica | F-05a | F-05b | Delta |
+| --- | ---: | ---: | ---: |
+| instruções | 567.928.816 | 503.316.489 | -11,38% |
+| referências a dados | 188.911.255 | 187.088.295 | -0,96% |
+| misses I1 | 2.318.801 | 2.110.675 | -8,98% |
+| misses D1 | 1.696.451 | 1.727.231 | +1,81% |
+| misses LL | 23.962 | 24.276 | +1,31% |
+| branches | 91.611.347 | 72.000.199 | -21,41% |
+| mispredicts | 6.834.882 | 4.685.523 | -31,45% |
+| checksum | 22.723 | 22.723 | idêntico |
+
+O DHAT confirmou o custo esperado da arena: 35.363.446 bytes em 113.352 blocos
+e pico de 9.752.473 bytes, contra 35.297.094 bytes, 113.351 blocos e pico de
+9.686.313 na baseline. Isso representa +66.352 bytes totais, uma alocação e
++66.160 bytes de pico. Não havia bytes vivos ao encerrar o processo.
+
+Validação de F-05b:
+
+- checksum 22.723 no benchmark de uma iteração e 68.169 no perfil LLVM de três;
+- teste dedicado garante que consultas canônicas ainda retornam as grafias de
+  origem `Jupiter` e `Vulcan`, sem mutar os pools públicos;
+- guardrails de quantidade, `i/j`, `u/v` e consistência de todos os índices;
+- 117/117 testes no build Debug e 117/117 com ASan/UBSan;
+- builds RelWithDebInfo e Emscripten/WASM com as flags estritas do projeto.
+
+No Callgrind pós-F-04, anterior ao comparador, outros custos já claros foram:
 
 - `LatinLexer::lex`: 7,27% inclusivos; somente `map_utf8` representa 5,79%;
 - `rewrite_attempts`: 6,92% inclusivos, além das análises lexicais disparadas
@@ -1334,7 +1465,7 @@ e 8.023 alocações de `vector<Glyph>`: limite superior de 40.115 blocos, ou
 primeira etapa; a retirada completa de utf8proc permanece um experimento
 posterior e separado.
 
-### Ablações pós-F-04
+### Ablações pós-F-05a
 
 As ablações abaixo foram executadas no NativeLab com Callgrind sobre o mesmo
 corpus. Elas alteram resultados e caminhos de controle, portanto são limites
@@ -1343,17 +1474,25 @@ otimização. Os percentuais se sobrepõem e não podem ser somados.
 
 | Configuração | Instruções | Delta | Checksum |
 | --- | ---: | ---: | ---: |
-| padrão | 692.809.841 | — | 22.723 |
-| sem síncope | 361.614.452 | -47,80% | 22.660 |
-| sem ortografia | 510.779.789 | -26,27% | 22.695 |
-| sem sufixos | 477.056.449 | -31,14% | 22.683 |
-| sem derivações produtivas | 417.192.274 | -39,78% | 22.680 |
+| padrão | 567.928.816 | — | 22.723 |
+| sem síncope | 304.980.280 | -46,30% | 22.660 |
+| sem ortografia | 424.987.383 | -25,17% | 22.695 |
+| sem sufixos | 411.561.668 | -27,53% | 22.683 |
+| sem derivações produtivas | 369.906.572 | -34,87% | 22.680 |
 
 Síncope, ortografia e sufixos custam muito mais que a quantidade de análises
 adicionais sugere, mas parte relevante é trabalho lexical necessário para
 provar que uma tentativa falha. O primeiro corte seguro é reduzir varreduras e
 tentativas redundantes, preservando todos os resultados, não simplesmente
 desabilitar mecanismos.
+
+Os quatro perfis foram gerados no NativeLab com simulação de cache e branches.
+Os artefatos foram preservados em
+`build/profile-instr/profiles/engine-lines-post-f05-*.callgrind`. O comparador
+reduziu todos os caminhos que fazem lookups, mas não mudou a conclusão: rewrites
+continuam com o maior teto de CPU. O valor de `rewrite_attempts` no perfil LLVM
+também permaneceu em 17.816.000 execuções, indicando que a próxima redução deve
+vir da enumeração/scheduling das regras, não de mais ajustes no comparador.
 
 ### Backlog por ondas
 
@@ -1362,11 +1501,14 @@ desabilitar mecanismos.
 1. **Concluído em F-05a:** comparador para chave armazenada versus consulta já
    canônica, removendo a normalização redundante do lado direito nos oito
    `lookup_*`; -18,03% de instruções no Callgrind.
-2. Adicionar o fast path ASCII de uma passagem ao lexer, mantendo utf8proc como
+2. **Concluído em F-05b:** arena única de cerca de 65 KiB para as chaves não
+   canônicas e comparação manual por bytes; -11,38% de instruções e -21,41% de
+   branches adicionais no Callgrind.
+3. Adicionar o fast path ASCII de uma passagem ao lexer, mantendo utf8proc como
    fallback Unicode.
-3. Indexar as 170 reescritas por tipo, estágio e prioridade; depois medir
+4. Indexar as 170 reescritas por tipo, estágio e prioridade; depois medir
    buckets pelo primeiro byte da sequência `before`.
-4. Reperfilar após cada mudança. Só avançar se checksum, diferenciais, tamanho
+5. Reperfilar após cada mudança. Só avançar se checksum, diferenciais, tamanho
    nativo/WASM e sanitizers permanecerem aceitáveis.
 
 #### Onda E2 — escolher com os novos perfis
@@ -1374,8 +1516,8 @@ desabilitar mecanismos.
 1. Avaliar buffer inline para os IDs de addons, priorizando quantidade de
    alocações; os bytes envolvidos são pequenos.
 2. Comparar trie reverso de terminações com o `lower_bound` já simplificado. O
-   teto atual de `lookup_ending` é 5,65% inclusivos, portanto o trie não deve
-   preceder o experimento mais geral de comparação canônica.
+   teto histórico de `lookup_ending` era 5,65% inclusivos antes de F-05a;
+   portanto o trie deve ser reperfilado depois da arena canônica.
 3. Medir ordenação indireta/chaves pré-calculadas para `AnalysisIR`; hoje o
    sort representa 2,57%, logo não justifica ainda uma grande reestruturação.
 
@@ -1403,21 +1545,23 @@ atribuída ao subsistema; não é uma promessa de que toda a fatia desaparecerá
 | Ordem | Hipótese | Código | Risco | Benefício provável | Teto ou evidência atual |
 | ---: | --- | --- | --- | --- | --- |
 | 1 | **Concluído:** comparador chave armazenada × consulta canônica | XS | baixo | alto medido | -18,03% de instruções, -14,44% de branches e checksum idêntico |
-| 2 | Fast path `[A-Za-z]+` no lexer | S | baixo–médio | alto em corpus ASCII | lexer 7,27% inclusivos; limite de 40.115 blocos, 35,4% das alocações atuais |
-| 3 | Buckets de rewrite por tipo/estágio/prioridade | M | médio | médio | `rewrite_attempts` 6,92% inclusivos; não remove a reanálise semântica das formas válidas |
-| 4 | Sink interno de `analyze_line` para WASM/line mode | M | médio | alto em textos, nulo no benchmark por palavra | vetor de `QueryResult`: 8,95 MB, 25,3% dos bytes no perfil `lines` |
-| 5 | Buffer inline especializado para IDs de addons | S–M | baixo–médio | alto em contagem de alocações, baixo/incerto em CPU | 30.074 blocos, 26,5% do total, mas somente cerca de 414 KiB |
-| 6 | Trie reverso de terminações construída em memória | M | médio | baixo–médio depois do comparador | `lookup_ending` tem teto de 5,65% inclusivos antes da simplificação do comparador |
-| 7 | Ordenação indireta/chaves pré-calculadas de `AnalysisIR` | S–M | médio | baixo na mediana, possível em alta ambiguidade | sort/dedup inteiro representa 2,57%; mediana de apenas três análises |
-| 8 | Normalizador latino finito e retirada de utf8proc | L | alto semântico | baixo adicional em runtime ASCII; alto em tamanho WASM | até 328.538 bytes de tabelas `.rodata`; o fast path captura antes o caso runtime comum |
-| 9 | Índices canônicos e pré-ordenados no WWDB | XL | alto de formato | alto no startup, nulo no steady-state medido | loader 8,11% exclusivos e sort de stems 6,46% no perfil de startup |
-| 10 | Descritores compactos antes de `AnalysisIR` | L–XL | alto arquitetural | potencialmente alto em memória, CPU incerto | vetores de `AnalysisIR`: 13,95 MB, 39,5% dos bytes pós-F-04 |
+| 2 | **Concluído:** arena canônica híbrida para chaves dos índices (F-05b) | S–M | baixo–médio | alto medido em CPU, pequeno custo de RSS | -11,38% de instruções, -21,41% de branches; +66.352 bytes alocados e uma alocação |
+| 3 | Fast path `[A-Za-z]+` no lexer | S | baixo–médio | alto em corpus ASCII | lexer 7,27% inclusivos antes de F-05a; limite de 40.115 blocos, 35,4% das alocações atuais |
+| 4 | Buckets de rewrite por tipo/estágio/prioridade | M | médio | médio–alto em CPU | 17.816.000 execuções de `rewrite_attempts`; ablações atuais dão tetos de 25,17% a 46,30%, mas incluem reanálise inevitável |
+| 5 | Sink interno de `analyze_line` para WASM/line mode | M | médio | alto em textos, nulo no benchmark por palavra | vetor de `QueryResult`: 8,95 MB, 25,3% dos bytes no perfil `lines` |
+| 6 | Buffer inline especializado para IDs de addons | S–M | baixo–médio | alto em contagem de alocações, baixo/incerto em CPU | 30.074 blocos, 26,5% do total, mas somente cerca de 414 KiB |
+| 7 | Trie reverso de terminações construída em memória | M | médio | baixo–médio depois do comparador | `lookup_ending` tinha teto de 5,65% inclusivos antes de F-05a; deve ser reperfilado depois da arena canônica |
+| 8 | Ordenação indireta/chaves pré-calculadas de `AnalysisIR` | S–M | médio | baixo na mediana, possível em alta ambiguidade | sort/dedup inteiro representava 2,57%; mediana de apenas três análises |
+| 9 | Normalizador latino finito e retirada de utf8proc | L | alto semântico | baixo adicional em runtime ASCII; alto em tamanho WASM | até 328.538 bytes de tabelas `.rodata`; o fast path captura antes o caso runtime comum |
+| 10 | Índices canônicos e pré-ordenados no WWDB | XL | alto de formato | alto no startup, nulo no steady-state medido | loader 8,11% exclusivos e sort de stems 6,46% no perfil de startup |
+| 11 | Descritores compactos antes de `AnalysisIR` | L–XL | alto arquitetural | potencialmente alto em memória, CPU incerto | vetores de `AnalysisIR`: 13,95 MB, 39,5% dos bytes pós-F-04 |
 
-A ordem 1–3 é deliberadamente firme; depois dela deve haver novo Callgrind e
-DHAT. A ordem 4–10 é condicional ao novo perfil. Em particular, se tamanho do
-WASM for o objetivo dominante, o normalizador finito sobe da posição 8 para a
-posição 4. Se latência de startup for o objetivo dominante, o WWDB pré-ordenado
-sobe, mas continua atrás de um protótipo que prove o formato desejado.
+A ordem começa agora no item 3; cada item continua sendo um A/B isolado e deve
+ter novo Callgrind e DHAT. A ordem 5–11 é condicional ao novo perfil. Em
+particular, se tamanho do WASM for o objetivo dominante, o
+normalizador finito sobe da posição 9 para a posição 5. Se latência de startup
+for o objetivo dominante, o WWDB pré-ordenado sobe, mas continua atrás de um
+protótipo que prove o formato desejado.
 
 O critério para promover uma hipótese é:
 
@@ -1442,7 +1586,8 @@ dedicados antes da implementação.
 
 | Hipótese | Cobertura atual | Pitfall principal ainda não coberto | Guardrail a adicionar antes/do experimento |
 | --- | --- | --- | --- |
-| Comparador assimétrico canônico | parcial | consulta não canônica ou ordenação incompatível nas bordas do `lower_bound` | auditar em debug que toda consulta da engine é `[a-z]*` sem `j/v`; para cada chave derivável do banco, comparar lookup novo com referência normalizada, incluindo vazio, ausente, primeira e última chave |
+| Comparador assimétrico canônico | concluído, cobertura forte | consulta não canônica ou ordenação incompatível nas bordas do `lower_bound` | implementados: asserção debug de `[a-z]*` sem `j/v`, consistência estrutural dos índices, pares `i/j` e `u/v`, quantidades exatas, diferenciais, corpus, sanitizers e CI multiplataforma; uma referência exaustiva sobre a seção privada de `stem_references` exigiria API de auditoria adicional |
+| Arena canônica híbrida (F-05b) | concluído, cobertura forte | `string_view` pendente após realocação, mutação dos pools de apresentação ou colisões canônicas separadas | implementados: dimensionamento exato antes de publicar views, validação do domínio `[a-z]*`, consistência estrutural dos oito índices, preservação de `Jupiter`/`Vulcan`, guardrails de F-05a, DHAT, tamanho nativo/WASM e sanitizers; fixtures sintéticos de arena vazia e overflow continuariam úteis, mas o banco real cobre chaves canônicas e não canônicas |
 | Fast path ASCII | parcial | aceitar vazio/pontuação/NUL, alterar `original_utf8`, offsets ou folding `J/V` | tabela direta para minúsculas, maiúsculas, `JjVv`, palavra de um byte e longa; confirmar todas as propriedades de `SurfaceForm`; provar fallback para qualquer byte não ASCII |
 | Buckets de rewrite | funcional forte, estrutural parcial | perder/duplicar regra ou mudar ordem de prioridade, estágio, `scan_reverse` e ID | teste de integridade: os 170 IDs aparecem exatamente uma vez no bucket correto e na ordem original; buckets vazios; paridade de tentativas e provenance nos fixtures de síncope/ortografia |
 | Sink de `analyze_line` | funcional forte | emitir lookahead cedo, duplicar/perder token, mover dados antes do consumo | executar wrapper e sink sobre os mesmos casos e comparar resultados completos; cobrir lookahead falho, composto aceito, erro entre tokens, Unicode, pontuação e two-words |
@@ -1548,7 +1693,8 @@ pertencem ao custo interno da engine.
 
 ## Ordem sugerida dos experimentos
 
-Para a engine, seguir E1, reperfilar e então escolher E2 pelos novos números.
+Para a engine, o próximo A/B de E1 é o fast path ASCII; depois dele, reperfilar
+antes dos buckets de rewrite e então escolher E2 pelos novos números.
 Para o CLI, medir writer streaming antes do cache, pois ele melhora também
 consultas distintas. Mudanças de WWDB, API e retirada completa de utf8proc
 ficam em E3 para não misturar estrutura, semântica e micro-otimização.

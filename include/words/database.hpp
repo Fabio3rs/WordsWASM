@@ -252,41 +252,17 @@ class Database final {
     }
 
   private:
-    struct StemGroup final {
+    struct LookupGroup final {
         std::string_view key;
         std::uint32_t first{};
         std::uint32_t count{};
     };
-
-    struct EndingGroup final {
-        std::string_view key;
-        std::uint32_t first{};
-        std::uint32_t count{};
-    };
-
-    struct UniqueGroup final {
-        std::string_view key;
-        std::uint32_t first{};
-        std::uint32_t count{};
-    };
-
-    struct SuffixGroup final {
-        std::string_view key;
-        std::uint32_t first{};
-        std::uint32_t count{};
-    };
-
-    struct PrefixGroup final {
-        std::string_view key;
-        std::uint32_t first{};
-        std::uint32_t count{};
-    };
-
-    struct TackonGroup final {
-        std::string_view key;
-        std::uint32_t first{};
-        std::uint32_t count{};
-    };
+    using StemGroup = LookupGroup;
+    using EndingGroup = LookupGroup;
+    using UniqueGroup = LookupGroup;
+    using SuffixGroup = LookupGroup;
+    using PrefixGroup = LookupGroup;
+    using TackonGroup = LookupGroup;
 
     struct AddonReference final {
         AddonKind kind{AddonKind::unknown};
@@ -305,6 +281,8 @@ class Database final {
 
     explicit Database(std::vector<std::byte> image, DatabaseContent content)
         : image_{std::move(image)}, content_{content} {}
+
+    void canonicalize_lookup_group_keys();
 
     std::vector<std::byte> image_;
     DatabaseContent content_{DatabaseContent::full};
@@ -329,6 +307,10 @@ class Database final {
     std::vector<TackonRule> tackons_;
     std::vector<RewriteRule> rewrites_;
     std::vector<AddonReference> addon_references_;
+    // Owns canonical copies only for lookup keys whose source spelling is not
+    // already lowercase with j/i and v/u folded. Public string pools keep the
+    // original Whitaker spelling.
+    std::vector<char> canonical_lookup_keys_;
     std::vector<StemReference> stem_references_;
     std::vector<StemGroup> stem_groups_;
     std::vector<RuleId> ending_rule_ids_;
