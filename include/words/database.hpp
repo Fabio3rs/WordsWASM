@@ -156,6 +156,8 @@ class Database final {
     Database &operator=(Database &&) = delete;
     ~Database() = default;
 
+    // Lookup keys are lowercase Latin ASCII with j/i and v/u already folded.
+    // The empty key is valid where it exists in the indexed domain.
     [[nodiscard]] std::span<const StemReference>
     lookup_stem(std::string_view normalized_ascii) const noexcept;
 

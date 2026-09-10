@@ -8,14 +8,182 @@
 
 #include <algorithm>
 #include <array>
+#include <compare>
+#include <cstdint>
 #include <ranges>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace words {
 
 using Json = nlohmann::ordered_json;
+
+namespace {
+
+struct NominalExpectation final {
+    std::uint32_t dictionary_entry{};
+    PartOfSpeech part_of_speech{PartOfSpeech::unknown};
+    std::uint8_t declension{};
+    std::uint8_t variant{};
+    GrammaticalCase grammatical_case{GrammaticalCase::unknown};
+    GrammaticalNumber number{GrammaticalNumber::unknown};
+    Gender gender{Gender::unknown};
+    Degree degree{Degree::unknown};
+    std::uint8_t stem_key{};
+    auto operator<=>(const NominalExpectation &) const = default;
+};
+
+struct AnalysisSemanticSignature final {
+    LexemeId lexeme;
+    std::optional<RuleId> rule;
+    std::uint8_t stem_key{};
+    SurfaceRange stem;
+    SurfaceRange ending;
+    Morphology morphology;
+    QuantityMatch quantity_match{QuantityMatch::unspecified};
+    DerivationIR derivation;
+    MorphologicalAssessmentIR assessment;
+    auto operator<=>(const AnalysisSemanticSignature &) const = default;
+};
+
+[[nodiscard]] std::vector<AnalysisSemanticSignature>
+semantic_signatures(const std::span<const AnalysisIR> analyses) {
+    std::vector<AnalysisSemanticSignature> signatures;
+    signatures.reserve(analyses.size());
+    for (const auto &analysis : analyses) {
+        signatures.push_back({
+            .lexeme = analysis.lexeme,
+            .rule = analysis.rule,
+            .stem_key = analysis.stem_key,
+            .stem = analysis.stem,
+            .ending = analysis.ending,
+            .morphology = analysis.morphology,
+            .quantity_match = analysis.quantity_match,
+            .derivation = analysis.derivation,
+            .assessment = analysis.assessment,
+        });
+    }
+    std::ranges::sort(signatures);
+    return signatures;
+}
+
+[[nodiscard]] constexpr NominalExpectation noun_expectation(
+    const std::uint32_t dictionary_entry, const std::uint8_t declension,
+    const std::uint8_t variant, const GrammaticalCase grammatical_case,
+    const GrammaticalNumber number, const Gender gender,
+    const std::uint8_t stem_key) noexcept {
+    return NominalExpectation{
+        .dictionary_entry = dictionary_entry,
+        .part_of_speech = PartOfSpeech::noun,
+        .declension = declension,
+        .variant = variant,
+        .grammatical_case = grammatical_case,
+        .number = number,
+        .gender = gender,
+        .degree = Degree::unknown,
+        .stem_key = stem_key,
+    };
+}
+
+[[nodiscard]] constexpr NominalExpectation adjective_expectation(
+    const std::uint32_t dictionary_entry, const std::uint8_t declension,
+    const std::uint8_t variant, const GrammaticalCase grammatical_case,
+    const GrammaticalNumber number, const Gender gender, const Degree degree,
+    const std::uint8_t stem_key) noexcept {
+    return NominalExpectation{
+        .dictionary_entry = dictionary_entry,
+        .part_of_speech = PartOfSpeech::adjective,
+        .declension = declension,
+        .variant = variant,
+        .grammatical_case = grammatical_case,
+        .number = number,
+        .gender = gender,
+        .degree = degree,
+        .stem_key = stem_key,
+    };
+}
+
+void expect_nominal_analyses(
+    const std::string_view surface,
+    const std::span<const NominalExpectation> expected,
+    const QuantityMatch quantity_match, const std::string_view expected_stem,
+    const std::string_view expected_ending) {
+    const auto result = test::engine().analyze(surface);
+    ASSERT_EQ(result.status, QueryStatus::analyzed) << surface;
+    EXPECT_EQ(result.surface.normalized_nfc, surface);
+    ASSERT_EQ(result.analyses.size(), expected.size()) << surface;
+
+    const auto &database = test::engine().database();
+    std::vector<NominalExpectation> actual;
+    actual.reserve(result.analyses.size());
+    for (std::size_t index = 0; index < result.analyses.size(); ++index) {
+        const auto &analysis = result.analyses[index];
+        const auto &lexeme = database.lexeme(analysis.lexeme);
+
+        EXPECT_EQ(analysis.quantity_match, quantity_match)
+            << surface << " analysis " << index;
+        EXPECT_EQ(result.surface.slice(analysis.stem), expected_stem)
+            << surface << " analysis " << index;
+        EXPECT_EQ(result.surface.slice(analysis.ending), expected_ending)
+            << surface << " analysis " << index;
+        EXPECT_EQ(analysis.derivation.count, 0U)
+            << surface << " analysis " << index;
+
+        if (const auto *noun =
+                std::get_if<NounMorphology>(&analysis.morphology)) {
+            actual.push_back(noun_expectation(
+                lexeme.dictionary_entry + 1U, noun->declension, noun->variant,
+                noun->grammatical_case, noun->number, noun->gender,
+                analysis.stem_key));
+        } else if (const auto *adjective =
+                       std::get_if<AdjectiveMorphology>(
+                           &analysis.morphology)) {
+            actual.push_back(adjective_expectation(
+                lexeme.dictionary_entry + 1U, adjective->declension,
+                adjective->variant, adjective->grammatical_case,
+                adjective->number, adjective->gender, adjective->degree,
+                analysis.stem_key));
+        } else {
+            ADD_FAILURE() << surface << " analysis " << index
+                          << " is not nominal";
+            continue;
+        }
+
+        EXPECT_EQ(lexeme.part_of_speech, actual.back().part_of_speech)
+            << surface << " analysis " << index;
+        ASSERT_TRUE(analysis.rule.has_value())
+            << surface << " analysis " << index;
+        const auto &rule = database.rule(*analysis.rule);
+        EXPECT_EQ(rule.part_of_speech, actual.back().part_of_speech)
+            << surface << " analysis " << index;
+        EXPECT_EQ(rule.stem_key, analysis.stem_key)
+            << surface << " analysis " << index;
+    }
+
+    auto sorted_expected =
+        std::vector<NominalExpectation>{expected.begin(), expected.end()};
+    std::ranges::sort(actual);
+    std::ranges::sort(sorted_expected);
+    ASSERT_EQ(actual.size(), sorted_expected.size()) << surface;
+    for (std::size_t index = 0; index < sorted_expected.size(); ++index) {
+        const auto &found = actual[index];
+        const auto &item = sorted_expected[index];
+        EXPECT_EQ(found.dictionary_entry, item.dictionary_entry);
+        EXPECT_EQ(found.part_of_speech, item.part_of_speech);
+        EXPECT_EQ(found.declension, item.declension);
+        EXPECT_EQ(found.variant, item.variant);
+        EXPECT_EQ(found.grammatical_case, item.grammatical_case);
+        EXPECT_EQ(found.number, item.number);
+        EXPECT_EQ(found.gender, item.gender);
+        EXPECT_EQ(found.degree, item.degree);
+        EXPECT_EQ(found.stem_key, item.stem_key);
+    }
+}
+
+} // namespace
 
 TEST(EngineTest, SearchDatabasePreservesTheFullDatabaseHitContract) {
     constexpr std::array<std::string_view, 10> fixtures{
@@ -90,6 +258,39 @@ TEST(EngineTest, SearchDatabaseResolvesCanonicalLemmaWithoutMeanings) {
             const auto &lexeme = search_database.lexeme(analysis.lexeme);
             return citation_lemma(search_database, lexeme, surface) == expected;
         })) << surface;
+    }
+}
+
+TEST(EngineTest, FoldsIAndJAndUAndVWithoutChangingAnalysisSemantics) {
+    constexpr std::array pairs{
+        std::pair<std::string_view, std::string_view>{"juvenis", "iuuenis"},
+        std::pair<std::string_view, std::string_view>{"mavis", "mauis"},
+        std::pair<std::string_view, std::string_view>{"mavisque", "mauisque"},
+    };
+
+    for (const auto &[traditional, canonical] : pairs) {
+        const auto traditional_result = test::engine().analyze(traditional);
+        const auto canonical_result = test::engine().analyze(canonical);
+
+        ASSERT_EQ(traditional_result.status, QueryStatus::analyzed)
+            << traditional;
+        ASSERT_EQ(canonical_result.status, QueryStatus::analyzed) << canonical;
+        ASSERT_FALSE(traditional_result.analyses.empty()) << traditional;
+        ASSERT_FALSE(canonical_result.analyses.empty()) << canonical;
+        EXPECT_EQ(traditional_result.surface.orthography_ascii, traditional);
+        EXPECT_EQ(canonical_result.surface.orthography_ascii, canonical);
+        EXPECT_EQ(traditional_result.surface.lookup_ascii,
+                  canonical_result.surface.lookup_ascii);
+        EXPECT_EQ(canonical_result.surface.lookup_ascii, canonical);
+        EXPECT_EQ(semantic_signatures(traditional_result.analyses),
+                  semantic_signatures(canonical_result.analyses))
+            << traditional << " / " << canonical;
+        EXPECT_TRUE(traditional_result.compound_analyses.empty());
+        EXPECT_TRUE(canonical_result.compound_analyses.empty());
+        EXPECT_TRUE(traditional_result.artificial_analyses.empty());
+        EXPECT_TRUE(canonical_result.artificial_analyses.empty());
+        EXPECT_TRUE(traditional_result.diagnostics.empty());
+        EXPECT_TRUE(canonical_result.diagnostics.empty());
     }
 }
 
@@ -1122,6 +1323,81 @@ TEST(EngineTest, AnalyzeLineAppliesLegacyTwoWordsRecoveryPerToken) {
     EXPECT_EQ(results[0].status, QueryStatus::unknown);
     EXPECT_TRUE(results[0].two_word_suggestion.has_value());
     EXPECT_EQ(results[1].status, QueryStatus::analyzed);
+}
+
+TEST(EngineTest, QuantityPartitionsPuellaInflectionsExactly) {
+    constexpr std::array expected{
+        noun_expectation(32'257U, 1U, 1U, GrammaticalCase::nominative,
+                         GrammaticalNumber::singular, Gender::feminine, 1U),
+        noun_expectation(32'257U, 1U, 1U, GrammaticalCase::vocative,
+                         GrammaticalNumber::singular, Gender::feminine, 1U),
+        noun_expectation(32'257U, 1U, 1U, GrammaticalCase::ablative,
+                         GrammaticalNumber::singular, Gender::feminine, 2U),
+    };
+
+    expect_nominal_analyses("puella", expected, QuantityMatch::unspecified,
+                            "puell", "a");
+    expect_nominal_analyses("puellă", std::span{expected}.first<2U>(),
+                            QuantityMatch::exact, "puell", "ă");
+    expect_nominal_analyses("puellā", std::span{expected}.last<1U>(),
+                            QuantityMatch::exact, "puell", "ā");
+}
+
+TEST(EngineTest, QuantityPartitionsMalumLexemesExactly) {
+    // Keeping the long-a group before the short-a group in this fixture lets
+    // the marked cases reuse spans of the unmarked semantic set.  The helper
+    // sorts signatures and deliberately does not constrain presentation order.
+    constexpr std::array expected{
+        noun_expectation(26'263U, 1U, 1U, GrammaticalCase::genitive,
+                         GrammaticalNumber::plural, Gender::feminine, 2U),
+        noun_expectation(26'264U, 2U, 1U, GrammaticalCase::genitive,
+                         GrammaticalNumber::plural, Gender::masculine, 2U),
+        noun_expectation(26'264U, 2U, 1U, GrammaticalCase::accusative,
+                         GrammaticalNumber::singular, Gender::masculine, 2U),
+        noun_expectation(26'265U, 2U, 1U, GrammaticalCase::genitive,
+                         GrammaticalNumber::plural, Gender::feminine, 2U),
+        noun_expectation(26'265U, 2U, 1U, GrammaticalCase::accusative,
+                         GrammaticalNumber::singular, Gender::feminine, 2U),
+        noun_expectation(26'266U, 2U, 2U, GrammaticalCase::nominative,
+                         GrammaticalNumber::singular, Gender::neuter, 1U),
+        noun_expectation(26'266U, 2U, 2U, GrammaticalCase::vocative,
+                         GrammaticalNumber::singular, Gender::neuter, 1U),
+        noun_expectation(26'266U, 2U, 2U, GrammaticalCase::genitive,
+                         GrammaticalNumber::plural, Gender::neuter, 2U),
+        noun_expectation(26'266U, 2U, 2U, GrammaticalCase::accusative,
+                         GrammaticalNumber::singular, Gender::neuter, 2U),
+        noun_expectation(26'267U, 2U, 2U, GrammaticalCase::nominative,
+                         GrammaticalNumber::singular, Gender::neuter, 1U),
+        noun_expectation(26'267U, 2U, 2U, GrammaticalCase::vocative,
+                         GrammaticalNumber::singular, Gender::neuter, 1U),
+        noun_expectation(26'267U, 2U, 2U, GrammaticalCase::genitive,
+                         GrammaticalNumber::plural, Gender::neuter, 2U),
+        noun_expectation(26'267U, 2U, 2U, GrammaticalCase::accusative,
+                         GrammaticalNumber::singular, Gender::neuter, 2U),
+        adjective_expectation(
+            26'269U, 1U, 1U, GrammaticalCase::nominative,
+            GrammaticalNumber::singular, Gender::neuter, Degree::positive,
+            2U),
+        adjective_expectation(
+            26'269U, 1U, 1U, GrammaticalCase::vocative,
+            GrammaticalNumber::singular, Gender::neuter, Degree::positive,
+            2U),
+        adjective_expectation(
+            26'269U, 1U, 1U, GrammaticalCase::accusative,
+            GrammaticalNumber::singular, Gender::masculine, Degree::positive,
+            2U),
+        adjective_expectation(
+            26'269U, 1U, 1U, GrammaticalCase::accusative,
+            GrammaticalNumber::singular, Gender::neuter, Degree::positive,
+            2U),
+    };
+
+    expect_nominal_analyses("malum", expected, QuantityMatch::unspecified,
+                            "mal", "um");
+    expect_nominal_analyses("mālum", std::span{expected}.first<9U>(),
+                            QuantityMatch::exact, "māl", "um");
+    expect_nominal_analyses("mălum", std::span{expected}.last<8U>(),
+                            QuantityMatch::exact, "măl", "um");
 }
 
 TEST(EngineTest, UnknownQuantityKeepsLegacyAnalysesAndNfcSurface) {

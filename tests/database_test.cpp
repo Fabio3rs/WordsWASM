@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <limits>
 #include <ranges>
+#include <string>
 #include <type_traits>
 #include <utility>
 
@@ -71,6 +72,23 @@ void write_u32_le(std::vector<std::byte> &bytes, const std::size_t offset,
     }
 }
 
+[[nodiscard]] std::string canonical_lookup(const std::string_view spelling) {
+    std::string result;
+    result.reserve(spelling.size());
+    for (char value : spelling) {
+        if (value >= 'A' && value <= 'Z') {
+            value = static_cast<char>(value - 'A' + 'a');
+        }
+        if (value == 'j') {
+            value = 'i';
+        } else if (value == 'v') {
+            value = 'u';
+        }
+        result.push_back(value);
+    }
+    return result;
+}
+
 } // namespace
 
 TEST(DatabaseTest, LoadsDensePocAndFindsRealData) {
@@ -80,6 +98,77 @@ TEST(DatabaseTest, LoadsDensePocAndFindsRealData) {
     EXPECT_FALSE((*database)->lookup_ending("ae").empty());
     EXPECT_FALSE((*database)->lookup_ending("").empty());
     EXPECT_TRUE((*database)->lookup_stem("zzzzzz").empty());
+}
+
+TEST(DatabaseTest, CanonicalLookupIndexesRemainInternallyConsistent) {
+    const auto &database = test::engine().database();
+    std::size_t resolved_stem_spellings{};
+
+    for (std::uint32_t ordinal = 0U; ordinal < database.lexemes().size();
+         ++ordinal) {
+        const auto id = LexemeId{ordinal};
+        const auto &lexeme = database.lexeme(id);
+        if (lexeme.dictionary == DictionaryKind::unique) {
+            const auto spelling = database.stem_string(lexeme.stems.front());
+            const auto references =
+                database.lookup_unique(canonical_lookup(spelling));
+            EXPECT_TRUE(std::ranges::any_of(
+                references, [id](const UniqueReference &reference) {
+                    return reference.lexeme == id;
+                })) << spelling;
+            continue;
+        }
+
+        for (std::uint8_t slot = 0U; slot < lexeme.stems.size(); ++slot) {
+            const auto spelling = database.stem_string(lexeme.stems[slot]);
+            if (spelling.empty()) {
+                continue;
+            }
+            const auto canonical = canonical_lookup(spelling);
+            const auto references = database.lookup_stem(canonical);
+            if (references.empty()) {
+                continue;
+            }
+            ++resolved_stem_spellings;
+            for (const auto &reference : references) {
+                const auto &referenced = database.lexeme(reference.lexeme);
+                ASSERT_LT(reference.lexical_slot, referenced.stems.size());
+                const auto indexed_spelling = database.stem_string(
+                    referenced.stems[reference.lexical_slot]);
+                EXPECT_EQ(canonical_lookup(indexed_spelling), canonical)
+                    << spelling << " resolved to lexeme "
+                    << reference.lexeme.value() << " slot "
+                    << static_cast<unsigned>(reference.lexical_slot);
+            }
+        }
+    }
+    EXPECT_GT(resolved_stem_spellings, 0U);
+
+    for (const auto &rule : database.rules()) {
+        const auto spelling = database.ending_string(rule.ending);
+        const auto ids = database.lookup_ending(canonical_lookup(spelling));
+        EXPECT_NE(std::ranges::find(ids, rule.id), ids.end()) << spelling;
+    }
+    for (const auto &suffix : database.suffixes()) {
+        const auto spelling = database.suffix_string(suffix.fix);
+        const auto ids = database.lookup_suffix(canonical_lookup(spelling));
+        EXPECT_NE(std::ranges::find(ids, suffix.id), ids.end()) << spelling;
+    }
+    for (const auto &prefix : database.prefixes()) {
+        const auto spelling = database.prefix_string(prefix.fix);
+        const auto canonical = canonical_lookup(spelling);
+        const auto ids = prefix.root == PartOfSpeech::pack
+                             ? database.lookup_tickon(canonical)
+                             : database.lookup_prefix(canonical);
+        EXPECT_NE(std::ranges::find(ids, prefix.id), ids.end()) << spelling;
+    }
+    for (const auto &tackon : database.tackons()) {
+        const auto spelling = database.tackon_string(tackon.fix);
+        const auto canonical = canonical_lookup(spelling);
+        const auto ids = tackon.packon ? database.lookup_packon(canonical)
+                                       : database.lookup_tackon(canonical);
+        EXPECT_NE(std::ranges::find(ids, tackon.id), ids.end()) << spelling;
+    }
 }
 
 TEST(DatabaseTest, LoadsColumnarSearchPocWithoutMeaningPools) {
@@ -533,8 +622,8 @@ TEST(DatabaseTest, LoadsInflectionAndSparseStemQuantities) {
     expect_stem_quantity("nomen", 27'969U, 0b00010U, 0b00010U);
     expect_stem_quantity("adhuc", 1'012U, 0b01001U, 0b01000U);
     expect_stem_quantity("defend", 16'105U, 0b00010U, 0b00010U);
-    expect_stem_quantity("lev", 25'590U, 0b00010U, 0U);
-    expect_stem_quantity("lev", 25'591U, 0b00010U, 0b00010U);
+    expect_stem_quantity("leu", 25'590U, 0b00010U, 0U);
+    expect_stem_quantity("leu", 25'591U, 0b00010U, 0b00010U);
     expect_stem_quantity("popul", 30'955U, 0b01010U, 0U);
     expect_stem_quantity("popul", 30'957U, 0b01010U, 0b00010U);
 }

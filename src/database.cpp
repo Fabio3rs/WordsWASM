@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cassert>
 #include <compare>
 #include <cstddef>
 #include <cstdint>
@@ -172,14 +173,47 @@ normalized_compare(const std::string_view left,
     return left.size() <=> right.size();
 }
 
-[[nodiscard]] bool normalized_less(const std::string_view left,
-                                   const std::string_view right) noexcept {
-    return std::is_lt(normalized_compare(left, right));
-}
-
 [[nodiscard]] bool normalized_equal(const std::string_view left,
                                     const std::string_view right) noexcept {
     return std::is_eq(normalized_compare(left, right));
+}
+
+// The lookup side comes from SurfaceForm::lookup_ascii: lowercase Latin ASCII
+// with j/i and v/u already folded. Stored WWDB keys retain their source
+// spelling, so only that side still needs per-byte normalization.
+[[nodiscard]] std::strong_ordering stored_key_compare_canonical_query(
+    const std::string_view stored_key,
+    const std::string_view canonical_query) noexcept {
+    const auto common = std::min(stored_key.size(), canonical_query.size());
+    for (std::size_t index = 0; index < common; ++index) {
+        const auto stored_char = normalized_char(stored_key[index]);
+        const auto query_char = canonical_query[index];
+        if (stored_char != query_char) {
+            return stored_char <=> query_char;
+        }
+    }
+    return stored_key.size() <=> canonical_query.size();
+}
+
+[[nodiscard]] bool stored_key_less_canonical_query(
+    const std::string_view stored_key,
+    const std::string_view canonical_query) noexcept {
+    return std::is_lt(
+        stored_key_compare_canonical_query(stored_key, canonical_query));
+}
+
+[[nodiscard]] bool stored_key_equal_canonical_query(
+    const std::string_view stored_key,
+    const std::string_view canonical_query) noexcept {
+    return std::is_eq(
+        stored_key_compare_canonical_query(stored_key, canonical_query));
+}
+
+void assert_canonical_query(const std::string_view query) noexcept {
+    assert(std::ranges::all_of(query, [](const char value) {
+        return value >= 'a' && value <= 'z' && value != 'j' && value != 'v';
+    }));
+    static_cast<void>(query);
 }
 
 [[nodiscard]] std::span<const std::byte>
@@ -2058,14 +2092,15 @@ Database::load_poc(std::vector<std::byte> image) try {
 
 std::span<const StemReference>
 Database::lookup_stem(const std::string_view normalized_ascii) const noexcept {
+    assert_canonical_query(normalized_ascii);
     const auto found = std::ranges::lower_bound(
         stem_groups_, normalized_ascii,
         [](const std::string_view left, const std::string_view right) {
-            return normalized_less(left, right);
+            return stored_key_less_canonical_query(left, right);
         },
         &StemGroup::key);
     if (found == stem_groups_.end() ||
-        !normalized_equal(found->key, normalized_ascii)) {
+        !stored_key_equal_canonical_query(found->key, normalized_ascii)) {
         return {};
     }
     return std::span<const StemReference>{stem_references_}.subspan(
@@ -2074,14 +2109,15 @@ Database::lookup_stem(const std::string_view normalized_ascii) const noexcept {
 
 std::span<const RuleId> Database::lookup_ending(
     const std::string_view normalized_ascii) const noexcept {
+    assert_canonical_query(normalized_ascii);
     const auto found = std::ranges::lower_bound(
         ending_groups_, normalized_ascii,
         [](const std::string_view left, const std::string_view right) {
-            return normalized_less(left, right);
+            return stored_key_less_canonical_query(left, right);
         },
         &EndingGroup::key);
     if (found == ending_groups_.end() ||
-        !normalized_equal(found->key, normalized_ascii)) {
+        !stored_key_equal_canonical_query(found->key, normalized_ascii)) {
         return {};
     }
     return std::span<const RuleId>{ending_rule_ids_}.subspan(found->first,
@@ -2090,14 +2126,15 @@ std::span<const RuleId> Database::lookup_ending(
 
 std::span<const UniqueReference> Database::lookup_unique(
     const std::string_view normalized_ascii) const noexcept {
+    assert_canonical_query(normalized_ascii);
     const auto found = std::ranges::lower_bound(
         unique_groups_, normalized_ascii,
         [](const std::string_view left, const std::string_view right) {
-            return normalized_less(left, right);
+            return stored_key_less_canonical_query(left, right);
         },
         &UniqueGroup::key);
     if (found == unique_groups_.end() ||
-        !normalized_equal(found->key, normalized_ascii)) {
+        !stored_key_equal_canonical_query(found->key, normalized_ascii)) {
         return {};
     }
     return std::span<const UniqueReference>{unique_references_}.subspan(
@@ -2106,14 +2143,15 @@ std::span<const UniqueReference> Database::lookup_unique(
 
 std::span<const AddonId> Database::lookup_suffix(
     const std::string_view normalized_ascii) const noexcept {
+    assert_canonical_query(normalized_ascii);
     const auto found = std::ranges::lower_bound(
         suffix_groups_, normalized_ascii,
         [](const std::string_view left, const std::string_view right) {
-            return normalized_less(left, right);
+            return stored_key_less_canonical_query(left, right);
         },
         &SuffixGroup::key);
     if (found == suffix_groups_.end() ||
-        !normalized_equal(found->key, normalized_ascii)) {
+        !stored_key_equal_canonical_query(found->key, normalized_ascii)) {
         return {};
     }
     return std::span<const AddonId>{suffix_ids_}.subspan(found->first,
@@ -2122,14 +2160,15 @@ std::span<const AddonId> Database::lookup_suffix(
 
 std::span<const AddonId> Database::lookup_prefix(
     const std::string_view normalized_ascii) const noexcept {
+    assert_canonical_query(normalized_ascii);
     const auto found = std::ranges::lower_bound(
         prefix_groups_, normalized_ascii,
         [](const std::string_view left, const std::string_view right) {
-            return normalized_less(left, right);
+            return stored_key_less_canonical_query(left, right);
         },
         &PrefixGroup::key);
     if (found == prefix_groups_.end() ||
-        !normalized_equal(found->key, normalized_ascii)) {
+        !stored_key_equal_canonical_query(found->key, normalized_ascii)) {
         return {};
     }
     return std::span<const AddonId>{prefix_ids_}.subspan(found->first,
@@ -2138,14 +2177,15 @@ std::span<const AddonId> Database::lookup_prefix(
 
 std::span<const AddonId> Database::lookup_tickon(
     const std::string_view normalized_ascii) const noexcept {
+    assert_canonical_query(normalized_ascii);
     const auto found = std::ranges::lower_bound(
         tickon_groups_, normalized_ascii,
         [](const std::string_view left, const std::string_view right) {
-            return normalized_less(left, right);
+            return stored_key_less_canonical_query(left, right);
         },
         &PrefixGroup::key);
     if (found == tickon_groups_.end() ||
-        !normalized_equal(found->key, normalized_ascii)) {
+        !stored_key_equal_canonical_query(found->key, normalized_ascii)) {
         return {};
     }
     return std::span<const AddonId>{tickon_ids_}.subspan(found->first,
@@ -2154,14 +2194,15 @@ std::span<const AddonId> Database::lookup_tickon(
 
 std::span<const AddonId> Database::lookup_tackon(
     const std::string_view normalized_ascii) const noexcept {
+    assert_canonical_query(normalized_ascii);
     const auto found = std::ranges::lower_bound(
         tackon_groups_, normalized_ascii,
         [](const std::string_view left, const std::string_view right) {
-            return normalized_less(left, right);
+            return stored_key_less_canonical_query(left, right);
         },
         &TackonGroup::key);
     if (found == tackon_groups_.end() ||
-        !normalized_equal(found->key, normalized_ascii)) {
+        !stored_key_equal_canonical_query(found->key, normalized_ascii)) {
         return {};
     }
     return std::span<const AddonId>{tackon_ids_}.subspan(found->first,
@@ -2170,14 +2211,15 @@ std::span<const AddonId> Database::lookup_tackon(
 
 std::span<const AddonId> Database::lookup_packon(
     const std::string_view normalized_ascii) const noexcept {
+    assert_canonical_query(normalized_ascii);
     const auto found = std::ranges::lower_bound(
         packon_groups_, normalized_ascii,
         [](const std::string_view left, const std::string_view right) {
-            return normalized_less(left, right);
+            return stored_key_less_canonical_query(left, right);
         },
         &TackonGroup::key);
     if (found == packon_groups_.end() ||
-        !normalized_equal(found->key, normalized_ascii)) {
+        !stored_key_equal_canonical_query(found->key, normalized_ascii)) {
         return {};
     }
     return std::span<const AddonId>{packon_ids_}.subspan(found->first,

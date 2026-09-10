@@ -1105,6 +1105,59 @@ Os quatro blocos principais de dados do utf8proc somam 328.538 bytes:
 - `utf8proc_sequences`: 25.922;
 - `utf8proc_stage1table`: 8.704.
 
+### Protótipo reaproveitável: `simple_utf8view.hpp`
+
+O header de outro projeto em
+`/mnt/projects/Projects/indexador/include/simple_utf8view.hpp` contém um
+decoder UTF-8 pequeno, sem alocação e com checks explícitos para truncamento,
+overlong encodings, surrogates e valores acima de `U+10FFFF`. Ele é uma boa
+base para o fallback Unicode finito da engine, mas não pode ser incorporado
+sem adaptação:
+
+- a política atual converte sequências inválidas em `U+FFFD`; o lexer da
+  engine deve retornar `DiagnosticCode::invalid_utf8`, e precisa distinguir
+  um `U+FFFD` válido de um erro de decodificação;
+- o `iterator` executa `decode` tanto em `operator*` quanto em `operator++`,
+  duplicando a decodificação em um `range-for`; o lexer deve usar um cursor
+  que devolva codepoint e tamanho uma única vez por iteração;
+- `string_view_utf8` mantém um `vector<size_t>` lazy de offsets. Isso é útil
+  para acesso aleatório genérico, mas não para o hotpath: `SurfaceForm` já
+  possui `nfc_byte_offsets`, que deve continuar sendo preenchido durante a
+  mesma passagem;
+- `multisplit` materializa um vetor e, em uma variante, um `unordered_set`.
+  Ele não deve substituir `TextTokenCursor`, que é lazy e precisa também
+  preservar as classes de pontuação;
+- o decoder resolve somente UTF-8. A retirada de utf8proc ainda exige a tabela
+  latina finita de composição/decomposição, o encoder de codepoints aceitos e
+  uma política explícita para as categorias de pontuação usadas pelo cursor.
+
+A interface apropriada para reaproveitamento seria um resultado estrito:
+
+```cpp
+enum class Utf8DecodeError : std::uint8_t {
+    none,
+    invalid_lead,
+    invalid_continuation,
+    truncated,
+    overlong,
+    surrogate,
+    out_of_range,
+};
+
+struct Utf8DecodeResult final {
+    char32_t codepoint{};
+    std::uint8_t byte_count{};
+    Utf8DecodeError error{Utf8DecodeError::none};
+};
+```
+
+O experimento deve copiar/adaptar apenas o núcleo do decoder, preservando sua
+proveniência/licença, e não o container com cache nem os algoritmos de split.
+No caminho Unicode da engine, cada chamada alimentaria diretamente o estado da
+letra lógica, a quantidade vocálica, a saída NFC e os offsets, sem `Glyph` ou
+buffer Unicode intermediário. O fast path `[A-Za-z]+` continua separado e não
+precisa decodificar UTF-8.
+
 O contrato do lexer aceita somente uma palavra latina com macrons ou breves,
 mas usa tabelas Unicode gerais para chegar a esse conjunto restrito. Se esse
 contrato permanecer formalmente restrito, pode-se gerar uma tabela compacta
@@ -1140,19 +1193,365 @@ instruções, comparações repetidas e allocator churn do que para espera por R
 Como são caches simulados, a conclusão deve ser confirmada com contadores de
 hardware quando `perf` estiver disponível.
 
+## Reavaliação geral depois de F-04
+
+Esta reavaliação usa somente `words_engine_benchmark`, ligado a `words_core`.
+Loader, DOM JSON, serialização e escrita do CLI ficam fora da região medida.
+Portanto, a ordem abaixo é a ordem da **engine pura**, não do produto completo.
+
+### O que já foi resolvido
+
+F-04 era a maior origem individual de bytes transitórios da engine e a única
+que materializava quase um milhão de objetos que não escapavam da chamada. Ela
+foi eliminada sem mudar API pública, WWDB ou WASM. Depois da mudança:
+
+- `enumerate_candidates` representa 5,92% inclusivos, dos quais 5,65 pontos
+  percentuais pertencem a `lookup_ending`; a materialização deixou de ser o
+  problema;
+- o total da região caiu para 692.809.841 instruções;
+- `CandidateIR` deixou de aparecer como allocation point;
+- não há sinal de complexidade exponencial no caminho de terminações.
+
+Assim, o hotpath mais grave e óbvio de alocação interna foi resolvido, mas não
+todos os hotpaths relevantes da engine.
+
+### Hotpaths atuais
+
+No Callgrind pós-F-04, os custos exclusivos dos quatro lookups principais são:
+
+| Função | Instruções exclusivas |
+| --- | ---: |
+| `lookup_stem` | 12,70% |
+| `lookup_prefix` | 11,91% |
+| `lookup_suffix` | 7,43% |
+| `lookup_ending` | 4,65% |
+
+Eles somam 36,69% da região. Isso não significa que uma nova estrutura remova
+todo esse custo, mas mostra que F-05 deve ser decomposto antes de investir num
+trie. Todas as consultas feitas pela engine são substrings de `lookup_ascii` e
+o parâmetro público já se chama `normalized_ascii`; apesar disso,
+`normalized_compare` aplicava lowercase e `j/v` folding também ao lado da
+consulta em cada comparação. O experimento F-05a passou a normalizar somente a
+chave armazenada e a comparar o lado direito como byte canônico. Isso não exige
+mudar o banco e deixa a canonização de chaves no packer como hipótese separada.
+
+A inspeção de todos os call sites da engine confirmou a precondição: os oito
+`lookup_*` recebem exclusivamente a própria `SurfaceForm::lookup_ascii` ou um
+`substr` dela. O lexer constrói essa string depois de casefold, aceitando apenas
+`a`–`z`, e `lookup_letter` já transforma `j -> i` e `v -> u`. A ressalva está na
+API pública de `Database`: o nome `normalized_ascii` comunicava a precondição,
+mas ela não estava documentada nem verificada, e a implementação anterior
+tolerava acidentalmente maiúsculas, `j` e `v` na consulta. F-05a formaliza o
+contrato no header e usa uma asserção somente em debug; ela é eliminada por
+`NDEBUG` no binário instrumentado.
+
+A cobertura de `i/j` e `u/v` existe, mas ainda não fecha esse contrato em todas
+as camadas. `LatinLexerTest.KeepsDistinctSurfaceAndLookupRepresentations` fixa
+o caso forte `JŪVĔNIS`: preserva `juvenis` em `orthography_ascii` e produz
+`iuuenis` em `lookup_ascii`. `DatabaseTest.LoadsAndIndexesUniqueAnalyses`
+confirma que a consulta canônica `mauis` alcança a entrada unique armazenada
+com ortografia equivalente. Os diferenciais incluem `mavis` e `iusiurandum`,
+mas não comparam pares de grafias entre si.
+
+O teste
+`EngineTest.FoldsIAndJAndUAndVWithoutChangingAnalysisSemantics` fecha essa
+lacuna antes do A/B. Ele compara `juvenis`/`iuuenis`, `mavis`/`mauis` e
+`mavisque`/`mauisque`, exige que as duas superfícies produzam o mesmo
+`lookup_ascii` canônico não vazio e compara, como multiset, lexema, regra,
+`stem_key`, ranges, morfologia, quantidade, derivação e assessment. Assim o
+conjunto cobre os caminhos regular, unique e com addon sem tornar a grafia de
+apresentação artificialmente igual.
+
+As chaves dos grupos carregados também não podem ser comparadas como bytes sem
+mais trabalho. O loader ordena e agrupa com `normalized_compare`, mas conserva
+como `group.key` a grafia original do primeiro registro. Logo, a variante XS
+correta normaliza somente o byte da chave armazenada; tornar ambos os lados um
+`string_view::compare` exige antes canonizar as chaves no loader ou no WWDB.
+Isso continua sendo custo linear no comprimento inspecionado dentro de cada
+passo do `lower_bound`, não comportamento exponencial.
+
+#### Resultado F-05a — comparador assimétrico canônico
+
+O Callgrind foi repetido no NativeLab com a mesma configuração RelWithDebInfo,
+Eneida IV, modo `lines`, um warmup e uma iteração. O artefato está em
+`build/profile-instr/profiles/engine-lines-asymmetric.callgrind`.
+
+| Métrica | Pós-F-04 | Comparador assimétrico | Delta |
+| --- | ---: | ---: | ---: |
+| instruções | 692.809.841 | 567.928.816 | -18,03% |
+| referências a dados | 196.037.719 | 188.911.255 | -3,64% |
+| misses D1 | 1.696.357 | 1.696.451 | +0,006% |
+| branches | 107.075.695 | 91.611.347 | -14,44% |
+| mispredicts | 7.574.861 | 6.834.882 | -9,77% |
+| checksum | 22.723 | 22.723 | idêntico |
+
+O custo exclusivo nomeado de `lookup_stem` caiu de 12,70% para 8,63% do
+programa; os demais lookups foram incorporados em seus chamadores nessa build
+otimizada e não aparecem como linhas de função independentes no
+`callgrind_annotate`. O D1 praticamente invariável e a grande redução de
+instruções e branches são coerentes com a mudança: ela remove decisões por
+caractere, não acessos à estrutura do índice. `normalized_char` continua
+visível como hotpath porque a chave armazenada ainda precisa ser normalizada;
+eliminar também esse lado exigirá chaves canônicas no loader ou no WWDB.
+
+Validação de F-05a:
+
+- builds Debug e RelWithDebInfo com Clang, além do link Emscripten/WASM, todos
+  com as flags estritas do projeto;
+- 116/116 testes no build Debug;
+- diferenciais selecionados, configured oracle e Eneida com checksum e
+  semântica preservados;
+- 116/116 testes com ASan/UBSan. LeakSanitizer foi desabilitado porque não
+  funciona sob o `ptrace` deste ambiente, não por diagnóstico do programa;
+- `git diff --check` limpo.
+
+Há ainda uma duplicação separada de código: os oito métodos repetem o mesmo
+`lower_bound`, teste de igualdade e recorte por `first/count`, e os tipos
+`StemGroup`, `EndingGroup`, `UniqueGroup`, `SuffixGroup`, `PrefixGroup` e
+`TackonGroup` têm o mesmo layout. Um `LookupGroup` comum permitiria extrair uma
+única busca não-template e deixar wrappers tipados apenas para formar o
+`span`. Isso pode reduzir fonte e talvez `.text`, mas não deve ser misturado ao
+A/B do comparador: um helper template ainda tende a gerar oito instanciações,
+e impedir inline à força pode trocar tamanho por custo de chamada. Primeiro se
+mede o comparador; depois se compara tamanho nativo/WASM e instruções com a
+deduplicação isolada.
+
+Outros custos ainda claros:
+
+- `LatinLexer::lex`: 7,27% inclusivos; somente `map_utf8` representa 5,79%;
+- `rewrite_attempts`: 6,92% inclusivos, além das análises lexicais disparadas
+  pelas formas transformadas;
+- `sort_and_deduplicate_analyses`: 2,57% inclusivos;
+- vetores de `AnalysisIR` e `QueryResult` respondem juntos por cerca de 64,9%
+  dos bytes alocados no DHAT pós-F-04;
+- lexer/utf8proc ainda produz 56.161 blocos e os vetores temporários de addons,
+  30.074; juntos são aproximadamente 76,1% de todos os blocos restantes.
+
+Como a Eneida e todas as formas internas geradas nesse perfil são ASCII, um
+fast path do lexer pode evitar 32.092 eventos de `malloc`/`realloc` do utf8proc
+e 8.023 alocações de `vector<Glyph>`: limite superior de 40.115 blocos, ou
+35,4% dos blocos atuais. `quantities` e offsets continuam proprietários nessa
+primeira etapa; a retirada completa de utf8proc permanece um experimento
+posterior e separado.
+
+### Ablações pós-F-04
+
+As ablações abaixo foram executadas no NativeLab com Callgrind sobre o mesmo
+corpus. Elas alteram resultados e caminhos de controle, portanto são limites
+superiores do custo de cada mecanismo, não previsões de ganho de uma
+otimização. Os percentuais se sobrepõem e não podem ser somados.
+
+| Configuração | Instruções | Delta | Checksum |
+| --- | ---: | ---: | ---: |
+| padrão | 692.809.841 | — | 22.723 |
+| sem síncope | 361.614.452 | -47,80% | 22.660 |
+| sem ortografia | 510.779.789 | -26,27% | 22.695 |
+| sem sufixos | 477.056.449 | -31,14% | 22.683 |
+| sem derivações produtivas | 417.192.274 | -39,78% | 22.680 |
+
+Síncope, ortografia e sufixos custam muito mais que a quantidade de análises
+adicionais sugere, mas parte relevante é trabalho lexical necessário para
+provar que uma tentativa falha. O primeiro corte seguro é reduzir varreduras e
+tentativas redundantes, preservando todos os resultados, não simplesmente
+desabilitar mecanismos.
+
+### Backlog por ondas
+
+#### Onda E1 — experimentos pequenos da engine
+
+1. **Concluído em F-05a:** comparador para chave armazenada versus consulta já
+   canônica, removendo a normalização redundante do lado direito nos oito
+   `lookup_*`; -18,03% de instruções no Callgrind.
+2. Adicionar o fast path ASCII de uma passagem ao lexer, mantendo utf8proc como
+   fallback Unicode.
+3. Indexar as 170 reescritas por tipo, estágio e prioridade; depois medir
+   buckets pelo primeiro byte da sequência `before`.
+4. Reperfilar após cada mudança. Só avançar se checksum, diferenciais, tamanho
+   nativo/WASM e sanitizers permanecerem aceitáveis.
+
+#### Onda E2 — escolher com os novos perfis
+
+1. Avaliar buffer inline para os IDs de addons, priorizando quantidade de
+   alocações; os bytes envolvidos são pequenos.
+2. Comparar trie reverso de terminações com o `lower_bound` já simplificado. O
+   teto atual de `lookup_ending` é 5,65% inclusivos, portanto o trie não deve
+   preceder o experimento mais geral de comparação canônica.
+3. Medir ordenação indireta/chaves pré-calculadas para `AnalysisIR`; hoje o
+   sort representa 2,57%, logo não justifica ainda uma grande reestruturação.
+
+#### Onda E3 — mudanças de representação ou API
+
+1. Sink interno de `analyze_line`, preservando a API de vetor e projetando
+   diretamente para o vetor final no adaptador WASM.
+2. Descritores compactos antes de materializar `AnalysisIR`, caso o DHAT depois
+   das ondas anteriores continue apontando os vetores como maior churn.
+3. Chaves e índices já canônicos/ordenados no WWDB, loader linear e possível
+   trie persistido somente depois de medir os protótipos em memória.
+4. Substituição completa de utf8proc pelo normalizador latino finito e pela
+   política de pontuação escolhida para o tokenizador.
+
+### Priorização por custo versus benefício
+
+As estimativas de código abaixo incluem implementação, testes específicos e
+integração, mas são somente ordens de grandeza: **XS** até aproximadamente 100
+linhas tocadas, **S** 100–250, **M** 250–600, **L** 600–1.200 e **XL** quando
+há mudança de formato/API transversal. O “teto medido” é a fatia atualmente
+atribuída ao subsistema; não é uma promessa de que toda a fatia desaparecerá.
+
+#### Engine: ordem padrão para testar
+
+| Ordem | Hipótese | Código | Risco | Benefício provável | Teto ou evidência atual |
+| ---: | --- | --- | --- | --- | --- |
+| 1 | **Concluído:** comparador chave armazenada × consulta canônica | XS | baixo | alto medido | -18,03% de instruções, -14,44% de branches e checksum idêntico |
+| 2 | Fast path `[A-Za-z]+` no lexer | S | baixo–médio | alto em corpus ASCII | lexer 7,27% inclusivos; limite de 40.115 blocos, 35,4% das alocações atuais |
+| 3 | Buckets de rewrite por tipo/estágio/prioridade | M | médio | médio | `rewrite_attempts` 6,92% inclusivos; não remove a reanálise semântica das formas válidas |
+| 4 | Sink interno de `analyze_line` para WASM/line mode | M | médio | alto em textos, nulo no benchmark por palavra | vetor de `QueryResult`: 8,95 MB, 25,3% dos bytes no perfil `lines` |
+| 5 | Buffer inline especializado para IDs de addons | S–M | baixo–médio | alto em contagem de alocações, baixo/incerto em CPU | 30.074 blocos, 26,5% do total, mas somente cerca de 414 KiB |
+| 6 | Trie reverso de terminações construída em memória | M | médio | baixo–médio depois do comparador | `lookup_ending` tem teto de 5,65% inclusivos antes da simplificação do comparador |
+| 7 | Ordenação indireta/chaves pré-calculadas de `AnalysisIR` | S–M | médio | baixo na mediana, possível em alta ambiguidade | sort/dedup inteiro representa 2,57%; mediana de apenas três análises |
+| 8 | Normalizador latino finito e retirada de utf8proc | L | alto semântico | baixo adicional em runtime ASCII; alto em tamanho WASM | até 328.538 bytes de tabelas `.rodata`; o fast path captura antes o caso runtime comum |
+| 9 | Índices canônicos e pré-ordenados no WWDB | XL | alto de formato | alto no startup, nulo no steady-state medido | loader 8,11% exclusivos e sort de stems 6,46% no perfil de startup |
+| 10 | Descritores compactos antes de `AnalysisIR` | L–XL | alto arquitetural | potencialmente alto em memória, CPU incerto | vetores de `AnalysisIR`: 13,95 MB, 39,5% dos bytes pós-F-04 |
+
+A ordem 1–3 é deliberadamente firme; depois dela deve haver novo Callgrind e
+DHAT. A ordem 4–10 é condicional ao novo perfil. Em particular, se tamanho do
+WASM for o objetivo dominante, o normalizador finito sobe da posição 8 para a
+posição 4. Se latência de startup for o objetivo dominante, o WWDB pré-ordenado
+sobe, mas continua atrás de um protótipo que prove o formato desejado.
+
+O critério para promover uma hipótese é:
+
+```text
+prioridade prática = ganho reproduzível
+                   / (código novo + risco semântico + custo no binário)
+```
+
+Por isso, quantidade de alocações sozinha não promove o buffer inline acima do
+lexer: addons produzem muitos blocos pequenos, enquanto o lexer combina CPU,
+alocações e uma oportunidade clara de simplificação.
+
+### Cobertura de testes necessária por hipótese da engine
+
+O checksum do benchmark (`units.size() + total_analyses()`) impede a eliminação
+trivial do trabalho, mas não prova equivalência: IDs, morfologia, ordenação,
+quantidades e provenance podem mudar mantendo as mesmas contagens. Cada A/B
+deve conservar o checksum barato dentro da região instrumentada e executar uma
+comparação semântica forte fora dela. A suíte atual oferece boa cobertura de
+resultados finais, porém vários contratos internos novos precisam de testes
+dedicados antes da implementação.
+
+| Hipótese | Cobertura atual | Pitfall principal ainda não coberto | Guardrail a adicionar antes/do experimento |
+| --- | --- | --- | --- |
+| Comparador assimétrico canônico | parcial | consulta não canônica ou ordenação incompatível nas bordas do `lower_bound` | auditar em debug que toda consulta da engine é `[a-z]*` sem `j/v`; para cada chave derivável do banco, comparar lookup novo com referência normalizada, incluindo vazio, ausente, primeira e última chave |
+| Fast path ASCII | parcial | aceitar vazio/pontuação/NUL, alterar `original_utf8`, offsets ou folding `J/V` | tabela direta para minúsculas, maiúsculas, `JjVv`, palavra de um byte e longa; confirmar todas as propriedades de `SurfaceForm`; provar fallback para qualquer byte não ASCII |
+| Buckets de rewrite | funcional forte, estrutural parcial | perder/duplicar regra ou mudar ordem de prioridade, estágio, `scan_reverse` e ID | teste de integridade: os 170 IDs aparecem exatamente uma vez no bucket correto e na ordem original; buckets vazios; paridade de tentativas e provenance nos fixtures de síncope/ortografia |
+| Sink de `analyze_line` | funcional forte | emitir lookahead cedo, duplicar/perder token, mover dados antes do consumo | executar wrapper e sink sobre os mesmos casos e comparar resultados completos; cobrir lookahead falho, composto aceito, erro entre tokens, Unicode, pontuação e two-words |
+| Buffer inline de addons | funcional parcial | overflow, transição inline→heap, sort/unique atravessando os dois storages e invalidar iteradores | testar vazio, capacidade−1, capacidade, capacidade+1, múltiplos appends, duplicatas, move e overflow forçado com capacidade de teste pequena |
+| Trie reversa de endings | parcial | esquecer ending vazio, parar cedo, inverter a ordem longest-first ou errar palavras menores que o máximo | comparar trie com `lookup_ending` de referência para todas as terminações do banco e mutações ausentes; testar ending vazio, prefixos compartilhados, profundidade máxima e ordem exata dos `RuleId` |
+| Sort indireto de `AnalysisIR` | parcial | deduplicar análises distintas, produzir ordem não determinística sem necessidade ou manter `string_view` pendente após movimentos | paridade do multiset semântico, sem congelar ordem de apresentação; casos 0/1/duplicados e palavra de alta ambiguidade; ASan/UBSan para lifetime das chaves pré-calculadas |
+| Normalizador latino finito | bom conjunto de exemplos, insuficiente para substituição | classificação errada de UTF-8 inválido, composição NFC divergente ou expansão de casefold indevida | todos os 22 precompostos; combinações decompostas; `y`+breve; marcas antes/duplicadas/conflitantes; matriz de overlong, truncados, surrogate, `>U+10FFFF`, `U+FFFD` válido e comparação exaustiva contra utf8proc |
+| WWDB pré-ordenado/canônico | forte para formato atual | aceitar grupos fora de ordem, ranges sobrepostos/fora do arquivo, duplicatas ou chave não canônica | fixtures corrompidos específicos para cada novo invariante; geração determinística byte a byte; paridade de todos os lookups entre banco antigo e novo |
+| Descritores compactos de análise | black-box ampla, estrutural fraca | perder ownership/provenance/quantidade durante materialização tardia | modo A/B temporário com comparação dos multisets semânticos de `QueryResult`; Eneida completa, casos de rewrite, addon, quantidade, homógrafos, compostos e alta ambiguidade; sanitizers |
+
+Cobertura existente especialmente relevante:
+
+- `words_aeneid_corpus` cobre 2.726 formas ASCII distintas, mas compara a
+  semântica do corpus principalmente como conjunto e não protege toda ordem;
+- `words_differential` cobre fixtures selecionados contra Ada e compara JSON
+  completo em vários caminhos;
+- os testes `AppliesDataDrivenPerfectSyncopeByPriority`,
+  `AppliesDataDrivenOrthographicFamilies`,
+  `BoundsOrthographyThenSyncopeToTwoTypedSteps` e
+  `KeepsDirectEncliticAnalysisAheadOfSpellingRecovery` já protegem decisões
+  importantes do scheduler de rewrites;
+- os testes de `analyze_line` já cobrem lookahead falho, composto aceito,
+  pontuação ASCII/Unicode, erros por token e normalização;
+- os testes do lexer cobrem os principais casos latinos e rejeições, mas não
+  constituem ainda uma suíte UTF-8 estrita/exaustiva;
+- os testes de corrupção do WWDB protegem header, versão, truncamento e
+  checksum do formato atual, não os futuros invariantes de índices persistidos.
+
+Um fixture visual revelou uma lacuna concreta na cobertura de quantidade. O
+comportamento atual é:
+
+| Consulta | Entradas | Análises | Partição esperada |
+| --- | ---: | ---: | --- |
+| `puella` | 1 | 3 | nominativo, vocativo e ablativo singular |
+| `puellă` | 1 | 2 | nominativo e vocativo singular |
+| `puellā` | 1 | 1 | ablativo singular |
+| `malum` | 6 | 17 | união não marcada dos grupos curto e longo |
+| `mălum` | 2 | 8 | entradas 26.267 e 26.269 |
+| `mālum` | 4 | 9 | entradas 26.263–26.266 |
+
+Os binários Ada locais foram consultados como oráculo somente para as formas
+ASCII. `bin/words puella` confirma NOM/VOC/ABL singular feminino, e
+`bin/words_json puella` contém as mesmas três análises estruturadas.
+`bin/words_json malum` contém as mesmas 17 análises da engine. A saída textual
+de `bin/words` agrupa regras e sentidos na apresentação, portanto não deve ser
+usada para contar objetos `AnalysisIR`; o JSON é o oráculo estrutural. As
+formas com breve/macron não são enviadas ao programa histórico ASCII: elas são
+validadas como partições da semântica da forma não marcada.
+
+Há cobertura parcial: `AnalyzesNounOnlyFixtures` fixa somente as três análises
+de `puella`; `InflectionQuantityDistinguishesFirstDeclensionA` prova a divisão
+breve/macron usando `rosă` e `rosā`; e `LexicalQuantityPartitionsMalumHomographs`
+prova os grupos de entry IDs e que suas contagens somam a consulta sem marca.
+Os testes `QuantityPartitionsPuellaInflectionsExactly` e
+`QuantityPartitionsMalumLexemesExactly` agora fixam as seis assinaturas acima,
+incluindo caso, número, gênero, entry ID, `stem_key`, `quantity_match`, ranges
+de stem/ending e multiplicidade. Eles comparam assinaturas ordenadas apenas
+internamente como multisets e deliberadamente não tornam a ordem de
+apresentação parte do contrato. Esse fixture protege os experimentos de lexer,
+comparadores, trie ou materialização tardia, pois cruza todos esses caminhos.
+
+Foi acrescentado também
+`DatabaseTest.CanonicalLookupIndexesRemainInternallyConsistent`. Ele percorre
+todos os endings, uniques e addons expostos pelo banco e confirma que a forma
+canônica resolve para o ID correspondente; para stems, percorre todas as
+grafias lexicais que de fato resolvem e verifica que cada referência devolvida
+aponta novamente para a mesma chave canônica. Uma tentativa inicial de exigir
+que todo slot não vazio de `LexemeRecord::stems` estivesse no índice revelou um
+contrato interno importante: esses quatro slots são payload lexical e podem
+conter alternativas ou sentinelas como `zzz`; somente a seção
+`stem_references` define quais pares lexema/slot/stem-key são pesquisáveis.
+Portanto, um teste de paridade absolutamente exaustivo do índice de stems
+precisaria expor uma visão somente-leitura das referências ou decodificar essa
+seção do WWDB; inferi-la dos slots do lexema produziria falsos positivos.
+
+Antes do primeiro A/B, deve ser criado um fingerprint semântico de validação,
+calculado fora da região medida, contendo ao menos status, `LexemeId`, `RuleId`,
+morfologia, quantity match e derivation/addon/rewrite IDs. A comparação padrão
+deve ser por multiset; ordem só entra no fingerprint onde “primeiro match” ou
+prioridade do scheduler fizer parte da semântica. O checksum barato continua
+dentro do loop para impedir dead-code elimination sem poluir o perfil com
+hashing de strings e variantes.
+
+#### CLI e produto: trilha independente
+
+| Ordem | Hipótese | Código | Risco | Benefício provável | Evidência atual |
+| ---: | --- | --- | --- | --- | --- |
+| 1 | Writer JSON incremental | M–L | médio de compatibilidade textual | muito alto | DOM JSON: 329,6 MB e 5,27 milhões de blocos |
+| 2 | Usar o sink de `analyze_line` na projeção WASM | M incremental | médio | alto para textos grandes | evita manter `QueryResult` e projeção do browser ao mesmo tempo |
+| 3 | LRU limitado por bytes | M | médio de política/memória | alto quando há repetição, zero em consultas únicas | repetição observada de 40,4% na Eneida e 66,6% na amostra Latin Library |
+| 4 | `mmap` do banco nativo | S–M | médio de plataforma | baixo enquanto sorts dominarem startup | leitura física não apareceu como custo principal no `strace` |
+
+O LRU não deve preceder o writer: cache melhora workloads repetitivos, enquanto
+o writer reduz custo também para todas as consultas distintas. Esses números
+não devem ser usados para priorizar alterações da engine pura.
+
+### Trilha separada do CLI
+
+O writer JSON streaming continua sendo a maior oportunidade do formato
+`analysis`, e o LRU do modo batch continua atraente para corpora repetitivos.
+Eles devem usar o CLI nos benchmarks A/B, não `words_engine_benchmark`, pois não
+pertencem ao custo interno da engine.
+
 ## Ordem sugerida dos experimentos
 
-1. writer JSON streaming, mantendo golden outputs byte a byte;
-2. cache LRU por bytes no CLI batch;
-3. buckets contíguos de reescritas por tipo/estágio/prioridade;
-4. chaves canônicas e protótipo de trie reverso para as terminações; a
-   enumeração lazy de candidatos já foi concluída;
-5. índices pré-ordenados no WWDB e loader linear;
-6. fast path ASCII e normalizador latino especializado, validado
-   diferencialmente contra o lexer atual;
-7. ordenação indireta dos resultados;
-8. redução da tabela de categorias de pontuação do tokenizador, conforme o
-   contrato editorial escolhido.
+Para a engine, seguir E1, reperfilar e então escolher E2 pelos novos números.
+Para o CLI, medir writer streaming antes do cache, pois ele melhora também
+consultas distintas. Mudanças de WWDB, API e retirada completa de utf8proc
+ficam em E3 para não misturar estrutura, semântica e micro-otimização.
 
 Cada experimento deve ser isolado em benchmark A/B e preservar os resultados
 canônicos da engine. Tempos devem ser acompanhados por instruções, alocações,
