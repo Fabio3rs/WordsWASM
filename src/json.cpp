@@ -40,8 +40,8 @@ constexpr std::string_view related_passive_notice_text{
 constexpr std::string_view related_passive_notice_documentation{
     "docs/morphological-assessment.md#reviewed-semideponent-exceptions"};
 constexpr std::string_view source_disagreement_notice_text{
-    "Whitaker's trim policy and external grammatical or lexical evidence "
-    "do not support the same early rejection."};
+    "Whitaker and external grammatical or lexical evidence disagree about "
+    "this analysis or its classification."};
 constexpr std::string_view source_disagreement_notice_documentation{
     "docs/morphological-assessment.md#source-disagreement"};
 constexpr std::string_view manual_review_notice_text{
@@ -193,6 +193,19 @@ rewrite_category(const RewriteRule &rewrite) noexcept {
         {"normalized", normalized},
         {"mode", "latin"},
     };
+}
+
+[[nodiscard]] QueryResult
+independent_token_result(const QueryResult &parent,
+                         const IndependentTokenAnalysisIR &token) {
+    QueryResult result{parent.origin};
+    result.options = parent.options;
+    result.surface = token.surface;
+    result.status = token.status;
+    result.analyses = token.analyses;
+    result.artificial_analyses = token.artificial_analyses;
+    result.diagnostics = token.diagnostics;
+    return result;
 }
 
 [[nodiscard]] Json analysis_options_json(const AnalysisOptions &options) {
@@ -643,7 +656,8 @@ compound_meaning(const CompoundAnalysisIR &analysis) noexcept {
 
 [[nodiscard]] Json full_roman_analysis(const Database &database,
                                        const QueryResult &result,
-                                       const RomanNumeralIR &analysis) {
+                                       const RomanNumeralIR &analysis,
+                                       const bool extended = false) {
     const auto meaning = roman_meaning(analysis);
     const auto stem = std::string_view{result.surface.original_utf8}.substr(
         analysis.stem.begin, analysis.stem.count);
@@ -660,7 +674,7 @@ compound_meaning(const CompoundAnalysisIR &analysis) noexcept {
     }
     steps.push_back(Json{
         {"type", roman_dictionary_name}, {"text", ""}, {"meaning", meaning}});
-    return Json{
+    Json output{
         {"partOfSpeech", lexical_part_name(PartOfSpeech::numeral)},
         {"lexeme",
          Json{{"dictionary", roman_dictionary_name},
@@ -694,6 +708,11 @@ compound_meaning(const CompoundAnalysisIR &analysis) noexcept {
         {"derivation",
          Json{{"method", roman_dictionary_name}, {"steps", std::move(steps)}}},
     };
+    if (extended) {
+        output["assessment"] =
+            morphological_assessment_json(analysis.assessment);
+    }
+    return output;
 }
 
 struct SearchHit final {
@@ -948,8 +967,8 @@ std::string analysis_json_v2(const Engine &engine,
                     analysis_order_key(engine.database(), analysis),
                     std::move(value));
             } else if constexpr (std::is_same_v<Analysis, RomanNumeralIR>) {
-                auto value =
-                    full_roman_analysis(engine.database(), result, analysis);
+                auto value = full_roman_analysis(engine.database(), result,
+                                                  analysis, true);
                 ordered.emplace_back(analysis_order_key(analysis),
                                      std::move(value));
             } else {
@@ -981,6 +1000,20 @@ std::string analysis_json_v2(const Engine &engine,
     if (result.two_word_suggestion) {
         output["suggestions"] = Json::array({full_two_word_suggestion(
             engine, *result.two_word_suggestion, true)});
+    }
+    if (!result.independent_tokens.empty()) {
+        Json tokens = Json::array();
+        for (const auto &token : result.independent_tokens) {
+            const auto token_document = Json::parse(analysis_json_v2(
+                engine, independent_token_result(result, token)));
+            tokens.push_back(Json{
+                {"query", token_document.at("query")},
+                {"status", token_document.at("status")},
+                {"analyses", token_document.at("analyses")},
+                {"diagnostics", token_document.at("diagnostics")},
+            });
+        }
+        output["tokens"] = std::move(tokens);
     }
     return output.dump();
 }
@@ -1127,6 +1160,8 @@ std::string search_json_v2(const Engine &engine, const QueryResult &result) {
                      Json{{"method", roman_dictionary_name},
                           {"value", analysis.value},
                           {"wellFormed", analysis.well_formed}}},
+                    {"assessment",
+                     morphological_assessment_json(analysis.assessment)},
                 });
             },
             artificial);
@@ -1148,6 +1183,20 @@ std::string search_json_v2(const Engine &engine, const QueryResult &result) {
     if (result.two_word_suggestion) {
         output["suggestions"] = Json::array(
             {search_two_word_suggestion(*result.two_word_suggestion, true)});
+    }
+    if (!result.independent_tokens.empty()) {
+        Json tokens = Json::array();
+        for (const auto &token : result.independent_tokens) {
+            const auto token_document = Json::parse(search_json_v2(
+                engine, independent_token_result(result, token)));
+            tokens.push_back(Json{
+                {"query", token_document.at("query")},
+                {"status", token_document.at("status")},
+                {"hits", token_document.at("hits")},
+                {"diagnostics", token_document.at("diagnostics")},
+            });
+        }
+        output["tokens"] = std::move(tokens);
     }
     return output.dump();
 }

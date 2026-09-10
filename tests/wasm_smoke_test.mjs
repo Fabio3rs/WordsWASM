@@ -39,6 +39,7 @@ try {
     rawSearch.hits.delete();
     rawSearch.diagnostics.delete();
     rawSearch.suggestions.delete();
+    rawSearch.tokens.delete();
   }
 } finally {
   reloadable.delete();
@@ -225,6 +226,21 @@ try {
   assert.equal(compound.compound.construction, "finite-sum");
   assert.equal(compound.compound.auxiliary, "est");
   assert.equal(compound.form.recognized, "amata est");
+  assert.deepEqual(
+    compoundDocument.tokens.map(({query}) => query.normalized),
+    ["amata", "est"],
+  );
+  assert.ok(compoundDocument.tokens.every(({hits}) => hits.length > 0));
+
+  const abbreviation = engine.search("C.");
+  const abbreviationRoman = abbreviation.hits.find((hit) =>
+    hit.kind === "artificial"
+  );
+  assert.ok(abbreviation.hits.some((hit) => hit.kind === "lexical"));
+  assert.ok(abbreviationRoman);
+  assert.ok(abbreviationRoman.assessment.notices.includes(
+    "source-disagreement",
+  ));
 
   expectedSearchLine = engine.searchLine("amo, amatus\u00A0sum; amare");
   assert.deepEqual(

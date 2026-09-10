@@ -285,6 +285,13 @@ struct BrowserSearchSuggestion final {
     std::vector<BrowserSearchSegment> segments;
 };
 
+struct BrowserIndependentToken final {
+    BrowserQuery query;
+    std::string status;
+    std::vector<BrowserSearchHit> hits;
+    std::vector<BrowserDiagnostic> diagnostics;
+};
+
 struct BrowserSearchResult final {
     std::string schema{"whitakers-words.browser-search"};
     std::uint32_t schema_version{4U};
@@ -294,6 +301,7 @@ struct BrowserSearchResult final {
     std::vector<BrowserSearchHit> hits;
     std::vector<BrowserDiagnostic> diagnostics;
     std::vector<BrowserSearchSuggestion> suggestions;
+    std::vector<BrowserIndependentToken> tokens;
 };
 
 using words::addon_kind_name;
@@ -766,6 +774,7 @@ browser_search_result(const words::Engine &engine,
                 BrowserSearchHit hit;
                 hit.has_lexeme = false;
                 hit.kind = "artificial";
+                hit.assessment = browser_assessment(analysis.assessment);
                 hit.assessment.generated_by_whitaker = false;
                 const auto morphology = words::roman_numeral_morphology();
                 hit.part_of_speech =
@@ -829,6 +838,24 @@ browser_search_result(const words::Engine &engine,
             suggestion.segments.push_back(std::move(projected));
         }
         output.suggestions.push_back(std::move(suggestion));
+    }
+    output.tokens.reserve(result.independent_tokens.size());
+    for (const auto &token : result.independent_tokens) {
+        words::QueryResult token_result{result.origin};
+        token_result.options = result.options;
+        token_result.surface = token.surface;
+        token_result.status = token.status;
+        token_result.analyses = token.analyses;
+        token_result.artificial_analyses = token.artificial_analyses;
+        token_result.diagnostics = token.diagnostics;
+        auto projected =
+            browser_search_result(engine, token_result, include_meanings);
+        output.tokens.push_back(BrowserIndependentToken{
+            .query = std::move(projected.query),
+            .status = std::move(projected.status),
+            .hits = std::move(projected.hits),
+            .diagnostics = std::move(projected.diagnostics),
+        });
     }
     return output;
 }
@@ -1253,6 +1280,15 @@ EMSCRIPTEN_BINDINGS(words_analysis_engine) {
         "VectorResolvedSearchSuggestion");
     emscripten::register_vector<BrowserDiagnostic>("VectorSearchDiagnostic");
 
+    emscripten::value_object<BrowserIndependentToken>(
+        "ResolvedIndependentToken")
+        .field("query", &BrowserIndependentToken::query)
+        .field("status", &BrowserIndependentToken::status)
+        .field("hits", &BrowserIndependentToken::hits)
+        .field("diagnostics", &BrowserIndependentToken::diagnostics);
+    emscripten::register_vector<BrowserIndependentToken>(
+        "VectorResolvedIndependentToken");
+
     emscripten::value_object<BrowserSearchResult>("ResolvedSearchResult")
         .field("schema", &BrowserSearchResult::schema)
         .field("schemaVersion", &BrowserSearchResult::schema_version)
@@ -1261,7 +1297,8 @@ EMSCRIPTEN_BINDINGS(words_analysis_engine) {
         .field("status", &BrowserSearchResult::status)
         .field("hits", &BrowserSearchResult::hits)
         .field("diagnostics", &BrowserSearchResult::diagnostics)
-        .field("suggestions", &BrowserSearchResult::suggestions);
+        .field("suggestions", &BrowserSearchResult::suggestions)
+        .field("tokens", &BrowserSearchResult::tokens);
     emscripten::register_vector<BrowserSearchResult>(
         "VectorResolvedSearchResult");
 

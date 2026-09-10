@@ -268,6 +268,7 @@ interface ArtificialBase<D extends SearchDerivation | AnalysisDerivation>
   kind: "artificial";
   partOfSpeech: "numeral";
   morphology: Extract<Morphology, {kind: "numeral"}>;
+  assessment: MorphologicalAssessment;
   artificial: {
     method: "roman-numeral";
     value: number;
@@ -301,16 +302,25 @@ interface DocumentBase {
   diagnostics: Diagnostic[];
 }
 
+export interface IndependentToken<H extends SearchHit | AnalysisHit> {
+  query: QueryIdentity;
+  status: QueryStatus;
+  hits: H[];
+  diagnostics: Diagnostic[];
+}
+
 export interface AnalysisDocument extends DocumentBase {
   schema: "whitakers-words.browser-analysis";
   hits: AnalysisHit[];
   suggestions: Array<SearchSuggestion<AnalysisLexicalHit>>;
+  tokens: Array<IndependentToken<AnalysisHit>>;
 }
 
 export interface SearchDocument extends DocumentBase {
   schema: "whitakers-words.browser-search";
   hits: SearchHit[];
   suggestions: Array<SearchSuggestion<SearchLexicalHit>>;
+  tokens: Array<IndependentToken<SearchHit>>;
 }
 
 export interface AnalyzeOptions {

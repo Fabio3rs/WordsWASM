@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,64 @@ from pathlib import Path
 
 MAIN_TABLES = tuple(f"{letter}_Tricks" for letter in "ADEFGHKLMNOPSTUYZ")
 EARLY_TABLES = tuple(f"{letter}_Slur_Tricks" for letter in "ACINOQS")
+SYNCOPE_ADA_SHA256 = "b94cd4b63cb48b5c62d1962ef301e303d6f4f922941ee385754ecb34301a5ddb"
+SYNCOPE_RECORDS = (
+    (
+        "SYNCOPE 0 MAIN LITERAL INTERNAL REVERSE ii ivi V 3 0 0 ANY "
+        "CLASSICAL perfect-ivi-uncontracted",
+        "Syncopated perfect ivi can drop 'v' without contracting vowel",
+    ),
+    (
+        "SYNCOPE 1 MAIN LITERAL INTERNAL REVERSE as avis V 3 0 1 ANY "
+        "CLASSICAL perfect-v-contraction",
+        "Syncopated perfect often drops the 'v' and contracts vowel",
+    ),
+    (
+        "SYNCOPE 1 MAIN LITERAL INTERNAL REVERSE es evis V 3 0 1 ANY "
+        "CLASSICAL perfect-v-contraction",
+        "Syncopated perfect often drops the 'v' and contracts vowel",
+    ),
+    (
+        "SYNCOPE 1 MAIN LITERAL INTERNAL REVERSE is ivis V 3 0 1 ANY "
+        "CLASSICAL perfect-v-contraction",
+        "Syncopated perfect often drops the 'v' and contracts vowel",
+    ),
+    (
+        "SYNCOPE 1 MAIN LITERAL INTERNAL REVERSE os ovis V 3 0 1 ANY "
+        "CLASSICAL perfect-v-contraction",
+        "Syncopated perfect often drops the 'v' and contracts vowel",
+    ),
+    (
+        "SYNCOPE 2 MAIN LITERAL INTERNAL REVERSE ar aver V 3 1 1 ANY "
+        "CLASSICAL perfect-v-before-r",
+        "Syncopated perfect often drops the 'v' and contracts vowel",
+    ),
+    (
+        "SYNCOPE 2 MAIN LITERAL INTERNAL REVERSE er ever V 3 1 1 ANY "
+        "CLASSICAL perfect-v-before-r",
+        "Syncopated perfect often drops the 'v' and contracts vowel",
+    ),
+    (
+        "SYNCOPE 2 MAIN LITERAL INTERNAL REVERSE or over V 3 1 1 ANY "
+        "CLASSICAL perfect-v-before-r",
+        "Syncopated perfect often drops the 'v' and contracts vowel",
+    ),
+    (
+        "SYNCOPE 3 MAIN LITERAL INTERNAL REVERSE ier iver V 3 0 1 ANY "
+        "CLASSICAL perfect-ier",
+        "Syncopated perfect often drops the 'v' and contracts vowel",
+    ),
+    (
+        "SYNCOPE 4 MAIN LITERAL INTERNAL REVERSE s sis V 3 0 2 ANY "
+        "CLASSICAL perfect-is-after-s-x",
+        "Syncopated perfect sometimes drops the 'is' after 's' or 'x'",
+    ),
+    (
+        "SYNCOPE 4 MAIN LITERAL INTERNAL REVERSE x xis V 3 0 2 ANY "
+        "CLASSICAL perfect-is-after-s-x",
+        "Syncopated perfect sometimes drops the 'is' after 's' or 'x'",
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -19,6 +78,37 @@ class AdaTrick:
     operation: str
     first: str
     second: str = ""
+
+
+def validate_syncope(root: Path, rewrites: str) -> None:
+    path = root / "src/words_engine/words_engine-tricks.adb"
+    source = path.read_text()
+    try:
+        begin = source.index("   procedure Syncope (")
+        end = source.index("   end Syncope;", begin) + len("   end Syncope;")
+    except ValueError as error:
+        raise ValueError("Ada Syncope routine drift: procedure not found") from error
+    digest = hashlib.sha256(source[begin:end].encode()).hexdigest()
+    if digest != SYNCOPE_ADA_SHA256:
+        raise ValueError(
+            "Ada Syncope routine drift: review SYNCOPE_RECORDS and update digest"
+        )
+
+    marker = "-- BEGIN IMPORTED ADA ORTHOGRAPHY\n"
+    try:
+        prefix = rewrites[:rewrites.index(marker)]
+    except ValueError as error:
+        raise ValueError("REWRITES.LAT has no orthography marker") from error
+    lines = [
+        line.strip()
+        for line in prefix.splitlines()
+        if line.strip() and not line.lstrip().startswith("--")
+    ]
+    if len(lines) % 2 != 0:
+        raise ValueError("incomplete SYNCOPE record in REWRITES.LAT")
+    records = tuple(zip(lines[0::2], lines[1::2], strict=True))
+    if records != SYNCOPE_RECORDS:
+        raise ValueError("REWRITES.LAT SYNCOPE records differ from reviewed Ada mapping")
 
 
 def table(source: str, name: str) -> list[AdaTrick]:
@@ -172,6 +262,7 @@ def main() -> None:
         return
 
     source = args.check.read_text()
+    validate_syncope(args.root, source)
     begin_marker = "-- BEGIN IMPORTED ADA ORTHOGRAPHY\n"
     end_marker = "-- END IMPORTED ADA ORTHOGRAPHY\n"
     begin = source.index(begin_marker) + len(begin_marker)

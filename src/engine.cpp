@@ -1790,6 +1790,14 @@ assess_morphology(const Database &database, const SurfaceForm &surface,
         assessment.whitaker_trim.add(
             WhitakerTrimReason::impersonal_non_third_person);
     }
+    if (lexeme.verb_kind == VerbKind::impersonal &&
+        is_finite_mood(verb->mood) &&
+        verb->number == GrammaticalNumber::plural) {
+        // Whitaker licenses third-person plural impersonal forms, while the
+        // reviewed grammar describes finite impersonals as third singular.
+        // Preserve the generated reading and expose the disagreement.
+        assessment.add_notice(MorphologicalNotice::source_disagreement);
+    }
 
     if (lexeme.verb_kind == VerbKind::deponent &&
         is_disallowed_deponent_active_form(*verb)) {
@@ -2494,6 +2502,13 @@ void append_compound(const AnalysisIR &source, const CompoundKind kind,
                      const DerivationIR &auxiliary_derivation,
                      const VerbMorphology morphology,
                      std::vector<CompoundAnalysisIR> &output) {
+    auto assessment = source.assessment;
+    if (kind == CompoundKind::finite_sum && source_tense == Tense::future &&
+        source_voice == Voice::active && morphology.voice == Voice::passive) {
+        // Preserve Whitaker's observable passive label, but mark its conflict
+        // with the active future periphrastic described by the grammar.
+        assessment.add_notice(MorphologicalNotice::source_disagreement);
+    }
     output.push_back(CompoundAnalysisIR{
         .lexeme = source.lexeme,
         .source_rule = source.rule,
@@ -2504,7 +2519,7 @@ void append_compound(const AnalysisIR &source, const CompoundKind kind,
         .source_tense = source_tense,
         .source_voice = source_voice,
         .auxiliary = std::string{auxiliary},
-        .assessment = source.assessment,
+        .assessment = assessment,
     });
 }
 
@@ -2594,6 +2609,53 @@ void append_compound(const AnalysisIR &source, const CompoundKind kind,
     return !result.compound_analyses.empty();
 }
 
+[[nodiscard]] IndependentTokenAnalysisIR
+independent_token(const QueryResult &result) {
+    return IndependentTokenAnalysisIR{
+        .surface = result.surface,
+        .status = result.status,
+        .analyses = result.analyses,
+        .artificial_analyses = result.artificial_analyses,
+        .diagnostics = result.diagnostics,
+    };
+}
+
+void annotate_period_abbreviation_conflict(const TextToken &token,
+                                            QueryResult &result) {
+    constexpr std::string_view roman_abbreviation_letters{"ACDLM"};
+    if (!has_any_flag(token.boundary_after.flags, BoundaryFlag::period) ||
+        token.text.size() != 1U ||
+        !roman_abbreviation_letters.contains(token.text.front())) {
+        return;
+    }
+
+    const auto has_noun_abbreviation =
+        std::ranges::any_of(result.analyses, [](const AnalysisIR &analysis) {
+            const auto *noun =
+                std::get_if<NounMorphology>(&analysis.morphology);
+            return noun != nullptr && noun->declension == 9U &&
+                   noun->variant == 8U;
+        });
+    if (!has_noun_abbreviation) {
+        return;
+    }
+
+    for (auto &artificial : result.artificial_analyses) {
+        std::visit(
+            [](auto &analysis) {
+                analysis.assessment.add_notice(
+                    MorphologicalNotice::source_disagreement);
+            },
+            artificial);
+    }
+}
+
+void preserve_independent_tokens(QueryResult &result,
+                                 const QueryResult &auxiliary) {
+    result.independent_tokens = {independent_token(result),
+                                 independent_token(auxiliary)};
+}
+
 [[nodiscard]] bool try_compound_query(const Database &database,
                                       const std::string_view original_utf8,
                                       QueryResult &result,
@@ -2611,6 +2673,7 @@ void append_compound(const AnalysisIR &source, const CompoundKind kind,
         .original_utf8 = std::string{original_utf8},
         .normalized_nfc = std::move(normalized),
     };
+    preserve_independent_tokens(result, auxiliary);
     result.artificial_analyses.clear();
     result.status = QueryStatus::analyzed;
     result.diagnostics.clear();
@@ -2671,6 +2734,7 @@ QueryResult Engine::analyze(const TextToken &token,
     result.surface = std::move(*lexed);
     const auto finish = [&]() -> QueryResult {
         apply_whitaker_trim(*database_, result);
+        annotate_period_abbreviation_conflict(token, result);
         if (result.options.whitaker_trim == WhitakerTrimMode::filter &&
             result.status == QueryStatus::analyzed &&
             result.analyses.empty() && result.artificial_analyses.empty()) {
@@ -2900,6 +2964,7 @@ QueryResult Engine::analyze_text(const std::string_view utf8,
                                .part_of_speech = std::nullopt}};
         return result;
     }
+    preserve_independent_tokens(result, auxiliary);
     result.status = QueryStatus::analyzed;
     result.diagnostics.clear();
     return result;

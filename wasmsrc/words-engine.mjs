@@ -260,6 +260,13 @@ function copyHit(raw) {
     derivation: copyDerivation(raw.derivation),
   };
   if (raw.kind === "artificial") {
+    hit.assessment = raw.assessment === undefined
+      ? {
+        generatedByWhitaker: false,
+        whitakerTrim: {compatible: true, reasons: []},
+        notices: [],
+      }
+      : copyAssessment(raw.assessment);
     hit.artificial = {
       method: raw.artificialMethod,
       value: raw.artificialValue,
@@ -307,6 +314,34 @@ function copySuggestion(suggestion) {
   };
 }
 
+function copyDiagnostic(diagnostic) {
+  return {
+    code: diagnostic.code,
+    severity: diagnostic.severity,
+    parameters: diagnostic.partOfSpeech === ""
+      ? {}
+      : {partOfSpeech: diagnostic.partOfSpeech},
+  };
+}
+
+function copyIndependentToken(token) {
+  const handles = [];
+  try {
+    const hits = token.hits;
+    handles.push(hits);
+    const diagnostics = token.diagnostics;
+    handles.push(diagnostics);
+    return {
+      query: token.query,
+      status: token.status,
+      hits: copyVector(hits, copyHit),
+      diagnostics: copyVector(diagnostics, copyDiagnostic),
+    };
+  } finally {
+    for (const handle of handles) deleteHandle(handle);
+  }
+}
+
 function copyResult(raw) {
   const handles = [];
   try {
@@ -316,6 +351,8 @@ function copyResult(raw) {
     handles.push(diagnostics);
     const suggestions = raw.suggestions;
     handles.push(suggestions);
+    const tokens = raw.tokens ?? [];
+    handles.push(tokens);
     return {
       schema: raw.schema,
       schemaVersion: raw.schemaVersion,
@@ -323,14 +360,9 @@ function copyResult(raw) {
       query: raw.query,
       status: raw.status,
       hits: copyVector(hits, copyHit),
-      diagnostics: copyVector(diagnostics, (diagnostic) => ({
-        code: diagnostic.code,
-        severity: diagnostic.severity,
-        parameters: diagnostic.partOfSpeech === ""
-          ? {}
-          : {partOfSpeech: diagnostic.partOfSpeech},
-      })),
+      diagnostics: copyVector(diagnostics, copyDiagnostic),
       suggestions: copyVector(suggestions, copySuggestion),
+      tokens: copyVector(tokens, copyIndependentToken),
     };
   } finally {
     for (const handle of handles) deleteHandle(handle);

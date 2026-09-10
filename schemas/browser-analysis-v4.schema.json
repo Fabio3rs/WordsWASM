@@ -12,7 +12,8 @@
     "status": {"enum": ["analyzed", "unknown", "error"]},
     "hits": {"type": "array", "items": {"$ref": "#/$defs/hit"}},
     "diagnostics": {"type": "array", "items": {"$ref": "browser-search-v3.schema.json#/$defs/diagnostic"}},
-    "suggestions": {"type": "array", "items": {"$ref": "#/$defs/suggestion"}}
+    "suggestions": {"type": "array", "items": {"$ref": "#/$defs/suggestion"}},
+    "tokens": {"type": "array", "items": {"$ref": "#/$defs/token"}}
   },
   "$defs": {
     "addonStep": {
@@ -112,13 +113,14 @@
     "artificialHit": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "artificial", "partOfSpeech", "form", "morphology", "derivation"],
+      "required": ["kind", "artificial", "partOfSpeech", "form", "morphology", "derivation", "assessment"],
       "properties": {
         "kind": {"const": "artificial"},
         "partOfSpeech": {"const": "numeral"},
         "form": {"$ref": "browser-search-v3.schema.json#/$defs/form"},
         "morphology": {"$ref": "browser-search-v3.schema.json#/$defs/morphology"},
         "derivation": {"$ref": "#/$defs/derivation"},
+        "assessment": {"$ref": "browser-search-v4.schema.json#/$defs/assessment"},
         "artificial": {
           "type": "object",
           "additionalProperties": false,
@@ -143,6 +145,17 @@
       "properties": {
         "text": {"type": "string"},
         "hits": {"type": "array", "items": {"$ref": "#/$defs/lexicalHit"}}
+      }
+    },
+    "token": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query", "status", "hits", "diagnostics"],
+      "properties": {
+        "query": {"$ref": "browser-search-v3.schema.json#/$defs/query"},
+        "status": {"enum": ["analyzed", "unknown", "error"]},
+        "hits": {"type": "array", "items": {"$ref": "#/$defs/hit"}},
+        "diagnostics": {"type": "array", "items": {"$ref": "browser-search-v3.schema.json#/$defs/diagnostic"}}
       }
     },
     "suggestion": {

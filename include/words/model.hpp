@@ -743,6 +743,7 @@ struct RomanNumeralIR final {
     bool well_formed{};
     SurfaceRange stem;
     DerivationIR derivation;
+    MorphologicalAssessmentIR assessment;
 };
 
 using ArtificialAnalysisIR = std::variant<RomanNumeralIR>;
@@ -751,6 +752,14 @@ struct Diagnostic final {
     DiagnosticCode code{DiagnosticCode::unknown_word};
     DiagnosticSeverity severity{DiagnosticSeverity::info};
     std::optional<PartOfSpeech> part_of_speech;
+};
+
+struct IndependentTokenAnalysisIR final {
+    SurfaceForm surface;
+    QueryStatus status{QueryStatus::unknown};
+    std::vector<AnalysisIR> analyses;
+    std::vector<ArtificialAnalysisIR> artificial_analyses;
+    std::vector<Diagnostic> diagnostics;
 };
 
 struct MultiTokenQueryIR final {
@@ -773,6 +782,10 @@ struct QueryResult final {
     QueryStatus status{QueryStatus::unknown};
     std::vector<AnalysisIR> analyses;
     std::vector<CompoundAnalysisIR> compound_analyses;
+    // A recognized compound supplements, rather than replaces, the analyses
+    // of its individual tokens.  Each snapshot owns its SurfaceForm so ranges
+    // remain anchored to the token from which they were produced.
+    std::vector<IndependentTokenAnalysisIR> independent_tokens;
     // Two_Words is deliberately a suggestion rather than a lexical hit: the
     // Ada documentation warns that mechanically successful splits are often
     // false.  Keeping it separate lets status remain unknown and prevents

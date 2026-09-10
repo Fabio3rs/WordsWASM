@@ -2,7 +2,8 @@
 
 Data da auditoria: 2026-09-10
 
-Estado: auditoria consolidada e primeira correção multiword implementada. A suíte completa passa com 121/121 testes.
+Estado: backlog prioritário implementado em TDD, incluindo IR multi-token,
+flags lossless, manifesto inicial, gate de síncope e relatório de cobertura.
 
 ## Objetivo
 
@@ -24,6 +25,12 @@ Cada comportamento deve ser classificado em pelo menos um destes eixos:
 3. **Contrato nativo do WordsWASM**: há uma representação melhor, mais completa ou Unicode-aware que deliberadamente diverge do legado?
 
 Uma igualdade diferencial com o Whitaker não prova correção linguística. Do mesmo modo, uma melhoria linguística ou estrutural não deve ser registrada como regressão sem distinguir o contrato afetado.
+
+### Decisão arquitetural: resultados lossless
+
+O contrato preferencial do WordsWASM é retornar todas as leituras estruturalmente geradas. Divergências entre Whitaker, outras fontes e a avaliação gramatical devem aparecer como `assessment`, notices ou flags tipadas, sem remover a análise do resultado padrão.
+
+Filtragem permanece aceitável apenas como projeção opcional de compatibilidade. Ela não deve orientar o conteúdo do IR canônico nem ser usada para esconder uma leitura disputada.
 
 ## Observação sobre ASCII e Unicode
 
@@ -54,17 +61,19 @@ Entretanto, isso ainda não permite afirmar que “todas as regras gramaticais�
 - o corpus da Eneida exercita somente 740 dos 1.785 `RuleId` de flexão, aproximadamente 41,5%;
 - especializações em código não possuem hoje uma identidade e uma cobertura equivalentes às regras do banco;
 - regras ortográficas, sincopadas, compostos, abreviações e filtros de configuração precisam de rastreamento próprio;
-- o processamento multiword é destrutivo: ele acrescenta a hipótese composta, mas descarta análises independentes válidas do primeiro token;
+- o processamento multiword era destrutivo; a correção atual preserva as
+  análises do primeiro token no resultado principal e as análises independentes
+  de ambos os tokens em `tokens[]`;
 - há comportamentos herdados do Whitaker que são compatíveis, mas gramaticalmente discutíveis ou incorretos.
 
 ### Resumo dos achados prioritários
 
 | Achado | Compatibilidade | Avaliação gramatical | Prioridade |
 |---|---|---|---|
-| `C.` mantém só a abreviação no original, mas também recebe `100` no nativo | divergência real | questão de tokenização/especialização | alta |
-| `licent` é aceito como impessoal no plural pelo original e pelo nativo | compatível | contraria a restrição normativa a 3ª pessoa singular | registrar como bug legado |
-| `amaturus est` recebe rótulo passivo | compatível | perífrase ativa, logo rótulo legado incorreto | oferecer projeção normalizada versionada |
-| compostos descartam análises independentes do primeiro token | em grande parte compatível | perda informacional desnecessária | alta |
+| `C.` mantém só a abreviação no original, mas também recebe `100` no nativo | divergência real, agora sinalizada | questão de tokenização/especialização | concluído sem perda |
+| `licent` é aceito como impessoal no plural pelo original e pelo nativo | compatível, agora sinalizado | contraria a restrição normativa a 3ª pessoa singular | concluído sem perda |
+| `amaturus est` recebe rótulo passivo | compatível, agora sinalizado | perífrase ativa, logo rótulo legado incorreto | concluído sem perda |
+| compostos descartavam análises independentes | divergência nativa intencional | perda informacional eliminada | concluído |
 | infinitivos compostos homógrafos geram quatro hipóteses nativas e uma no original | divergência de cardinalidade | quatro regras-fonte são reais | preservar proveniência, não deduplicar arbitrariamente |
 | regras ortográficas têm gate de importação, regras de síncope não têm gate equivalente | risco de drift | não é lacuna morfológica comprovada | média |
 | cobertura por corpus atinge cerca de 41,5% dos `RuleId` | testes atuais passam | cobertura insuficiente para alegar completude | alta |
@@ -155,9 +164,12 @@ O Ada contém uma especialização durante o sweep da lista em `words_engine-lis
 - morfologia de banco: não é uma família ausente;
 - natureza: tokenização/especialização codificada em código.
 
-### Sugestão
+### Implementação
 
-Representar a regra no manifesto como `codeSpecialization`, criar uma testemunha mínima para `C.` e decidir explicitamente se o modo compatível deve remover a leitura numeral. O modo nativo pode preservar ambas, desde que a divergência seja documentada e versionada.
+O core mantém as duas leituras e acrescenta `source-disagreement` à leitura de
+numeral romano quando há ponto e uma análise lexical de abreviação 9/8. O IR,
+JSON v2 e browser v4 expõem o assessment. `C` sem ponto permanece sem essa
+flag. A regra também recebeu identidade e witnesses no manifesto.
 
 ## Finding 2: `licet` e `licent`
 
@@ -175,9 +187,11 @@ A Gramática Latina de Luna, §342, descreve o verbo impessoal finito como restr
 - validade gramatical: **bug legado/disputado**;
 - implementação: não deve ser corrigido silenciosamente dentro do modo compatível.
 
-### Sugestão
+### Implementação
 
-Separar os estados `differentially-equal` e `linguistically-supported`. Se houver normalização normativa, expô-la como política ou projeção versionada, mantendo o resultado legado disponível.
+A leitura impessoal plural continua presente, mas recebe
+`source-disagreement`. `licet` singular não recebe a flag. A decisão preserva
+paridade e informação, separando a geração Whitaker da avaliação normativa.
 
 ## Finding 3: voz de `amaturus est`
 
@@ -189,9 +203,11 @@ O original e o WordsWASM descrevem o composto sintético como presente passivo. 
 
 Luna §285 classifica a construção de particípio futuro ativo com `sum` como conjugação perifrástica ativa. O rótulo passivo é, portanto, um erro semântico herdado, não uma lacuna de paridade.
 
-### Sugestão
+### Implementação
 
-Não alterar o payload compatível sem versionamento. Acrescentar uma projeção semântica normalizada que corrija a voz, com proveniência indicando que o rótulo legado foi preservado no resultado bruto.
+O rótulo passivo histórico permanece no composto e recebe
+`source-disagreement` quando a fonte é um particípio futuro ativo. Assim não se
+reescreve silenciosamente a saída compatível, mas a divergência fica tipada.
 
 ## Finding 4: política de maiúsculas e nomes desconhecidos
 
@@ -205,23 +221,26 @@ Trata-se de política de configuração e ordem de processamento, não de ausên
 
 ### Sugestão
 
-Registrar essas opções no manifesto como filtros/políticas e cobri-las com testes configurados. Não incorporá-las aos bits morfológicos do WWDB.
+Idade e frequência já são transportadas como metadados categóricos tipados e aparecem no JSON tanto no lexema quanto na regra de flexão. O modo padrão também anota avaliações de compatibilidade sem filtrar as leituras. Portanto, os filtros `OMIT_*` e a paridade fina dessas políticas ficam fora do backlog imediato. Não incorporá-los a novos bits morfológicos do WWDB.
 
 ## Finding 5: risco de drift em rewrites
 
 As 159 regras ortográficas possuem um gate exato no importador Ada, em `import_ada_rewrites.py` próximo da linha 159. As 11 regras de síncope são mantidas manualmente em `REWRITES.LAT` e não possuem uma verificação de drift equivalente.
 
-### Sugestão
+### Implementação
 
-Criar um gate determinístico para as regras de síncope: identidade semântica, contagem, origem e testemunhas. O gate deve falhar se o conjunto importado divergir do conjunto esperado, sem depender apenas da contagem total.
+`import_ada_rewrites.py` agora valida as 11 identidades semânticas em
+`REWRITES.LAT` e o digest do corpo revisado de `Syncope` no Ada. Mudança em
+qualquer lado falha com pedido explícito de revisão, em vez de confiar somente
+na contagem.
 
-## Finding 6: análise multiword é destrutiva
+## Finding 6: análise multiword lossless
 
 ### Requisito desejado
 
 A análise multiword deve preservar todas as análises independentes dos tokens e acrescentar a hipótese composta, sem usar o composto para substituir o conjunto original.
 
-### Comportamento atual
+### Comportamento anterior
 
 Em `src/engine.cpp`, na região aproximada de 2523–2607, a engine:
 
@@ -229,11 +248,20 @@ Em `src/engine.cpp`, na região aproximada de 2523–2607, a engine:
 2. gera as hipóteses compostas;
 3. substitui `result.analyses` apenas pelas análises participantes.
 
-Essa última etapa perde leituras válidas que não participam do composto.
+Essa última etapa perdia leituras válidas que não participavam do composto.
+
+### Implementação atual
+
+`QueryResult::analyses` conserva todas as leituras isoladas do primeiro token.
+Quando um composto é reconhecido, `QueryResult::independent_tokens` registra
+snapshots completos dos dois tokens, cada qual com sua própria `SurfaceForm`,
+status, análises lexicais e artificiais e diagnósticos. As projeções nativas v2
+publicam isso como `tokens[].analyses`/`tokens[].hits`; o browser v4 publica
+`tokens[].hits`. JSON v1 permanece inalterado.
 
 ### Exemplos quantificados
 
-| Consulta | Análises isoladas do primeiro token | Fontes preservadas na frase | Perda atual |
+| Consulta | Análises isoladas do primeiro token | Fontes preservadas antes | Perda anterior |
 |---|---:|---:|---:|
 | `amata est` | 15 | 1 | 14 |
 | `amatam esse` | 3 | 1 | 2 |
@@ -366,11 +394,19 @@ Isso evita sobrecarregar `QueryResult::analyses` com análises de superfícies d
 ### Artefatos
 
 1. `whitakers-words/GRAMMAR_SPECIALIZATIONS.jsonl`: fonte canônica, revisável por humanos, para mapeamentos e especializações em código.
-2. `*.grammar-trace.jsonl`: sidecar determinístico emitido pelo packer para cada dataset.
+2. `*.grammar-trace.json`: sidecar determinístico compilado junto ao dataset.
 3. `build/reports/grammar-coverage.json`: relatório de CI e execução, fora da identidade do dataset.
 4. `grammar-trace.sqlite`: índice derivado opcional para consultas; nunca a fonte de verdade.
 
-O sidecar deve ficar fora do payload WWDB. O runtime precisa apenas dos IDs, flags e `datasetId` necessários para execução; explicações, citações, witnesses e estado de cobertura não precisam ocupar o formato binário.
+O sidecar fica fora do payload WWDB. O runtime precisa apenas dos IDs, flags e
+`datasetId` necessários para execução; explicações, citações, witnesses e
+estado de cobertura não precisam ocupar o formato binário. O MVP atual compila
+o ledger com `validate_grammar_specializations.py`, inclui digests dos arquivos
+de implementação, liga o relatório ao digest/tamanho/perfil do WWDB e produz
+`build/reports/grammar-trace.json` no teste de CI. Para cada uma das 1.785
+flexões, o trace liga o índice e offset do registro de 40 bytes em
+`INFLECTS.SEC`, seu digest, o registro u48 efetivamente lido do WWDB, os
+offsets/larguras/valores de cada campo e o `words::RuleId` usado pela engine.
 
 ### Entidades recomendadas
 
@@ -468,15 +504,24 @@ As opções e rotinas abaixo são relevantes para compatibilidade, mas não indi
 
 Elas devem ser registradas como filtros, apresentação ou tooling.
 
+Por decisão de produto, esses itens são ignoráveis por agora. O runtime já expõe `age` e `frequency` no lexema e na regra, enquanto `WhitakerTrimMode::annotate`, que é o padrão, preserva as análises e acrescenta `assessment.whitakerTrim` e notices. `WhitakerTrimMode::filter` permanece apenas como opção explícita de compatibilidade.
+
 ## Ordem recomendada de implementação
 
 1. ~~Tornar verde o teste lossless do primeiro token sem alterar a construção dos compostos.~~ Concluído.
 2. ~~Rodar testes direcionados, diferenciais e a suíte completa.~~ Concluído: 121/121.
 3. ~~Atualizar este documento com a diferença de compatibilidade causada pela preservação adicional.~~ Concluído.
-4. Criar a identidade e o schema inicial do manifesto.
-5. Instrumentar primeiro as regras de composição, `C.`, `licet` e rewrites de síncope.
-6. Gerar witnesses para os 1.045 `RuleId` ainda não exercitados pelo corpus atual.
-7. Projetar `MultiTokenAnalysisIR` antes de prometer preservação independente do segundo token em uma única resposta estruturada.
+4. ~~Criar a identidade e o schema inicial do manifesto.~~ Concluído para oito
+   especializações prioritárias.
+5. ~~Instrumentar primeiro as regras de composição, `C.`, `licet` e rewrites de
+   síncope.~~ Concluído.
+6. Gerar witnesses morfologicamente válidos para os 1.045 `RuleId` ainda não
+   exercitados pelo corpus atual. O relatório determinístico e os IDs faltantes
+   já são produzidos; a geração do corpus dedicado continua pendente.
+7. ~~Projetar o IR multi-token antes de prometer preservação independente do
+   segundo token em uma única resposta estruturada.~~ Concluído como
+   `IndependentTokenAnalysisIR`/`tokens[]`; referências por identidade entre
+   compostos e supports continuam uma evolução futura, não uma perda atual.
 
 ## Critérios para considerar a correção multiword concluída
 
@@ -505,6 +550,38 @@ Consequências verificadas:
 - a suíte completa passou com 121 testes e zero falhas.
 
 Essa mudança cria uma divergência nativa intencional nas consultas em que o Whitaker oculta análises não participantes: o WordsWASM agora é lossless para o primeiro token e mantém a hipótese composta como informação adicional.
+
+## Resultado do segundo ciclo TDD
+
+Os testes foram escritos antes das implementações e falharam pelos contratos
+ausentes: `independent_tokens`, assessment do numeral romano, flags para
+`licent`/perífrase, validador do manifesto, gate de síncope e compilador de
+cobertura. Depois das correções:
+
+- `amata est`, `amatam esse` e `amatum iri` preservam os dois tokens completos;
+- `C.`, `licent` e `amaturus est` mantêm todas as leituras e expõem a
+  divergência por flag;
+- o manifesto contém oito especializações com implementação, fonte gramatical
+  e witnesses;
+- o gate compara as 11 regras de síncope com o corpo Ada revisado;
+- a Eneida volta a medir 740/1.785 regras observadas e lista os 1.045 IDs ainda
+  sem witness no corpus;
+- a suíte nativa, o wrapper JavaScript, o link Emscripten e o smoke test com o
+  módulo Wasm real passam.
+
+### Backlog remanescente real
+
+1. Construir um corpus mínimo dedicado que execute os 1.045 `RuleId` ausentes;
+   ausência no corpus não significa necessariamente que a regra seja
+   alcançável por um lexema existente, portanto o gerador deve distinguir
+   `unwitnessed` de `uninstantiated`.
+2. Expandir o manifesto das oito especializações iniciais para todos os ramos
+   gramaticais codificados e acrescentar o elo anterior a `INFLECTS.SEC`. O
+   compilador já emite `INFLECTS.SEC → índice/bit WWDB → RuleId`; ainda falta o
+   sidecar do gerador que prove `INFLECTS.LAT → INFLECTS.SEC` sem reconstrução.
+3. Se consumidores precisarem navegar suporte sem duplicação, adicionar IDs
+   estáveis às análises e `supports[]` aos compostos. O payload atual já é
+   lossless, mas ainda usa snapshots por token em vez de referências cruzadas.
 
 ## Comandos de reprodução
 

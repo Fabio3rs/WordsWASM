@@ -6,6 +6,14 @@ import {createWordsAnalysisEngine} from "../wasmsrc/words-engine.mjs";
 const datasetId = `sha256:${"a".repeat(64)}`;
 
 function fakeResult(schema, text, twoWords) {
+  const tokens = text.includes(" ")
+    ? text.split(/\s+/u).map((token) => ({
+      query: {text: token, normalized: token, mode: "latin"},
+      status: "analyzed",
+      hits: [],
+      diagnostics: [],
+    }))
+    : [];
   return {
     schema,
     schemaVersion: 4,
@@ -15,6 +23,7 @@ function fakeResult(schema, text, twoWords) {
     hits: [],
     diagnostics: [],
     suggestions: [],
+    tokens,
     twoWords,
   };
 }
@@ -93,6 +102,10 @@ test("loads bytes once and exposes typed analysis/search contracts", async () =>
     engine.searchLine("amo amare", {twoWords: true}).map(({query}) => query.text),
     ["amo", "amare"],
   );
+  assert.deepEqual(
+    engine.analyze("amata est").tokens.map(({query}) => query.text),
+    ["amata", "est"],
+  );
   engine.dispose();
   engine.dispose();
 
@@ -102,6 +115,7 @@ test("loads bytes once and exposes typed analysis/search contracts", async () =>
     ["search", "anaticulus", true],
     ["analyzeLine", "mālum amamus", false],
     ["searchLine", "amo amare", true],
+    ["analyze", "amata est", false],
     ["delete"],
   ]);
   assert.throws(() => engine.analyze("amo"), /disposed/);

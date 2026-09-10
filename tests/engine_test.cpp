@@ -531,6 +531,65 @@ TEST(EngineTest, ReproducesWhitakerTrimAsAnExplainablePolicy) {
         }));
 }
 
+TEST(EngineTest, FlagsNormativeImpersonalNumberDisagreementLosslessly) {
+    const auto find_impersonal = [](const QueryResult &result,
+                                    const GrammaticalNumber number) {
+        return std::ranges::find_if(
+            result.analyses, [&](const AnalysisIR &analysis) {
+                const auto &lexeme =
+                    test::engine().database().lexeme(analysis.lexeme);
+                const auto *verb =
+                    std::get_if<VerbMorphology>(&analysis.morphology);
+                return lexeme.verb_kind == VerbKind::impersonal &&
+                       verb != nullptr && verb->person == Person::third &&
+                       verb->number == number;
+            });
+    };
+
+    const auto licent = test::engine().analyze("licent");
+    const auto plural =
+        find_impersonal(licent, GrammaticalNumber::plural);
+    ASSERT_NE(plural, licent.analyses.end());
+    ASSERT_TRUE(std::ranges::contains(
+        plural->assessment.notice_values(),
+        MorphologicalNotice::source_disagreement));
+
+    const auto licet = test::engine().analyze("licet");
+    const auto singular =
+        find_impersonal(licet, GrammaticalNumber::singular);
+    ASSERT_NE(singular, licet.analyses.end());
+    EXPECT_FALSE(std::ranges::contains(
+        singular->assessment.notice_values(),
+        MorphologicalNotice::source_disagreement));
+}
+
+TEST(EngineTest, FlagsLegacyFutureActivePeriphrasticVoiceLosslessly) {
+    const auto result = test::engine().analyze_text("amaturus est");
+    const auto compound = std::ranges::find_if(
+        result.compound_analyses, [](const CompoundAnalysisIR &analysis) {
+            return analysis.source_tense == Tense::future &&
+                   analysis.source_voice == Voice::active;
+        });
+    ASSERT_NE(compound, result.compound_analyses.end());
+    EXPECT_EQ(compound->morphology.voice, Voice::passive);
+    ASSERT_TRUE(std::ranges::contains(
+        compound->assessment.notice_values(),
+        MorphologicalNotice::source_disagreement));
+
+    const auto full =
+        Json::parse(analysis_json_v2(test::engine(), result));
+    const auto projection = std::ranges::find_if(
+        full.at("analyses"), [](const Json &analysis) {
+            return analysis.at("derivation").at("method") == "compound";
+        });
+    ASSERT_NE(projection, full.at("analyses").end());
+    EXPECT_EQ(projection->at("assessment")
+                  .at("notices")
+                  .front()
+                  .at("code"),
+              "source-disagreement");
+}
+
 TEST(EngineTest, PreservesAudeoPassiveWithRelatedEvidenceNotices) {
     const auto result = test::engine().analyze("audetur");
     ASSERT_EQ(result.status, QueryStatus::analyzed);
@@ -923,6 +982,50 @@ TEST(EngineTest, KeepsRomanHomographsAndMarksIllFormedFallbacks) {
     EXPECT_EQ(steps.back().at("type"), "roman-numeral");
 }
 
+TEST(EngineTest, FlagsPeriodAbbreviationConflictWithoutDroppingRomanReading) {
+    const auto result = test::engine().analyze_text("C.");
+    ASSERT_EQ(result.status, QueryStatus::analyzed);
+    ASSERT_FALSE(result.analyses.empty());
+    ASSERT_EQ(result.artificial_analyses.size(), 1U);
+
+    const auto &roman =
+        std::get<RomanNumeralIR>(result.artificial_analyses.front());
+    EXPECT_EQ(roman.value, 100U);
+    EXPECT_TRUE(std::ranges::contains(
+        roman.assessment.notice_values(),
+        MorphologicalNotice::source_disagreement));
+
+    const auto full =
+        Json::parse(analysis_json_v2(test::engine(), result));
+    const auto full_roman = std::ranges::find_if(
+        full.at("analyses"), [](const Json &analysis) {
+            return analysis.at("derivation").at("method") ==
+                   "roman-numeral";
+        });
+    ASSERT_NE(full_roman, full.at("analyses").end());
+    const auto &full_assessment = full_roman->at("assessment");
+    EXPECT_EQ(full_assessment.at("notices").front().at("code"),
+              "source-disagreement");
+
+    const auto search =
+        Json::parse(search_json_v2(test::engine(), result));
+    const auto search_roman = std::ranges::find_if(
+        search.at("hits"),
+        [](const Json &hit) { return hit.contains("artificial"); });
+    ASSERT_NE(search_roman, search.at("hits").end());
+    const auto &search_assessment = search_roman->at("assessment");
+    EXPECT_EQ(search_assessment.at("notices").front().at("code"),
+              "source-disagreement");
+
+    const auto bare = test::engine().analyze("C");
+    ASSERT_EQ(bare.artificial_analyses.size(), 1U);
+    const auto &bare_roman =
+        std::get<RomanNumeralIR>(bare.artificial_analyses.front());
+    EXPECT_FALSE(std::ranges::contains(
+        bare_roman.assessment.notice_values(),
+        MorphologicalNotice::source_disagreement));
+}
+
 TEST(EngineTest, AppliesDataDrivenPerfectSyncopeByPriority) {
     struct Fixture final {
         std::string_view word;
@@ -1298,6 +1401,62 @@ TEST(EngineTest, CompoundAnalysisPreservesIndependentFirstTokenAnalyses) {
         EXPECT_EQ(semantic_signatures(compound.analyses),
                   semantic_signatures(isolated.analyses))
             << fixture.phrase;
+    }
+}
+
+TEST(EngineTest, CompoundAnalysisPreservesEveryIndependentToken) {
+    struct Fixture final {
+        std::string_view first;
+        std::string_view second;
+        std::string_view phrase;
+    };
+    constexpr std::array fixtures{
+        Fixture{.first = "amata", .second = "est", .phrase = "amata est"},
+        Fixture{.first = "amatam", .second = "esse", .phrase = "amatam esse"},
+        Fixture{.first = "amatum", .second = "iri", .phrase = "amatum iri"},
+    };
+
+    for (const auto &fixture : fixtures) {
+        const auto isolated_first = test::engine().analyze(fixture.first);
+        const auto isolated_second = test::engine().analyze(fixture.second);
+        const auto result = test::engine().analyze_text(fixture.phrase);
+
+        ASSERT_EQ(result.status, QueryStatus::analyzed) << fixture.phrase;
+        ASSERT_EQ(result.independent_tokens.size(), 2U) << fixture.phrase;
+        EXPECT_EQ(result.independent_tokens[0].surface.normalized_nfc,
+                  fixture.first);
+        EXPECT_EQ(result.independent_tokens[1].surface.normalized_nfc,
+                  fixture.second);
+        EXPECT_EQ(
+            semantic_signatures(result.independent_tokens[0].analyses),
+            semantic_signatures(isolated_first.analyses))
+            << fixture.phrase;
+        EXPECT_EQ(
+            semantic_signatures(result.independent_tokens[1].analyses),
+            semantic_signatures(isolated_second.analyses))
+            << fixture.phrase;
+
+        const auto full =
+            Json::parse(analysis_json_v2(test::engine(), result));
+        ASSERT_TRUE(full.contains("tokens")) << fixture.phrase;
+        ASSERT_EQ(full.at("tokens").size(), 2U) << fixture.phrase;
+        EXPECT_EQ(full.at("tokens")[0].at("query").at("normalized"),
+                  fixture.first);
+        EXPECT_EQ(full.at("tokens")[1].at("query").at("normalized"),
+                  fixture.second);
+        EXPECT_EQ(full.at("tokens")[0].at("analyses").size(),
+                  isolated_first.analyses.size());
+        EXPECT_EQ(full.at("tokens")[1].at("analyses").size(),
+                  isolated_second.analyses.size());
+
+        const auto search =
+            Json::parse(search_json_v2(test::engine(), result));
+        ASSERT_TRUE(search.contains("tokens")) << fixture.phrase;
+        ASSERT_EQ(search.at("tokens").size(), 2U) << fixture.phrase;
+        EXPECT_EQ(search.at("tokens")[0].at("hits").size(),
+                  isolated_first.analyses.size());
+        EXPECT_EQ(search.at("tokens")[1].at("hits").size(),
+                  isolated_second.analyses.size());
     }
 }
 

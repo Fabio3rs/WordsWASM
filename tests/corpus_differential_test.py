@@ -7,15 +7,23 @@ import copy
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 import jsonschema
 
 from oracle_projection import with_deponent_constraints
 
+sys.path.insert(0, str(
+    Path(__file__).resolve().parents[1]
+    / "whitakers-words/poc/compact-db"
+))
+from grammar_coverage import compile_report
+
 
 DATASET_ID = "sha256:" + "0" * 64
 EXPECTED_CORPUS_FORMS = 2726
+EXPECTED_INFLECTION_RULES = 1785
 
 # WHY: these remaining differences are deliberate native semantics, not
 # unreviewed compatibility debt. Typed syncope filters candidates individually;
@@ -110,6 +118,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--cpp", type=Path, required=True)
+    parser.add_argument("--coverage-output", type=Path)
     args = parser.parse_args()
 
     root = args.root.resolve()
@@ -248,6 +257,12 @@ def main() -> None:
             f"search={search_bytes}")
     stats["accepted-native"] = len(ACCEPTED_NATIVE_DIFFERENCES)
     stats["known-compatibility"] = len(KNOWN_COMPATIBILITY_DIFFERENCES)
+    if args.coverage_output is not None:
+        coverage = compile_report(
+            search_documents, EXPECTED_INFLECTION_RULES, "Aeneid I"
+        )
+        args.coverage_output.parent.mkdir(parents=True, exist_ok=True)
+        args.coverage_output.write_text(coverage, encoding="utf-8")
     print(
         f"Aeneid corpus: {len(words)} forms; {dict(stats)}; "
         f"search/full bytes={search_bytes}/{full_bytes}")

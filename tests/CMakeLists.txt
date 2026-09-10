@@ -54,6 +54,8 @@ if(NOT EMSCRIPTEN)
                 "${CMAKE_CURRENT_SOURCE_DIR}/corpus_differential_test.py"
                 --root "${CMAKE_SOURCE_DIR}"
                 --cpp "$<TARGET_FILE:words_cli>"
+                --coverage-output
+                "${CMAKE_BINARY_DIR}/reports/grammar-coverage.json"
         )
         add_test(
             NAME words_quantity_import
@@ -108,6 +110,31 @@ if(NOT EMSCRIPTEN)
             COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/packon_requirements_test.py"
                 --root "${CMAKE_SOURCE_DIR}"
+        )
+        add_test(
+            NAME words_grammar_specializations
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/grammar_specializations_test.py"
+        )
+        add_test(
+            NAME words_grammar_trace
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/whitakers-words/poc/compact-db/validate_grammar_specializations.py"
+                --root "${CMAKE_SOURCE_DIR}"
+                --database
+                "${CMAKE_SOURCE_DIR}/whitakers-words/poc/compact-db/output/words-poc-dense.wwdb"
+                --profile dense
+                --output "${CMAKE_BINARY_DIR}/reports/grammar-trace.json"
+        )
+        add_test(
+            NAME words_rewrite_import
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/rewrite_import_test.py"
+        )
+        add_test(
+            NAME words_grammar_coverage
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/grammar_coverage_test.py"
         )
         add_dependencies(words_tests wwdb_poc_pack)
     endif()

@@ -84,6 +84,26 @@ surface alone. It is emitted only for reviewed cases whose supporting sources
 are recorded here or in `docs/whitaker-morphology-findings.md`. New cases must
 add both a focused test and documentation before receiving the flag.
 
+Three additional lossless disagreements are currently encoded:
+
+- `C.` retains both Whitaker's lexical abbreviation and the independently
+  generated Roman-numeral reading. The numeral is flagged because the original
+  `words`/`words_json` specialization suppresses it when the period is present;
+  Almeida's abbreviation table (printed page 200, unit `s0104-l`) explicitly
+  records `C.` for *Caius*, *Cicero*, and *Calendae*.
+- a finite plural analysis of a lexeme marked `impersonal`, such as the
+  impersonal reading of `licent`, is retained and flagged. Almeida §342
+  (printed page 318, unit `s0163-l`) describes finite impersonals as third
+  singular; the original Whitaker checks person but not singular number.
+- a future active participle combined with finite `sum`, such as
+  `amaturus est`, retains Whitaker's synthetic passive voice and is flagged.
+  Almeida §285 (printed page 257, unit `s0132-r`) describes future participle
+  plus `sum` as the active periphrastic construction.
+
+These notices do not filter or relabel the candidates. They expose the
+disagreement while keeping both the original classification and all generated
+readings available to downstream consumers.
+
 ## Review policy
 
 `manual-review-recommended` means the candidate should remain available to a
