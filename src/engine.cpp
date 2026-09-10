@@ -662,11 +662,56 @@ append_derivation(const DerivationIR &base,
 }
 
 [[nodiscard]] std::string_view
-candidate_stem(const SurfaceForm &surface,
-               const CandidateIR &candidate) noexcept {
-    return std::string_view{surface.lookup_ascii}.substr(candidate.stem.begin,
-                                                         candidate.stem.count);
+candidate_stem(const SurfaceForm &surface, const SurfaceRange stem) noexcept {
+    return std::string_view{surface.lookup_ascii}.substr(stem.begin,
+                                                         stem.count);
 }
+
+class CandidateRange final {
+  public:
+    struct EndingMatch final {
+        SurfaceRange stem;
+        SurfaceRange ending;
+        std::span<const RuleId> rules;
+
+        [[nodiscard]] CandidateIR candidate(const RuleId rule) const noexcept {
+            return CandidateIR{
+                .rule = rule,
+                .stem = stem,
+                .ending = ending,
+            };
+        }
+    };
+
+    explicit CandidateRange(const SurfaceRange word) noexcept : word_{word} {}
+
+    void append(const std::size_t stem_size, const std::size_t ending_size,
+                const std::span<const RuleId> rules) {
+        if (rules.empty()) {
+            return;
+        }
+        const auto stem_count = static_cast<std::uint32_t>(stem_size);
+        groups_[group_count_++] = EndingMatch{
+            .stem = SurfaceRange{.begin = word_.begin, .count = stem_count},
+            .ending =
+                SurfaceRange{
+                    .begin = word_.begin + stem_count,
+                    .count = static_cast<std::uint32_t>(ending_size),
+                },
+            .rules = rules,
+        };
+    }
+
+    [[nodiscard]] std::span<const EndingMatch>
+    groups() const noexcept WORDS_LIFETIMEBOUND {
+        return std::span<const EndingMatch>{groups_}.first(group_count_);
+    }
+
+  private:
+    SurfaceRange word_;
+    std::array<EndingMatch, ending_length_count> groups_{};
+    std::size_t group_count_{};
+};
 
 [[nodiscard]] char normalized_affix_char(char value) noexcept {
     if (value >= 'A' && value <= 'Z') {
@@ -751,20 +796,14 @@ void add_matching_suffixes(const Database &database,
 
 void append_prefix_analyses(const Database &database,
                             const SurfaceForm &surface,
-                            const std::span<const CandidateIR> candidates,
+                            const CandidateRange &candidates,
                             const bool surface_has_quantity,
                             const DerivationIR &initial_derivation,
                             std::vector<AnalysisIR> &output,
                             EnumerationState &state) {
     std::vector<AddonId> prefix_ids;
-    std::optional<SurfaceRange> previous_stem;
-    for (const auto &candidate : candidates) {
-        if (previous_stem && previous_stem->begin == candidate.stem.begin &&
-            previous_stem->count == candidate.stem.count) {
-            continue;
-        }
-        previous_stem = candidate.stem;
-        add_matching_prefixes(database, candidate_stem(surface, candidate),
+    for (const auto &group : candidates.groups()) {
+        add_matching_prefixes(database, candidate_stem(surface, group.stem),
                               prefix_ids);
     }
     sort_unique_ids(prefix_ids);
@@ -774,44 +813,35 @@ void append_prefix_analyses(const Database &database,
         const auto output_before = output.size();
         const auto unsupported_before = state.unsupported;
         const auto fix_size = database.prefix_string(prefix.fix).size();
-        previous_stem.reset();
-        std::span<const StemReference> base_stems;
-        bool matching_prefix{};
-        for (const auto &candidate : candidates) {
-            if (!previous_stem ||
-                previous_stem->begin != candidate.stem.begin ||
-                previous_stem->count != candidate.stem.count) {
-                previous_stem = candidate.stem;
-                const auto stem_text = candidate_stem(surface, candidate);
-                matching_prefix = prefix_matches(database, prefix, stem_text);
-                base_stems =
-                    matching_prefix
-                        ? database.lookup_stem(stem_text.substr(fix_size))
-                        : std::span<const StemReference>{};
-            }
-            if (!matching_prefix) {
+        for (const auto &group : candidates.groups()) {
+            const auto stem_text = candidate_stem(surface, group.stem);
+            if (!prefix_matches(database, prefix, stem_text)) {
                 continue;
             }
-            auto projected_candidate = candidate;
-            projected_candidate.stem.begin +=
-                static_cast<std::uint32_t>(fix_size);
-            projected_candidate.stem.count -=
-                static_cast<std::uint32_t>(fix_size);
-            for (const auto &stem : base_stems) {
-                const auto &lexeme = database.lexeme(stem.lexeme);
-                if (!prefix_root_matches(prefix, lexeme.part_of_speech)) {
-                    continue;
+            const auto base_stems =
+                database.lookup_stem(stem_text.substr(fix_size));
+            for (const auto rule_id : group.rules) {
+                auto projected_candidate = group.candidate(rule_id);
+                projected_candidate.stem.begin +=
+                    static_cast<std::uint32_t>(fix_size);
+                projected_candidate.stem.count -=
+                    static_cast<std::uint32_t>(fix_size);
+                for (const auto &stem : base_stems) {
+                    const auto &lexeme = database.lexeme(stem.lexeme);
+                    if (!prefix_root_matches(prefix, lexeme.part_of_speech)) {
+                        continue;
+                    }
+                    const std::array addition{prefix_id};
+                    const auto derivation = append_derivation(
+                        initial_derivation, std::span<const AddonId>{addition});
+                    if (!derivation) {
+                        continue;
+                    }
+                    append_regular_analyses(
+                        database, surface, projected_candidate,
+                        std::span<const StemReference>{&stem, 1U},
+                        surface_has_quantity, *derivation, output, state);
                 }
-                const std::array addition{prefix_id};
-                const auto derivation = append_derivation(
-                    initial_derivation, std::span<const AddonId>{addition});
-                if (!derivation) {
-                    continue;
-                }
-                append_regular_analyses(
-                    database, surface, projected_candidate,
-                    std::span<const StemReference>{&stem, 1U},
-                    surface_has_quantity, *derivation, output, state);
             }
         }
         if (output.size() != output_before ||
@@ -1026,23 +1056,14 @@ void append_suffix_semantics(
     }
 }
 
-void append_suffix_analyses(const Database &database,
-                            const SurfaceForm &surface,
-                            const std::span<const CandidateIR> candidates,
-                            const QuantityMatch quantity_match,
-                            const DerivationIR &initial_derivation,
-                            const bool allow_prefix_fallback,
-                            std::vector<AnalysisIR> &output,
-                            EnumerationState &state) {
+void append_suffix_analyses(
+    const Database &database, const SurfaceForm &surface,
+    const CandidateRange &candidates, const QuantityMatch quantity_match,
+    const DerivationIR &initial_derivation, const bool allow_prefix_fallback,
+    std::vector<AnalysisIR> &output, EnumerationState &state) {
     std::vector<AddonId> suffix_ids;
-    std::optional<SurfaceRange> previous_stem;
-    for (const auto &candidate : candidates) {
-        if (previous_stem && previous_stem->begin == candidate.stem.begin &&
-            previous_stem->count == candidate.stem.count) {
-            continue;
-        }
-        previous_stem = candidate.stem;
-        add_matching_suffixes(database, candidate_stem(surface, candidate),
+    for (const auto &group : candidates.groups()) {
+        add_matching_suffixes(database, candidate_stem(surface, group.stem),
                               suffix_ids);
     }
     sort_unique_ids(suffix_ids);
@@ -1061,48 +1082,32 @@ void append_suffix_analyses(const Database &database,
         }
         const auto suffix_size = database.suffix_string(suffix.fix).size();
         bool dictionary_hit = false;
-        previous_stem.reset();
-        bool matching_suffix{};
-        std::span<const StemReference> base_stems;
-        for (const auto &candidate : candidates) {
-            if (!previous_stem ||
-                previous_stem->begin != candidate.stem.begin ||
-                previous_stem->count != candidate.stem.count) {
-                previous_stem = candidate.stem;
-                const auto stem_text = candidate_stem(surface, candidate);
-                matching_suffix = suffix_matches(database, suffix, stem_text);
-                base_stems = matching_suffix
-                                 ? database.lookup_stem(stem_text.substr(
-                                       0, stem_text.size() - suffix_size))
-                                 : std::span<const StemReference>{};
-            }
-            if (matching_suffix && !base_stems.empty()) {
+        for (const auto &group : candidates.groups()) {
+            const auto stem_text = candidate_stem(surface, group.stem);
+            if (suffix_matches(database, suffix, stem_text) &&
+                !database
+                     .lookup_stem(
+                         stem_text.substr(0, stem_text.size() - suffix_size))
+                     .empty()) {
                 dictionary_hit = true;
                 break;
             }
         }
 
         if (dictionary_hit) {
-            previous_stem.reset();
-            for (const auto &candidate : candidates) {
-                if (!previous_stem ||
-                    previous_stem->begin != candidate.stem.begin ||
-                    previous_stem->count != candidate.stem.count) {
-                    previous_stem = candidate.stem;
-                    const auto stem_text = candidate_stem(surface, candidate);
-                    matching_suffix =
-                        suffix_matches(database, suffix, stem_text);
-                    base_stems = matching_suffix
-                                     ? database.lookup_stem(stem_text.substr(
-                                           0, stem_text.size() - suffix_size))
-                                     : std::span<const StemReference>{};
-                }
-                if (!matching_suffix) {
+            for (const auto &group : candidates.groups()) {
+                const auto stem_text = candidate_stem(surface, group.stem);
+                if (!suffix_matches(database, suffix, stem_text)) {
                     continue;
                 }
-                append_suffix_semantics(database, candidate, suffix, base_stems,
-                                        std::nullopt, quantity_match,
-                                        initial_derivation, output, state);
+                const auto base_stems = database.lookup_stem(
+                    stem_text.substr(0, stem_text.size() - suffix_size));
+                for (const auto rule_id : group.rules) {
+                    append_suffix_semantics(database, group.candidate(rule_id),
+                                            suffix, base_stems, std::nullopt,
+                                            quantity_match, initial_derivation,
+                                            output, state);
+                }
             }
             continue;
         }
@@ -1115,14 +1120,8 @@ void append_suffix_analyses(const Database &database,
         }
 
         std::vector<AddonId> prefix_ids;
-        previous_stem.reset();
-        for (const auto &candidate : candidates) {
-            if (previous_stem && previous_stem->begin == candidate.stem.begin &&
-                previous_stem->count == candidate.stem.count) {
-                continue;
-            }
-            previous_stem = candidate.stem;
-            const auto stem_text = candidate_stem(surface, candidate);
+        for (const auto &group : candidates.groups()) {
+            const auto stem_text = candidate_stem(surface, group.stem);
             if (suffix_matches(database, suffix, stem_text)) {
                 add_matching_prefixes(
                     database,
@@ -1136,39 +1135,29 @@ void append_suffix_analyses(const Database &database,
             const auto output_before = output.size();
             const auto unsupported_before = state.unsupported;
             const auto prefix_size = database.prefix_string(prefix.fix).size();
-            previous_stem.reset();
-            bool matching_prefix{};
-            for (const auto &candidate : candidates) {
-                if (!previous_stem ||
-                    previous_stem->begin != candidate.stem.begin ||
-                    previous_stem->count != candidate.stem.count) {
-                    previous_stem = candidate.stem;
-                    const auto stem_text = candidate_stem(surface, candidate);
-                    matching_suffix =
-                        suffix_matches(database, suffix, stem_text);
-                    const auto without_suffix =
-                        matching_suffix ? stem_text.substr(0, stem_text.size() -
-                                                                  suffix_size)
-                                        : std::string_view{};
-                    matching_prefix =
-                        matching_suffix &&
-                        prefix_matches(database, prefix, without_suffix);
-                    base_stems = matching_prefix
-                                     ? database.lookup_stem(
-                                           without_suffix.substr(prefix_size))
-                                     : std::span<const StemReference>{};
-                }
-                if (!matching_prefix) {
+            for (const auto &group : candidates.groups()) {
+                const auto stem_text = candidate_stem(surface, group.stem);
+                if (!suffix_matches(database, suffix, stem_text)) {
                     continue;
                 }
-                auto projected_candidate = candidate;
-                projected_candidate.stem.begin +=
-                    static_cast<std::uint32_t>(prefix_size);
-                projected_candidate.stem.count -=
-                    static_cast<std::uint32_t>(prefix_size);
-                append_suffix_semantics(database, projected_candidate, suffix,
-                                        base_stems, prefix_id, quantity_match,
-                                        initial_derivation, output, state);
+                const auto without_suffix =
+                    stem_text.substr(0, stem_text.size() - suffix_size);
+                if (!prefix_matches(database, prefix, without_suffix)) {
+                    continue;
+                }
+                const auto base_stems =
+                    database.lookup_stem(without_suffix.substr(prefix_size));
+                for (const auto rule_id : group.rules) {
+                    auto projected_candidate = group.candidate(rule_id);
+                    projected_candidate.stem.begin +=
+                        static_cast<std::uint32_t>(prefix_size);
+                    projected_candidate.stem.count -=
+                        static_cast<std::uint32_t>(prefix_size);
+                    append_suffix_semantics(database, projected_candidate,
+                                            suffix, base_stems, prefix_id,
+                                            quantity_match, initial_derivation,
+                                            output, state);
+                }
             }
             if (output.size() != output_before ||
                 state.unsupported != unsupported_before) {
@@ -1178,53 +1167,22 @@ void append_suffix_analyses(const Database &database,
     }
 }
 
-[[nodiscard]] std::vector<CandidateIR>
-enumerate_candidates(const Database &database, const SurfaceForm &surface,
-                     const SurfaceRange word) {
-    struct EndingGroup final {
-        std::size_t stem_size{};
-        std::size_t ending_size{};
-        std::span<const RuleId> rules;
-    };
-
+[[nodiscard]] CandidateRange enumerate_candidates(const Database &database,
+                                                  const SurfaceForm &surface,
+                                                  const SurfaceRange word) {
     const auto word_text =
         std::string_view{surface.lookup_ascii}.substr(word.begin, word.count);
     const auto maximum_ending =
         std::min(maximum_ending_length, word_text.size());
 
-    // There are at most eight distinct ending lengths. Retaining their stable
-    // database spans lets the output reserve exactly once instead of growing
-    // geometrically through a candidate set that commonly exceeds 100 rows.
-    std::array<EndingGroup, ending_length_count> groups{};
-    std::size_t group_count{};
-    std::size_t candidate_count{};
+    CandidateRange candidates{word};
     for (std::size_t ending_size = maximum_ending;; --ending_size) {
         const auto stem_size = word_text.size() - ending_size;
         const auto ending_text = word_text.substr(stem_size);
-        const auto rules = database.lookup_ending(ending_text);
-        groups.at(group_count++) = EndingGroup{
-            .stem_size = stem_size, .ending_size = ending_size, .rules = rules};
-        candidate_count += rules.size();
+        candidates.append(stem_size, ending_size,
+                          database.lookup_ending(ending_text));
         if (ending_size == 0U) {
             break;
-        }
-    }
-
-    std::vector<CandidateIR> candidates;
-    candidates.reserve(candidate_count);
-    for (const auto &group : std::span{groups}.first(group_count)) {
-        for (const auto rule_id : group.rules) {
-            candidates.push_back(CandidateIR{
-                .rule = rule_id,
-                .stem = SurfaceRange{.begin = word.begin,
-                                     .count = static_cast<std::uint32_t>(
-                                         group.stem_size)},
-                .ending =
-                    SurfaceRange{
-                        .begin = word.begin +
-                                 static_cast<std::uint32_t>(group.stem_size),
-                        .count = static_cast<std::uint32_t>(group.ending_size)},
-            });
         }
     }
     return candidates;
@@ -1278,17 +1236,14 @@ void append_word_analyses(const Database &database, const SurfaceForm &surface,
     const auto candidates = enumerate_candidates(database, surface, word);
     const auto surface_has_quantity =
         quantity_match != QuantityMatch::unspecified;
-    std::optional<SurfaceRange> previous_stem;
-    std::span<const StemReference> stems;
-    for (const auto &candidate : candidates) {
-        if (!previous_stem || previous_stem->begin != candidate.stem.begin ||
-            previous_stem->count != candidate.stem.count) {
-            previous_stem = candidate.stem;
-            stems = database.lookup_stem(candidate_stem(surface, candidate));
+    for (const auto &group : candidates.groups()) {
+        const auto stems =
+            database.lookup_stem(candidate_stem(surface, group.stem));
+        for (const auto rule_id : group.rules) {
+            append_regular_analyses(database, surface, group.candidate(rule_id),
+                                    stems, surface_has_quantity,
+                                    initial_derivation, output, state);
         }
-        append_regular_analyses(database, surface, candidate, stems,
-                                surface_has_quantity, initial_derivation,
-                                output, state);
     }
     const auto output_after_regular = output.size();
     const auto regular_hit = output_after_regular != output_before;
@@ -1544,46 +1499,46 @@ void append_packon_analyses(const Database &database,
         }
         const auto candidates =
             enumerate_candidates(database, surface, base_word);
-        std::optional<SurfaceRange> previous_stem;
-        std::span<const StemReference> stems;
-        for (const auto &candidate : candidates) {
-            const auto &rule = database.rule(candidate.rule);
-            if (rule.part_of_speech != PartOfSpeech::pronoun) {
-                continue;
-            }
-            if (!previous_stem ||
-                previous_stem->begin != candidate.stem.begin ||
-                previous_stem->count != candidate.stem.count) {
-                previous_stem = candidate.stem;
-                stems =
-                    database.lookup_stem(candidate_stem(surface, candidate));
-            }
-            for (const auto &stem : stems) {
-                const auto &lexeme = database.lexeme(stem.lexeme);
-                if (lexeme.part_of_speech != PartOfSpeech::pack ||
-                    !packon_paradigm_accepts(packon, rule, lexeme)) {
+        for (const auto &group : candidates.groups()) {
+            std::span<const StemReference> stems;
+            bool stems_loaded{};
+            for (const auto rule_id : group.rules) {
+                const auto &rule = database.rule(rule_id);
+                if (rule.part_of_speech != PartOfSpeech::pronoun) {
                     continue;
                 }
-                if (lexeme.required_packon != id) {
-                    continue;
+                if (!stems_loaded) {
+                    stems = database.lookup_stem(
+                        candidate_stem(surface, group.stem));
+                    stems_loaded = true;
                 }
-                output.push_back(AnalysisIR{
-                    .lexeme = stem.lexeme,
-                    .rule = candidate.rule,
-                    .stem_key = rule.stem_key,
-                    .stem = candidate.stem,
-                    .ending = candidate.ending,
-                    .morphology =
-                        PronounMorphology{.declension = rule.declension,
-                                          .variant = 0U,
-                                          .grammatical_case =
-                                              rule.grammatical_case,
-                                          .number = rule.number,
-                                          .gender = rule.gender},
-                    .quantity_match = quantity_match,
-                    .derivation = *derivation,
-                    .assessment = {},
-                });
+                for (const auto &stem : stems) {
+                    const auto &lexeme = database.lexeme(stem.lexeme);
+                    if (lexeme.part_of_speech != PartOfSpeech::pack ||
+                        !packon_paradigm_accepts(packon, rule, lexeme)) {
+                        continue;
+                    }
+                    if (lexeme.required_packon != id) {
+                        continue;
+                    }
+                    output.push_back(AnalysisIR{
+                        .lexeme = stem.lexeme,
+                        .rule = rule_id,
+                        .stem_key = rule.stem_key,
+                        .stem = group.stem,
+                        .ending = group.ending,
+                        .morphology =
+                            PronounMorphology{.declension = rule.declension,
+                                              .variant = 0U,
+                                              .grammatical_case =
+                                                  rule.grammatical_case,
+                                              .number = rule.number,
+                                              .gender = rule.gender},
+                        .quantity_match = quantity_match,
+                        .derivation = *derivation,
+                        .assessment = {},
+                    });
+                }
             }
         }
     }
@@ -1608,43 +1563,46 @@ void append_qu_pronoun_analyses(const Database &database,
     }
     const auto required_key = qu_form || aliqu_form ? 1U : 2U;
     const auto candidates = enumerate_candidates(database, surface, word);
-    std::optional<SurfaceRange> previous_stem;
-    std::span<const StemReference> stems;
-    for (const auto &candidate : candidates) {
-        const auto &rule = database.rule(candidate.rule);
-        if (rule.part_of_speech != PartOfSpeech::pronoun ||
-            rule.stem_key != required_key) {
-            continue;
-        }
-        if (!previous_stem || previous_stem->begin != candidate.stem.begin ||
-            previous_stem->count != candidate.stem.count) {
-            previous_stem = candidate.stem;
-            stems = database.lookup_stem(candidate_stem(surface, candidate));
-        }
-        for (const auto &stem : stems) {
-            const auto &lexeme = database.lexeme(stem.lexeme);
-            if (lexeme.part_of_speech != PartOfSpeech::pronoun ||
-                lexeme.declension != 1U ||
-                lexeme.declension != rule.declension ||
-                lexeme.variant != rule.variant) {
+    for (const auto &group : candidates.groups()) {
+        std::span<const StemReference> stems;
+        bool stems_loaded{};
+        for (const auto rule_id : group.rules) {
+            const auto &rule = database.rule(rule_id);
+            if (rule.part_of_speech != PartOfSpeech::pronoun ||
+                rule.stem_key != required_key) {
                 continue;
             }
-            output.push_back(AnalysisIR{
-                .lexeme = stem.lexeme,
-                .rule = candidate.rule,
-                .stem_key = rule.stem_key,
-                .stem = candidate.stem,
-                .ending = candidate.ending,
-                .morphology =
-                    PronounMorphology{.declension = rule.declension,
-                                      .variant = 0U,
-                                      .grammatical_case = rule.grammatical_case,
-                                      .number = rule.number,
-                                      .gender = rule.gender},
-                .quantity_match = quantity_match,
-                .derivation = derivation,
-                .assessment = {},
-            });
+            if (!stems_loaded) {
+                stems =
+                    database.lookup_stem(candidate_stem(surface, group.stem));
+                stems_loaded = true;
+            }
+            for (const auto &stem : stems) {
+                const auto &lexeme = database.lexeme(stem.lexeme);
+                if (lexeme.part_of_speech != PartOfSpeech::pronoun ||
+                    lexeme.declension != 1U ||
+                    lexeme.declension != rule.declension ||
+                    lexeme.variant != rule.variant) {
+                    continue;
+                }
+                output.push_back(AnalysisIR{
+                    .lexeme = stem.lexeme,
+                    .rule = rule_id,
+                    .stem_key = rule.stem_key,
+                    .stem = group.stem,
+                    .ending = group.ending,
+                    .morphology =
+                        PronounMorphology{.declension = rule.declension,
+                                          .variant = 0U,
+                                          .grammatical_case =
+                                              rule.grammatical_case,
+                                          .number = rule.number,
+                                          .gender = rule.gender},
+                    .quantity_match = quantity_match,
+                    .derivation = derivation,
+                    .assessment = {},
+                });
+            }
         }
     }
 }

@@ -26,7 +26,9 @@ ABI.
 
 1. Uma vogal ASCII sem marca tem quantidade **desconhecida**, não breve.
 2. Entrada sem marcas mantém o comportamento e as ambiguidades do WORDS Ada.
-3. A entrada é validada e normalizada com `utf8proc` na engine C++.
+3. O contrato de entrada é a allowlist latina finita descrita abaixo. A engine
+   C++ ainda a implementa com `utf8proc`, mas a biblioteca não faz parte da
+   semântica e pode ser substituída por tabelas especializadas.
 4. A quantidade possui três estados semânticos: desconhecida, breve ou longa.
 5. A chave dos índices permanece em letras-base ASCII normalizadas. Quantidade
    é uma restrição associada à forma, não parte da chave textual.
@@ -156,6 +158,173 @@ Depois de produzir uma letra lógica por posição, a engine compõe a superfíc
 inteira em uma única chamada NFC e constrói avidamente seus offsets de bytes.
 Não se usa uma view UTF-8 com cache `mutable`: o lexer já precisa percorrer toda
 a entrada, e os offsets pertencem ao mesmo objeto proprietário que a string.
+
+## Inventário para retirar `utf8proc`
+
+Este é o contrato executável que deve substituir a normalização Unicode geral.
+Ele é deliberadamente menor que Unicode: a engine analisa palavras latinas; não
+precisa aceitar todo caractere que por acaso possua uma decomposição ou um
+*case fold* conveniente.
+
+### Escalares aceitos numa palavra
+
+A lista positiva atual em [`src/lexer.cpp`](../../src/lexer.cpp) contém somente:
+
+- `A`–`Z` e `a`–`z`;
+- U+0304 COMBINING MACRON e U+0306 COMBINING BREVE;
+- os 22 escalares precompostos da tabela abaixo.
+
+| Quantidade | Base | Maiúscula | Minúscula | Forma normalizada |
+| --- | --- | --- | --- | --- |
+| longa | `a` | `Ā` U+0100 | `ā` U+0101 | `ā` U+0101 |
+| breve | `a` | `Ă` U+0102 | `ă` U+0103 | `ă` U+0103 |
+| longa | `e` | `Ē` U+0112 | `ē` U+0113 | `ē` U+0113 |
+| breve | `e` | `Ĕ` U+0114 | `ĕ` U+0115 | `ĕ` U+0115 |
+| longa | `i` | `Ī` U+012A | `ī` U+012B | `ī` U+012B |
+| breve | `i` | `Ĭ` U+012C | `ĭ` U+012D | `ĭ` U+012D |
+| longa | `o` | `Ō` U+014C | `ō` U+014D | `ō` U+014D |
+| breve | `o` | `Ŏ` U+014E | `ŏ` U+014F | `ŏ` U+014F |
+| longa | `u` | `Ū` U+016A | `ū` U+016B | `ū` U+016B |
+| breve | `u` | `Ŭ` U+016C | `ŭ` U+016D | `ŭ` U+016D |
+| longa | `y` | `Ȳ` U+0232 | `ȳ` U+0233 | `ȳ` U+0233 |
+
+Não há um caractere precomposto para `y` breve no contrato. `Y`/`y` seguido de
+U+0306 é aceito e a forma normalizada permanece a sequência `y` + U+0306. As
+outras onze combinações possuem composição canônica e saem precompostas. Uma
+entrada decomposta com U+0304 ou U+0306 é, portanto, equivalente à entrada
+precomposta correspondente.
+
+Mácron e breve representam **quantidade vocálica**, não acento tônico. Agudo,
+grave, circunflexo, til, diérese, cedilha, ligaduras e quaisquer outros
+diacríticos não são removidos nem aproximados: são rejeitados. `æ` não vira
+`ae`, por exemplo.
+
+### Transformações completas
+
+Para cada letra lógica, e somente depois de validar os bytes UTF-8 e o escalar
+original, a transformação é:
+
+| Entrada | `normalized_nfc` | `orthography_ascii` | `lookup_ascii` | quantidade |
+| --- | --- | --- | --- | --- |
+| `A`–`Z` | minúscula ASCII | minúscula ASCII | minúscula ASCII | desconhecida |
+| `a`–`z` | idêntica | idêntica | idêntica | desconhecida |
+| `J`/`j` | `j` | `j` | `i` | desconhecida |
+| `V`/`v` | `v` | `v` | `u` | desconhecida |
+| vogal com U+0304 ou forma precomposta | minúscula com mácron | vogal-base | vogal-base, com `j/v` folding não aplicável | longa |
+| vogal com U+0306 ou forma precomposta | minúscula com breve | vogal-base | vogal-base, com `j/v` folding não aplicável | breve |
+
+As quantidades possíveis por posição são exatamente `unknown`, `short_vowel`
+e `long_vowel`. Consoantes sempre têm `unknown`; uma marca sobre consoante é
+erro. Uma vogal sem marca também permanece `unknown` e nunca é inferida como
+breve.
+
+O algoritmo especializado pode executar isso em uma única passagem:
+
+1. decodificar UTF-8 estritamente, rejeitando sequências truncadas, bytes de
+   continuação soltos, *overlongs*, surrogates e valores acima de U+10FFFF;
+2. mapear ASCII maiúsculo para minúsculo e consultar uma tabela de apenas 22
+   precompostos;
+3. aplicar U+0304/U+0306 à vogal imediatamente anterior, rejeitando marca
+   inicial, repetida, conflitante ou aplicada a consoante;
+4. emitir diretamente `normalized_nfc`, as duas representações ASCII,
+   `quantities` e `nfc_byte_offsets`.
+
+Não é preciso implementar NFD/NFC nem *case folding* gerais. Uma pequena tabela
+de saída com os onze caracteres minúsculos precompostos, mais a codificação de
+U+0306 para `y` breve, reproduz todo o domínio. Construir os offsets enquanto a
+saída é emitida também remove a passagem `build_logical_offsets`.
+
+### A “lista de rejeição” existente
+
+Não existe uma denylist exaustiva no runtime. A fronteira de segurança é a
+allowlist acima, em `precomposed_quantity_characters` e
+`is_supported_original_codepoint`. Tudo o que não está nela é rejeitado com
+`unsupported_character`.
+
+Há uma lista negativa pequena somente como teste de regressão em
+[`tests/lexer_test.cpp`](../../tests/lexer_test.cpp):
+
+| Entrada | Transformação Unicode geral que não deve ocorrer | Decisão |
+| --- | --- | --- |
+| `ß` U+00DF | `ss` por *case fold* | rejeitar |
+| `K` U+212A | `k` por equivalência/case fold | rejeitar |
+| `ſ` U+017F | `s` por *case fold* | rejeitar |
+
+O teste da engine repete os mesmos três casos. Eles são testemunhos de uma
+regra mais forte, não os únicos caracteres proibidos: aceitar por enumeração é
+mais seguro e menor que tentar enumerar todo Unicode rejeitado.
+
+### Dependência separada do tokenizador
+
+Retirar `utf8proc` exige cobrir também `TextTokenCursor`. Ele usa o decoder
+UTF-8 e `utf8proc_category` para reconhecer pontuação, mas isso não faz parte da
+normalização da palavra. O contrato já possui listas explícitas para:
+
+- White_Space: U+0009–U+000D, U+0020, U+0085, U+00A0, U+1680,
+  U+2000–U+200A, U+2028–U+2029, U+202F, U+205F e U+3000;
+- vírgulas: `,`, `،`, `、`, `，`;
+- ponto e vírgula: `;`, `؛`, `；`;
+- dois-pontos: `:`, `：`;
+- pontos: `.`, `․`, `…`, `。`, `．`;
+- interrogação: `?`, `؟`, `？`;
+- exclamação: `!`, `！`;
+- apóstrofos: `'`, `’`; e aspas ASCII `"`.
+
+Hoje as categorias Unicode `Pi`, `Pf`, `Pd`, `Ps`, `Pe` e as demais `Pc`–`Po`
+completam aspas, travessões, colchetes e outra pontuação. Há duas opções para
+preservar esse comportamento sem a biblioteca:
+
+1. gerar no build uma tabela compacta de ranges dessas categorias a partir de
+   uma versão Unicode fixada; ou
+2. congelar uma allowlist editorial menor, baseada nos corpora e nos casos de
+   UI que o produto decide suportar.
+
+A segunda opção produz o menor binário, mas é uma decisão de contrato: um
+travessão ou uma aspa moderna desconhecida deixaria de separar tokens. Ela não
+deve ser misturada à tabela de letras latinas.
+
+### Evidência nos corpora locais
+
+O arquivo da Eneida IV usado no benchmark possui 735 linhas, 33.318 bytes e é
+inteiramente ASCII. Uma leitura somente-leitura das 412.656 unidades canônicas
+de `thelatinlibrary.sqlite3` (`mode=ro`, `immutable=1` e `query_only=ON`) encontrou
+estas quantidades precompostas no texto normalizado:
+
+| Forma | Ocorrências | Forma | Ocorrências |
+| --- | ---: | --- | ---: |
+| `Ā` / `ā` | 10 / 2.822 | `Ă` / `ă` | 0 / 63 |
+| `Ē` / `ē` | 5 / 3.880 | `Ĕ` / `ĕ` | 0 / 74 |
+| `Ī` / `ī` | 95 / 5.050 | `Ĭ` / `ĭ` | 0 / 69 |
+| `Ō` / `ō` | 21 / 4.516 | `Ŏ` / `ŏ` | 0 / 49 |
+| `Ū` / `ū` | 4 / 1.387 | `Ŭ` / `ŭ` | 0 / 12 |
+| `Ȳ` / `ȳ` | 0 / 0 | U+0304 / U+0306 | 0 / 0 |
+
+O acervo completo também contém grego, línguas modernas, erros de decodificação
+e outros diacríticos. Isso não amplia automaticamente o domínio lexical latino:
+esses trechos devem ser roteados, separados ou diagnosticados, não convertidos
+por uma normalização permissiva.
+
+### Testes de equivalência exigidos antes da remoção
+
+Além dos testes atuais, a implementação substituta deve comparar sua saída com
+o lexer presente para a enumeração finita inteira:
+
+- 52 letras ASCII, isoladas e em palavras;
+- todos os 22 precompostos;
+- as 24 combinações de seis vogais, duas caixas e duas marcas combinantes;
+- os pares NFC/NFD correspondentes e `y` breve não composto;
+- marca no início, após cada consoante, dupla igual e longa + breve nas duas
+  ordens;
+- UTF-8 inválido por classe estrutural;
+- `ß`, `K`, `ſ`, acentos não quantitativos e ligaduras;
+- todas as fronteiras explícitas do tokenizador e uma amostra de cada categoria
+  editorial que vier a ser congelada.
+
+Um teste diferencial sobre todos os escalares U+0000–U+10FFFF também é barato:
+para cada escalar codificável isolado, a implementação nova deve aceitar e
+produzir exatamente o mesmo resultado, ou rejeitar com a mesma classe de
+diagnóstico. Depois que `utf8proc` sair do runtime, esse teste pode manter a
+biblioteca apenas como ferramenta de desenvolvimento, fora do binário final.
 
 O normalizador deve diagnosticar, em vez de apagar silenciosamente:
 

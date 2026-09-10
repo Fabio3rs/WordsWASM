@@ -308,6 +308,15 @@ else()
     target_link_libraries(words_cli PRIVATE words_json)
     words_apply_project_options(words_cli)
 
+    # A presentation-free profiling target.  Keep it out of the default build:
+    # it exists to expose the engine hotpath to Callgrind, DHAT and PGO without
+    # charging JSON construction to the analysis loop.
+    add_executable(words_engine_benchmark EXCLUDE_FROM_ALL
+        whitakers-words/benchmarks/engine_benchmark.cpp
+    )
+    target_link_libraries(words_engine_benchmark PRIVATE words_core)
+    words_apply_project_options(words_engine_benchmark)
+
     if(ENABLE_STATIC_CLI)
         if(BUILD_SHARED_LIBS)
             message(FATAL_ERROR
