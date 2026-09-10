@@ -526,6 +526,181 @@ O total de contagens do perfil caiu de 387.297.862 depois de F-05a para
 de rewrite e de construção lazy de candidatos reforça que o ganho veio da
 comparação dos índices, não de uma alteração no trabalho semântico realizado.
 
+### Ambiente de profiling WebAssembly
+
+O `build/wasm` existente foi inspecionado antes de criar uma segunda árvore. A
+configuração efetiva é:
+
+| Componente | Caminho/versão |
+| --- | --- |
+| configuração | `Release`, `-O3 -DNDEBUG`, testes/sanitizers/compressão web desabilitados |
+| Emscripten C++ | `/mnt/projects/Projects/emsdk/upstream/emscripten/em++`, 5.0.6 |
+| LLVM/LLD | `/mnt/projects/Projects/emsdk/upstream/bin/{clang++,wasm-ld}`, 23.0.0, revisão `bbeae6932d653b8a71a3a985af0ccf97e13e2e08` |
+| Binaryen | `/mnt/projects/Projects/emsdk/upstream/bin/wasm-opt`, 129 |
+| CMake | `/home/fabio/.local/bin/cmake`, 3.30.1 |
+| Ninja | `/home/fabio/.local/bin/ninja`, `1.11.1.git.kitware.jobserver-1` |
+| Node usado manualmente | `/home/fabio/.npm-global/bin/node`, 20.18.0, V8 11.3.244.8 |
+| artefatos | `build/wasm/words_wasm.{mjs,wasm}` e `build/wasm/words-engine.mjs` |
+
+Há uma proveniência mista no cache antigo: `CMAKE_TOOLCHAIN_FILE` aponta para
+`/usr/share/emscripten/cmake/Modules/Platform/Emscripten.cmake` e o emulator
+para `/usr/bin/node --experimental-wasm-threads`, mas os compiladores realmente
+registrados e usados pelo Ninja são os do SDK em
+`/mnt/projects/Projects/emsdk`. Essa árvore continua válida, porém não deve ser
+copiada como receita reprodutível.
+
+A nova árvore `build/wasm-profile` foi configurada pelo `emcmake` do mesmo SDK,
+que seleciona sem mistura:
+
+```text
+CMAKE_TOOLCHAIN_FILE=/mnt/projects/Projects/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake
+CMAKE_CROSSCOMPILING_EMULATOR=/mnt/projects/Projects/emsdk/node/22.16.0_64bit/bin/node
+```
+
+Esse Node embarcado é 22.16.0 com V8 12.4.254.21. O runner também passou no
+Node 20.18.0 do ambiente. Perfis A/B devem fixar o mesmo executável Node: trocar
+V8 entre as duas metades invalida a comparação, ainda que o checksum coincida.
+
+Foram adicionadas duas opções CMake independentes:
+
+- `WORDS_WASM_PROFILING=ON` acrescenta `--profiling-funcs` somente ao link e
+  habilita o binding privado `benchmarkCorpus`;
+- `WORDS_WASM_SOURCE_MAPS=ON` acrescenta `-gsource-map` à compilação de
+  `words_core`/binding e ao link. É uma etapa opcional para navegação em fonte,
+  não a configuração padrão do profiler amostral.
+
+`--profiling-funcs` é adequado ao primeiro A/B: conserva a otimização e a
+minificação normais, adicionando nomes de funções ao Wasm. O artefato de
+profiling mediu 1.014.333 bytes contra 839.084 bytes do Release, enquanto o
+glue `.mjs` permaneceu em 56.721 bytes. Esse crescimento inclui a name section
+e o binding de benchmark; portanto, o tamanho dessa build não deve ser usado
+como tamanho de entrega.
+
+A opção de source map também foi compilada: produziu
+`words_wasm.wasm.map` com 392.411 bytes e referências verificadas a
+`src/engine.cpp`, `src/database.cpp` e `wasmsrc/main.cpp`. Ela fica desligada
+no perfil de funções porque o `.cpuprofile` já mostrou nomes C++ suficientes;
+deve ser ligada apenas quando uma amostra precisar ser levada até a linha.
+
+Configuração reproduzível:
+
+```sh
+/mnt/projects/Projects/emsdk/upstream/emscripten/emcmake \
+  /home/fabio/.local/bin/cmake \
+  -S . -B build/wasm-profile -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DWORDS_WASM_PROFILING=ON \
+  -DWORDS_WASM_SOURCE_MAPS=OFF \
+  -DENABLE_TESTS=OFF \
+  -DENABLE_SANITIZERS=OFF \
+  -DENABLE_WEB_COMPRESSION=OFF
+
+/home/fabio/.local/bin/cmake --build build/wasm-profile -j
+```
+
+#### Dois perfis delimitados depois do warmup
+
+`scripts/profile-wasm.mjs` usa o Inspector do próprio Node para ligar o V8 CPU
+profiler somente depois de carregar o módulo, validar o WWDB e aquecer a engine.
+Ele oferece duas regiões com o mesmo corpus e checksum:
+
+```text
+core:
+JS -> Embind (uma chamada) -> Engine::analyze_line × N -> checksum em C++
+
+end-to-end:
+JS -> Embind -> Engine::analyze_line -> BrowserSearchResult -> Embind
+   -> copyOwnedVector/objetos JS, repetido N vezes
+```
+
+O binding `benchmarkCorpus` só existe quando `WORDS_WASM_PROFILING=ON`; não
+altera a API pública nem o Release. Ele devolve apenas três números exatamente
+representáveis por JavaScript no workload esperado. O modo end-to-end chama o
+wrapper público sobre o corpus inteiro, que corresponde ao uso da caixa de
+texto e mantém uma única travessia JS -> Wasm por iteração.
+
+Exemplos:
+
+```sh
+/home/fabio/.npm-global/bin/node scripts/profile-wasm.mjs \
+  --mode core --warmup 10 --iterations 50 --interval 250 \
+  --output build/wasm-profile/profiles/baseline-core.cpuprofile
+
+/home/fabio/.npm-global/bin/node scripts/profile-wasm.mjs \
+  --mode end-to-end --warmup 5 --iterations 10 --interval 250 \
+  --output build/wasm-profile/profiles/baseline-end-to-end.cpuprofile
+```
+
+O runner grava o `.cpuprofile` para Chrome DevTools e um
+`.cpuprofile.summary.json` com checksum, tempos, corpus, tamanho dos artefatos e
+SHA-256 do Wasm/glue, além das versões de Node/V8.
+`scripts/compare-wasm-profiles.mjs` recusa comparar modos, runtime, corpus,
+banco ou checksum incompatíveis:
+
+```sh
+node scripts/compare-wasm-profiles.mjs \
+  build/wasm-profile/profiles/baseline-core.cpuprofile.summary.json \
+  build/wasm-profile-candidate/profiles/candidate-core.cpuprofile.summary.json
+```
+
+Para comparar latência, repetir o mesmo comando com `--profiler none`; o
+intervalo de 250 microssegundos tem overhead e serve principalmente para obter
+o flame chart. As medianas temporais devem vir das coletas sem Inspector, e a
+atribuição de hotpaths, das coletas com Inspector.
+
+Um smoke test da baseline F-05b confirmou os nomes C++ dentro do `.cpuprofile`,
+incluindo `Engine::analyze_line`, `analyze_lexical_surface`,
+`enumerate_candidates` e os lookups. Ambos os modos produziram por iteração
+`checksum=22723`, `units=4570` e `analyses=18153`. Em uma coleta curta no Node
+20, sem pretensão de benchmark estável, `core` levou cerca de 101 ms e
+end-to-end, 524 ms. A diferença grande confirma o valor de manter os dois
+perfis, mas não é o ganho esperado do sink: ela inclui toda a projeção,
+travessia de vetores, construção de objetos JS e garbage collection. O sink
+proposto elimina somente a primeira coleção de `QueryResult` e sua retenção.
+
+Para `perf`, o mesmo runner aceita `--profiler none`, deixando a delimitação ao
+profiler externo:
+
+```sh
+perf record -F 999 -g -- \
+  /home/fabio/.npm-global/bin/node \
+  --perf-basic-prof-only-functions \
+  scripts/profile-wasm.mjs --mode core --profiler none \
+  --warmup 10 --iterations 100
+```
+
+No ambiente atual, inclusive dentro do NativeLab, esse comando ainda está
+bloqueado por infraestrutura: `/usr/bin/perf` não possui as ferramentas para o
+kernel `6.14.0-1020-oem` e `kernel.perf_event_paranoid=4`. `ptrace` habilitado
+não concede automaticamente `perf_event_open`. O Inspector funciona agora e é
+a baseline recomendada; o perfil de hardware fica preparado para quando o
+pacote do kernel e a permissão forem disponibilizados.
+
+O perfil manual no Chrome continua válido como confirmação final do consumidor
+real e pode reutilizar `build/wasm-profile`; ele não substitui o A/B controlado
+no mesmo V8. O `--profiling` completo também não traz vantagem nesta etapa:
+preserva JS e whitespace adicionais para leitura, enquanto
+`--profiling-funcs` já entregou os nomes necessários sem desligar otimizações.
+
+Referências oficiais usadas para conferir esse desenho: documentação das
+[flags de profiling e source map do Emscripten](https://emscripten.org/docs/tools_reference/emcc.html),
+[profiling nos DevTools](https://emscripten.org/docs/porting/Debugging.html),
+[Inspector do Node](https://nodejs.org/api/inspector.html) e
+[flags `--cpu-prof`/`--perf-*` do Node](https://nodejs.org/api/cli.html).
+
+Para o A/B do sink, devem ser preservadas quatro comparações separadas:
+
+1. `core` baseline contra `core` candidato, medindo a engine Wasm;
+2. `end-to-end` baseline contra `end-to-end` candidato, medindo o consumidor;
+3. Release baseline contra Release candidato para `.wasm`, `.wasm.br` e glue;
+4. Callgrind/DHAT nativos, que continuam sendo a fonte determinística de
+   instruções e alocações internas.
+
+Não se deve subtrair diretamente os percentuais de Callgrind dos samples V8,
+nem atribuir toda a diferença end-to-end/core ao sink. Para cada modo, usar ao
+menos cinco coletas alternadas A/B, comparar medianas e verificar o checksum
+por iteração antes de abrir os flame charts.
+
 ## Tempos nativos
 
 Os valores abaixo são tempos de parede representativos, com saída direcionada

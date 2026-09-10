@@ -34,6 +34,14 @@ struct LoadResult final {
     std::string database_kind;
 };
 
+#if defined(WORDS_WASM_PROFILING)
+struct BrowserBenchmarkResult final {
+    double checksum{};
+    double units{};
+    double analyses{};
+};
+#endif
+
 constexpr std::string_view full_database_kind{"full"};
 constexpr std::string_view search_database_kind{"search"};
 
@@ -865,6 +873,58 @@ class BrowserAnalysisEngine final {
         return browser_search_results(*engine_, results, false);
     }
 
+#if defined(WORDS_WASM_PROFILING)
+    // One Embind crossing keeps corpus traversal, QueryResult construction and
+    // destruction, and the checksum inside Wasm.  It deliberately excludes
+    // BrowserSearchResult projection and JavaScript object copies.
+    [[nodiscard]] BrowserBenchmarkResult
+    benchmark_corpus(const std::string &utf8, const std::uint32_t iterations,
+                     const bool two_words) const {
+        require_ready();
+        if (!engine_->supports_full_analysis()) {
+            throw std::logic_error{
+                "analysis requires a full WWDB with meanings"};
+        }
+        if (iterations == 0U) {
+            throw std::invalid_argument{
+                "benchmark iterations must be positive"};
+        }
+
+        std::uint64_t units{};
+        std::uint64_t analyses{};
+        constexpr auto maximum_safe_javascript_integer =
+            (std::uint64_t{1U} << 53U) - 1U;
+        const auto add_count = [](std::uint64_t &total,
+                                  const std::size_t count) {
+            constexpr auto maximum = (std::uint64_t{1U} << 53U) - 1U;
+            if (count > maximum - total) {
+                throw std::overflow_error{
+                    "benchmark count exceeds JavaScript safe integer"};
+            }
+            total += static_cast<std::uint64_t>(count);
+        };
+        const auto options = analysis_options(two_words);
+        for (std::uint32_t iteration{}; iteration < iterations; ++iteration) {
+            const auto results = engine_->analyze_line(utf8, options);
+            add_count(units, results.size());
+            for (const auto &result : results) {
+                add_count(analyses, result.analyses.size());
+                add_count(analyses, result.compound_analyses.size());
+                add_count(analyses, result.artificial_analyses.size());
+            }
+        }
+        if (analyses > maximum_safe_javascript_integer - units) {
+            throw std::overflow_error{
+                "benchmark checksum exceeds JavaScript safe integer"};
+        }
+        return BrowserBenchmarkResult{
+            .checksum = static_cast<double>(units + analyses),
+            .units = static_cast<double>(units),
+            .analyses = static_cast<double>(analyses),
+        };
+    }
+#endif
+
     void reset() noexcept {
         engine_.reset();
         database_bytes_ = 0U;
@@ -913,6 +973,13 @@ EMSCRIPTEN_BINDINGS(words_analysis_engine) {
         .field("message", &LoadResult::message)
         .field("databaseBytes", &LoadResult::database_bytes)
         .field("databaseKind", &LoadResult::database_kind);
+
+#if defined(WORDS_WASM_PROFILING)
+    emscripten::value_object<BrowserBenchmarkResult>("BenchmarkResult")
+        .field("checksum", &BrowserBenchmarkResult::checksum)
+        .field("units", &BrowserBenchmarkResult::units)
+        .field("analyses", &BrowserBenchmarkResult::analyses);
+#endif
 
     emscripten::value_object<BrowserQuery>("SearchQuery")
         .field("text", &BrowserQuery::text)
@@ -1080,5 +1147,8 @@ EMSCRIPTEN_BINDINGS(words_analysis_engine) {
         .function("search", &BrowserAnalysisEngine::search)
         .function("analyzeLine", &BrowserAnalysisEngine::analyze_line)
         .function("searchLine", &BrowserAnalysisEngine::search_line)
+#if defined(WORDS_WASM_PROFILING)
+        .function("benchmarkCorpus", &BrowserAnalysisEngine::benchmark_corpus)
+#endif
         .function("reset", &BrowserAnalysisEngine::reset);
 }

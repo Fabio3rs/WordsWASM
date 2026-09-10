@@ -37,6 +37,10 @@ option(ENABLE_SANITIZERS "Enable sanitizers" ${SHOULD_ENABLE_SANITIZERS})
 option(ENABLE_WEB_COMPRESSION "Generate Brotli/Gzip compressed web assets when building with Emscripten" ON)
 option(ENABLE_STATIC_CLI "Statically link the native CLI where the platform supports it" OFF)
 option(FETCH_GTEST "Download GoogleTest when tests are enabled and it is not installed" OFF)
+option(WORDS_WASM_PROFILING
+    "Keep Wasm function names and expose benchmark-only bindings" OFF)
+option(WORDS_WASM_SOURCE_MAPS
+    "Generate Wasm source maps for source-level profiling" OFF)
 
 if(ENABLE_STATIC_CLI AND ENABLE_SANITIZERS)
     message(FATAL_ERROR
@@ -248,6 +252,27 @@ if(EMSCRIPTEN)
     target_compile_options(WordsWASM PRIVATE
         -sDISABLE_EXCEPTION_CATCHING=0
     )
+
+    if(WORDS_WASM_PROFILING)
+        target_compile_definitions(WordsWASM PRIVATE
+            WORDS_WASM_PROFILING=1
+        )
+        # Keep optimized Wasm and minified JS, adding only the function-name
+        # section needed by sampling profilers.  Profiling builds are not
+        # release-size artifacts.
+        target_link_options(WordsWASM PRIVATE
+            --profiling-funcs
+        )
+    endif()
+
+    if(WORDS_WASM_SOURCE_MAPS)
+        # Source maps need line information in both the core objects and the
+        # final link.  This is intentionally independent of the lighter
+        # function-name-only profiling mode.
+        target_compile_options(words_core PRIVATE -gsource-map)
+        target_compile_options(WordsWASM PRIVATE -gsource-map)
+        target_link_options(WordsWASM PRIVATE -gsource-map)
+    endif()
 
     # WHY: Embind keeps ordinary analysis calls at the typed language boundary;
     # only the initial immutable database image crosses as a contiguous byte
