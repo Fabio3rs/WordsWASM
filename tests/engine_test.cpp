@@ -1442,14 +1442,19 @@ TEST(EngineTest, CompoundAnalysisPreservesEveryIndependentToken) {
                       isolated_second.total_analyses())
             << fixture.phrase;
 
-        const auto full =
-            Json::parse(analysis_json_v2(test::engine(), result));
+        const auto full = Json::parse(analysis_json_v2(test::engine(), result));
         ASSERT_TRUE(full.contains("tokens")) << fixture.phrase;
         ASSERT_EQ(full.at("tokens").size(), 2U) << fixture.phrase;
-        EXPECT_EQ(full.at("tokens")[0].at("query").at("normalized"),
-                  fixture.first);
-        EXPECT_EQ(full.at("tokens")[1].at("query").at("normalized"),
-                  fixture.second);
+        const auto &first_normalized = full.at("tokens")[0]
+                                           .at("query")
+                                           .at("normalized")
+                                           .get_ref<const Json::string_t &>();
+        const auto &second_normalized = full.at("tokens")[1]
+                                            .at("query")
+                                            .at("normalized")
+                                            .get_ref<const Json::string_t &>();
+        EXPECT_EQ(std::string_view{first_normalized}, fixture.first);
+        EXPECT_EQ(std::string_view{second_normalized}, fixture.second);
         EXPECT_EQ(full.at("tokens")[0].at("analyses").size(),
                   isolated_first.analyses.size());
         EXPECT_EQ(full.at("tokens")[1].at("analyses").size(),
