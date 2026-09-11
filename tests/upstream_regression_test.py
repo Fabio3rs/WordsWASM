@@ -77,7 +77,7 @@ def main() -> None:
         raise AssertionError("destructive trim option is still accepted")
 
     for issue in (76, 145):
-        corpus = root / f"wordswasm-roadmap/corpus-issue-{issue}.txt"
+        corpus = root / f"tests/corpora/issue-{issue}.txt"
         documents = run(
             cli,
             database,
