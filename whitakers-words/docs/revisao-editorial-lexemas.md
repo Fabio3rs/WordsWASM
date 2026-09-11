@@ -191,6 +191,50 @@ Somente `accept_new` pode conter o bloco canônico. `merge_existing` e
 para o mesmo rascunho para separar homógrafos, desde que seus sentidos aceitos
 sejam disjuntos.
 
+### Revisão de uma entrada herdada: caso `hisco`
+
+Uma correção de dados já existente não deve ser representada como um novo
+lexema nem como uma interpretação concorrente artificial. Ela deve ser uma
+operação explícita e versionada sobre uma entrada herdada. A operação proposta
+é `revise_existing` e deve conter, no mínimo:
+
+- `dictionary` e `entry_id` da entrada-alvo;
+- uma precondição com os campos anteriores relevantes e a revisão/hash do
+  dataset de origem;
+- os campos corrigidos, com valores anterior e posterior;
+- evidência por campo, com nome completo da fonte e localizador;
+- decisão, revisor e data.
+
+O aplicador deve falhar se a precondição não corresponder ao registro atual.
+Assim, uma alteração posterior da mesma entrada não é sobrescrita
+silenciosamente. A operação é aplicada antes da geração de `DICTFILE.GEN` e do
+WWDB; esses arquivos continuam sendo derivados e não são editados manualmente.
+
+O primeiro caso é a entrada geral `entry_id 22241`, cuja forma de citação
+gerada era `hisco, hiscare`, com conjugação 1. A revisão corroborada por Lewis &
+Short (verbete **hisco, ĕre**, identificador `n20796`) estabelece:
+
+```text
+forma de citação: hisco, hiscere
+conjugação:       3ª
+consulta:         hiscere
+expectativa:      infinitivo presente ativo de hisco
+```
+
+Esta correção não remove análises. O dataset revisado deve continuar emitindo
+todas as análises morfologicamente geráveis, inclusive eventuais leituras
+passivas ou derivadas. O que deixa de ser publicado como dado ativo é somente
+a conjugação 1/forma `hiscare`, porque ela é uma classificação lexical
+incorreta do registro herdado, não uma segunda interpretação atestada. O
+baseline antigo permanece preservado para reprodução histórica e comparação.
+
+No estado atual do projeto, a correção já foi aplicada diretamente em
+`DICTLINE.GEN`, os perfis WWDB foram regenerados e há regressão unitária para
+`hiscere`. A extensão `revise_existing` do ledger ainda é uma tarefa de
+infraestrutura editorial futura; até sua implementação, a alteração direta
+deve permanecer acompanhada pelo diff, pela fonte e pelo teste, sem edição
+manual de `DICTFILE.GEN`.
+
 Invariantes do compilador:
 
 - não aceitar uma decisão cuja revisão não corresponda à fila atual;

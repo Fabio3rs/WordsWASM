@@ -935,11 +935,21 @@ TEST(EngineTest, PreservesHistoricalFinalTokensAndIssue70Split) {
     EXPECT_EQ(line.back().surface.normalized_nfc, "o");
     EXPECT_EQ(line.back().status, QueryStatus::analyzed);
 
-    for (const auto *const numeral : {"I", "V", "X", "L", "C", "D", "M"}) {
+    constexpr std::array roman_numerals{
+        std::pair{"I", 1U},   std::pair{"V", 5U},   std::pair{"X", 10U},
+        std::pair{"L", 50U},  std::pair{"C", 100U}, std::pair{"D", 500U},
+        std::pair{"M", 1000U},
+    };
+    for (const auto &[numeral, expected_value] : roman_numerals) {
         const auto result = test::engine().analyze_line(numeral);
         ASSERT_EQ(result.size(), 1U) << numeral;
         EXPECT_EQ(result.front().status, QueryStatus::analyzed) << numeral;
-        EXPECT_FALSE(result.front().artificial_analyses.empty()) << numeral;
+        ASSERT_EQ(result.front().artificial_analyses.size(), 1U) << numeral;
+        const auto *roman =
+            std::get_if<RomanNumeralIR>(&result.front().artificial_analyses.front());
+        ASSERT_NE(roman, nullptr) << numeral;
+        EXPECT_EQ(roman->value, expected_value) << numeral;
+        EXPECT_TRUE(roman->well_formed) << numeral;
     }
 
     const auto direct = test::engine().analyze("bestiasviginti");
@@ -965,6 +975,7 @@ TEST(EngineTest, CoversReportedDeleoFormsAndCurroWithoutTrailingSpace) {
         Fixture{"deleantur", Person::third, GrammaticalNumber::plural},
         Fixture{"deleamini", Person::second, GrammaticalNumber::plural},
     };
+    const auto &database = test::engine().database();
     for (const auto &[surface, person, number] : fixtures) {
         const auto result = test::engine().analyze(surface);
         EXPECT_TRUE(std::ranges::any_of(result.analyses, [&](const AnalysisIR
@@ -975,26 +986,83 @@ TEST(EngineTest, CoversReportedDeleoFormsAndCurroWithoutTrailingSpace) {
                    verb->tense == Tense::present &&
                    verb->voice == Voice::passive &&
                    verb->mood == Mood::subjunctive && verb->person == person &&
-                   verb->number == number;
+                   verb->number == number &&
+                   citation_lemma(database, database.lexeme(analysis.lexeme)) ==
+                       "deleo";
         })) << surface;
     }
 
     const auto curro = test::engine().analyze("curro");
     ASSERT_EQ(curro.status, QueryStatus::analyzed);
     EXPECT_TRUE(
-        std::ranges::any_of(curro.analyses, [](const AnalysisIR &analysis) {
+        std::ranges::any_of(curro.analyses, [&](const AnalysisIR &analysis) {
             const auto *verb =
                 std::get_if<VerbMorphology>(&analysis.morphology);
             return verb != nullptr && verb->tense == Tense::present &&
                    verb->voice == Voice::active &&
                    verb->mood == Mood::indicative &&
                    verb->person == Person::first &&
-                   verb->number == GrammaticalNumber::singular;
+                   verb->number == GrammaticalNumber::singular &&
+                   citation_lemma(database, database.lexeme(analysis.lexeme)) ==
+                       "curro";
         }));
+}
+
+TEST(EngineTest, CorrectsHiscoToThirdConjugationPresentActiveInfinitive) {
+    const auto result = test::engine().analyze("hiscere");
+    ASSERT_EQ(result.status, QueryStatus::analyzed);
+
+    const auto &database = test::engine().database();
+    EXPECT_TRUE(std::ranges::any_of(
+        result.analyses, [&](const AnalysisIR &analysis) {
+            const auto *verb = std::get_if<VerbMorphology>(&analysis.morphology);
+            if (verb == nullptr || verb->conjugation != 3U ||
+                verb->tense != Tense::present || verb->voice != Voice::active ||
+                verb->mood != Mood::infinitive) {
+                return false;
+            }
+            const auto &lexeme = database.lexeme(analysis.lexeme);
+            return citation_lemma(database, lexeme) == "hisco" &&
+                   dictionary_form(database, lexeme).find("hiscere") !=
+                       std::string::npos;
+        }))
+        << "hiscere must retain the corrected hisco, hiscere analysis";
 }
 
 TEST(EngineTest, PreservesSancteHomographsAndVidesneEnclitic) {
     const auto sancte = test::engine().analyze("sancte");
+    const auto &database = test::engine().database();
+    EXPECT_TRUE(
+        std::ranges::any_of(sancte.analyses, [&](const AnalysisIR &analysis) {
+            const auto *const adjective =
+                std::get_if<AdjectiveMorphology>(&analysis.morphology);
+            if (adjective == nullptr ||
+                adjective->grammatical_case != GrammaticalCase::vocative ||
+                citation_lemma(database, database.lexeme(analysis.lexeme)) !=
+                    "sanctus") {
+                return false;
+            }
+            return adjective->number == GrammaticalNumber::singular &&
+                   adjective->gender == Gender::masculine;
+        }));
+    EXPECT_TRUE(
+        std::ranges::any_of(sancte.analyses, [&](const AnalysisIR &analysis) {
+            const auto *const adverb =
+                std::get_if<AdverbMorphology>(&analysis.morphology);
+            if (adverb == nullptr ||
+                citation_lemma(database, database.lexeme(analysis.lexeme)) !=
+                    "sanctus") {
+                return false;
+            }
+            return std::ranges::any_of(
+                analysis.derivation.steps(), [&](const AddonId addon) {
+                    return database.addon_kind(addon) == AddonKind::suffix &&
+                           database.suffix_string(database.suffix(addon).fix) ==
+                               "e";
+                });
+        }));
+    /* Keep the weaker category checks below as diagnostics for future
+       datasets that may add a second vocative or adverbial homograph. */
     EXPECT_TRUE(
         std::ranges::any_of(sancte.analyses, [](const AnalysisIR &analysis) {
             return std::holds_alternative<AdverbMorphology>(
@@ -1012,18 +1080,22 @@ TEST(EngineTest, PreservesSancteHomographsAndVidesneEnclitic) {
     ASSERT_EQ(videsne.status, QueryStatus::analyzed);
     ASSERT_FALSE(videsne.analyses.empty());
     EXPECT_TRUE(
-        std::ranges::any_of(videsne.analyses, [](const AnalysisIR &analysis) {
+        std::ranges::any_of(videsne.analyses, [&](const AnalysisIR &analysis) {
             const auto *verb =
                 std::get_if<VerbMorphology>(&analysis.morphology);
-            return verb != nullptr && verb->person == Person::second &&
-                   verb->number == GrammaticalNumber::singular;
-        }));
-    EXPECT_TRUE(
-        std::ranges::any_of(videsne.analyses, [](const AnalysisIR &analysis) {
+            if (verb == nullptr || verb->person != Person::second ||
+                verb->number != GrammaticalNumber::singular) {
+                return false;
+            }
+            if (citation_lemma(database, database.lexeme(analysis.lexeme)) !=
+                "video") {
+                return false;
+            }
             return std::ranges::any_of(
-                analysis.derivation.steps(), [](const AddonId addon) {
-                    return test::engine().database().addon_kind(addon) ==
-                           AddonKind::tackon;
+                analysis.derivation.steps(), [&](const AddonId addon) {
+                    return database.addon_kind(addon) == AddonKind::tackon &&
+                           database.tackon_string(database.tackon(addon).fix) ==
+                               "ne";
                 });
         }));
 }
