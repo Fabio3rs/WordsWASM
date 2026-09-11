@@ -65,11 +65,12 @@
     "lexicalHit": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "lexemeId", "lemma", "lexical", "rule", "quantityMatch", "partOfSpeech", "form", "morphology", "derivation", "assessment", "meaning"],
+      "required": ["kind", "lexemeId", "lemma", "dictionaryForm", "lexical", "rule", "quantityMatch", "partOfSpeech", "form", "morphology", "derivation", "assessment", "meaning"],
       "properties": {
         "kind": {"const": "lexical"},
         "lexemeId": {"type": "integer", "minimum": 0},
         "lemma": {"type": "string"},
+        "dictionaryForm": {"type": "string"},
         "lexical": {"$ref": "browser-search-v3.schema.json#/$defs/lexical"},
         "rule": {"$ref": "browser-search-v3.schema.json#/$defs/rule"},
         "quantityMatch": {"enum": ["unspecified", "exact", "unknown"]},
@@ -84,11 +85,12 @@
     "compoundHit": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "lexemeId", "lemma", "lexical", "rule", "compound", "partOfSpeech", "form", "morphology", "derivation", "assessment", "meaning"],
+      "required": ["kind", "lexemeId", "lemma", "dictionaryForm", "lexical", "rule", "compound", "partOfSpeech", "form", "morphology", "derivation", "assessment", "meaning"],
       "properties": {
         "kind": {"const": "compound"},
         "lexemeId": {"type": "integer", "minimum": 0},
         "lemma": {"type": "string"},
+        "dictionaryForm": {"type": "string"},
         "lexical": {"$ref": "browser-search-v3.schema.json#/$defs/lexical"},
         "rule": {"$ref": "browser-search-v3.schema.json#/$defs/rule"},
         "partOfSpeech": {"const": "verb"},

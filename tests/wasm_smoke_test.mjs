@@ -80,6 +80,7 @@ try {
     hit.lexemeId === 2870 &&
     hit.rule?.id === 1312 &&
     hit.lemma === "amo" &&
+    hit.dictionaryForm === "amo, amare, amavi, amatus" &&
     hit.partOfSpeech === "verb" &&
     hit.morphology.tense === "present" &&
     hit.morphology.voice === "active" &&

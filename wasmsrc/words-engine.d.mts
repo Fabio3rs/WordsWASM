@@ -241,6 +241,8 @@ interface LexicalBase<D extends SearchDerivation | AnalysisDerivation>
   kind: "lexical";
   lexemeId: number;
   lemma: string;
+  /** Whitaker-style citation form, e.g. "rosa, rosae". */
+  dictionaryForm: string;
   lexical: LexicalFlags;
   rule: RuleFlags | null;
   quantityMatch: QuantityMatch;
@@ -252,6 +254,8 @@ interface CompoundBase<D extends SearchDerivation | AnalysisDerivation>
   kind: "compound";
   lexemeId: number;
   lemma: string;
+  /** Whitaker-style citation form of the source lexeme. */
+  dictionaryForm: string;
   lexical: LexicalFlags;
   rule: RuleFlags | null;
   assessment: MorphologicalAssessment;

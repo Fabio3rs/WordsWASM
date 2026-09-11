@@ -284,6 +284,7 @@ test("copies typed morphology assessments and concrete rewrite provenance", asyn
     kind: "lexical",
     lexemeId: 7,
     lemma: "theologia",
+    dictionaryForm: "theologia, theologiae",
     hasMeaning: false,
     meaning: "",
     partOfSpeech: "conjunction",
@@ -365,6 +366,7 @@ test("copies typed morphology assessments and concrete rewrite provenance", asyn
     replacement: "th",
   });
   assert.equal(hit.derivation.steps[0].category, "medieval");
+  assert.equal(hit.dictionaryForm, "theologia, theologiae");
   assert.deepEqual(deletions.sort(), [
     "diagnostics", "hits", "notices", "reasons", "steps", "suggestions",
   ]);

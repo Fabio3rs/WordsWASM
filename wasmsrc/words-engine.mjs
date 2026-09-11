@@ -278,6 +278,7 @@ function copyHit(raw) {
   hit.lexemeId = raw.lexemeId;
   hit.assessment = copyAssessment(raw.assessment);
   hit.lemma = raw.lemma;
+  hit.dictionaryForm = raw.dictionaryForm;
   hit.lexical = copyLexical(raw.lexical);
   hit.rule = raw.rule.present ? {
     id: raw.ruleId,

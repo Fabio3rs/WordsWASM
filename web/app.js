@@ -155,6 +155,7 @@ const translations = Object.freeze({
       evidenceNotesLead: "Evidence and review notes",
       enclitic: (text) => `enclitic -${text}`,
       recognizedFormLead: "Recognized form: ",
+      dictionaryFormLead: "Dictionary form: ",
       compound: (construction, auxiliary) =>
         `Compound construction: ${construction} · auxiliary ${auxiliary}`,
       reading: (value) => `Reading ${value}`,
@@ -313,6 +314,7 @@ const translations = Object.freeze({
       evidenceNotesLead: "Notas de evidência e revisão",
       enclitic: (text) => `enclítico -${text}`,
       recognizedFormLead: "Forma reconhecida: ",
+      dictionaryFormLead: "Forma do dicionário: ",
       compound: (construction, auxiliary) =>
         `Construção composta: ${construction} · auxiliar ${auxiliary}`,
       reading: (value) => `Leitura ${value}`,
@@ -471,6 +473,7 @@ const translations = Object.freeze({
       evidenceNotesLead: "Notae testimonii et recognitionis",
       enclitic: (text) => `encliticum -${text}`,
       recognizedFormLead: "Forma agnita: ",
+      dictionaryFormLead: "Forma dictionarii: ",
       compound: (construction, auxiliary) =>
         `Constructio composita: ${construction} · auxiliare ${auxiliary}`,
       reading: (value) => `Interpretatio ${value}`,
@@ -916,6 +919,7 @@ function groupHits(hits) {
 function renderReading(hit, index, groupSize, hasCommonForm,
   hasCommonDerivation) {
   const reading = element("section", "reading");
+  const overview = element("div", "reading__overview");
   if (groupSize > 1) {
     const heading = element("div", "reading__heading");
     heading.append(
@@ -923,11 +927,12 @@ function renderReading(hit, index, groupSize, hasCommonForm,
       element("span", "reading__kind",
         translated("partOfSpeech", hit.partOfSpeech)),
     );
-    reading.append(heading);
+    overview.append(heading);
   }
 
-  renderVoice(hit, reading);
-  renderTraits(hit, reading);
+  renderVoice(hit, overview);
+  renderTraits(hit, overview);
+  if (overview.childElementCount > 0) reading.append(overview);
   renderAssessment(hit, reading);
   if (!hasCommonForm) renderForm(hit, reading);
 
@@ -955,6 +960,13 @@ function renderHitGroup(hits) {
     element("span", "part-of-speech", translated("partOfSpeech", lexicalPart)),
   );
   group.append(heading);
+
+  if (first.dictionaryForm && first.dictionaryForm !== first.lemma) {
+    const dictionaryForm = element("p", "dictionary-form");
+    dictionaryForm.append(message("dictionaryFormLead"),
+      element("span", "dictionary-form__value", first.dictionaryForm));
+    group.append(dictionaryForm);
+  }
 
   const meaningText = hits.find(({meaning}) => meaning)?.meaning;
   if (meaningText) {

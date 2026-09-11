@@ -252,6 +252,7 @@ struct BrowserSearchHit final {
     bool has_rule{};
     std::uint32_t rule_id{};
     std::string lemma;
+    std::string dictionary_form;
     bool has_meaning{};
     std::string meaning;
     std::string part_of_speech;
@@ -660,6 +661,8 @@ browser_assessment(const words::MorphologicalAssessmentIR &assessment) {
     }
     const auto &lexeme = database.lexeme(analysis.lexeme);
     hit.lemma = words::citation_lemma(database, lexeme, surface.normalized_nfc);
+    hit.dictionary_form =
+        words::dictionary_form(database, lexeme, surface.normalized_nfc);
     if (include_meaning) {
         hit.has_meaning = true;
         hit.meaning = normalized_meaning(database.meaning(lexeme.meaning));
@@ -695,6 +698,8 @@ browser_hit(const words::Database &database, const words::SurfaceForm &surface,
     }
     const auto &lexeme = database.lexeme(analysis.lexeme);
     hit.lemma = words::citation_lemma(database, lexeme, surface.normalized_nfc);
+    hit.dictionary_form =
+        words::dictionary_form(database, lexeme, surface.normalized_nfc);
     if (include_meaning) {
         hit.has_meaning = true;
         hit.meaning = normalized_meaning(database.meaning(lexeme.meaning));
@@ -1245,6 +1250,7 @@ EMSCRIPTEN_BINDINGS(words_analysis_engine) {
         .field("hasRule", &BrowserSearchHit::has_rule)
         .field("ruleId", &BrowserSearchHit::rule_id)
         .field("lemma", &BrowserSearchHit::lemma)
+        .field("dictionaryForm", &BrowserSearchHit::dictionary_form)
         .field("hasMeaning", &BrowserSearchHit::has_meaning)
         .field("meaning", &BrowserSearchHit::meaning)
         .field("partOfSpeech", &BrowserSearchHit::part_of_speech)

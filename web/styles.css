@@ -392,6 +392,17 @@ h1 {
   text-transform: uppercase;
 }
 
+.dictionary-form {
+  margin: -0.1rem 0 0.25rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.dictionary-form__value {
+  color: var(--ink);
+  font-style: italic;
+}
+
 .meaning {
   margin: 0.3rem 0 0.9rem;
   color: #454139;
@@ -399,22 +410,18 @@ h1 {
 }
 
 .voice {
-  margin: 0.85rem 0;
-  padding: 0.72rem 0.82rem;
+  margin: 0;
+  padding: 0.38rem 0.62rem;
   border-left: 3px solid var(--accent);
   border-radius: 0.35rem;
   background: var(--accent-soft);
-}
-
-.voice strong,
-.voice span {
-  display: block;
+  font-size: 0.8rem;
 }
 
 .voice span {
-  margin-top: 0.14rem;
+  margin-left: 0.35rem;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
 }
 
 .morphological-assessment {
@@ -447,14 +454,15 @@ h1 {
 .traits {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
-  margin: 0.75rem 0;
+  flex: 1 1 19rem;
+  gap: 0.3rem;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .traits li {
-  padding: 0.3rem 0.5rem;
+  padding: 0.26rem 0.45rem;
   border: 1px solid var(--line);
   border-radius: 0.35rem;
   background: #faf7f0;
@@ -523,8 +531,9 @@ h1 {
 .reading__heading {
   display: flex;
   justify-content: space-between;
+  flex: 0 1 11rem;
   gap: 1rem;
-  margin-bottom: 0.55rem;
+  margin: 0;
   color: var(--muted);
   font-size: 0.7rem;
   font-weight: 750;
@@ -534,6 +543,13 @@ h1 {
 
 .reading__kind {
   color: var(--accent);
+}
+
+.reading__overview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
 }
 
 .reading .voice:first-child,
