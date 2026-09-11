@@ -451,7 +451,7 @@ TEST(EngineTest, PreservesEveryVerbKindRepresentedByARealLexeme) {
     }
 }
 
-TEST(EngineTest, AnnotatesAndOptionallyFiltersActiveDeponentForms) {
+TEST(EngineTest, AnnotatesAndPreservesActiveDeponentFormsInEveryProjection) {
     constexpr std::uint32_t reor_entry = 32909U;
     const auto is_reor = [](const Engine &engine, const AnalysisIR &analysis) {
         const auto &lexeme = engine.database().lexeme(analysis.lexeme);
@@ -489,16 +489,15 @@ TEST(EngineTest, AnnotatesAndOptionallyFiltersActiveDeponentForms) {
                            WhitakerTrimReason::deponent_active_form);
             }));
 
-        auto filter = AnalysisOptions{};
-        filter.whitaker_trim = WhitakerTrimMode::filter;
-        const auto filtered = engine->analyze("res", filter);
-        EXPECT_TRUE(std::ranges::none_of(filtered.analyses,
-                                         [&](const AnalysisIR &analysis) {
-                                             return is_reor(*engine, analysis);
-                                         }));
         EXPECT_TRUE(expects_person(*engine, "reor", Person::first));
         EXPECT_TRUE(expects_person(*engine, "reris", Person::second));
     }
+
+    const auto result = test::engine().analyze("res");
+    const auto full = Json::parse(analysis_json(test::engine(), result));
+    const auto search = Json::parse(search_json(test::engine(), result));
+    EXPECT_EQ(full.at("analyses").size(), result.total_analyses());
+    EXPECT_EQ(search.at("hits").size(), result.analyses.size());
 }
 
 TEST(EngineTest, ReproducesWhitakerTrimAsAnExplainablePolicy) {
@@ -536,18 +535,13 @@ TEST(EngineTest, ReproducesWhitakerTrimAsAnExplainablePolicy) {
                 WhitakerTrimReason::semideponent_active_perfect_system);
         }));
 
-    auto filter = AnalysisOptions{};
-    filter.whitaker_trim = WhitakerTrimMode::filter;
-    EXPECT_EQ(test::engine().analyze("reg", filter).status,
-              QueryStatus::unknown);
-    EXPECT_TRUE(std::ranges::none_of(
-        test::engine().analyze("liceo", filter).analyses,
-        [&](const AnalysisIR &analysis) {
+    EXPECT_EQ(short_imperative.status, QueryStatus::analyzed);
+    EXPECT_TRUE(std::ranges::any_of(
+        impersonal.analyses, [](const AnalysisIR &analysis) {
             return !analysis.assessment.whitaker_trim.accepted();
         }));
-    EXPECT_TRUE(std::ranges::none_of(
-        test::engine().analyze("ausi", filter).analyses,
-        [&](const AnalysisIR &analysis) {
+    EXPECT_TRUE(std::ranges::any_of(
+        active_perfect.analyses, [&](const AnalysisIR &analysis) {
             return has_reason(
                 analysis,
                 WhitakerTrimReason::semideponent_active_perfect_system);
@@ -633,11 +627,6 @@ TEST(EngineTest, PreservesAudeoPassiveWithRelatedEvidenceNotices) {
     const auto &search_assessment = search.at("hits").front().at("assessment");
     EXPECT_FALSE(search_assessment.at("whitakerTrim").at("compatible"));
     EXPECT_EQ(search_assessment.at("notices").size(), 3U);
-
-    auto filter = AnalysisOptions{};
-    filter.whitaker_trim = WhitakerTrimMode::filter;
-    EXPECT_EQ(test::engine().analyze("audetur", filter).status,
-              QueryStatus::unknown);
 }
 
 TEST(EngineTest, QualifiesDocumentedSemideponentExceptionsByAnalysis) {
@@ -938,6 +927,105 @@ TEST(EngineTest, SplitsTwoWordSuggestionAtLogicalUtf8Boundary) {
     EXPECT_EQ(result.two_word_suggestion->logical_split, 3U);
     EXPECT_EQ(result.two_word_suggestion->segments[0].surface.normalized_nfc,
               "rēs");
+}
+
+TEST(EngineTest, PreservesHistoricalFinalTokensAndIssue70Split) {
+    const auto line = test::engine().analyze_line("amo o");
+    ASSERT_EQ(line.size(), 2U);
+    EXPECT_EQ(line.back().surface.normalized_nfc, "o");
+    EXPECT_EQ(line.back().status, QueryStatus::analyzed);
+
+    for (const auto *const numeral : {"I", "V", "X", "L", "C", "D", "M"}) {
+        const auto result = test::engine().analyze_line(numeral);
+        ASSERT_EQ(result.size(), 1U) << numeral;
+        EXPECT_EQ(result.front().status, QueryStatus::analyzed) << numeral;
+        EXPECT_FALSE(result.front().artificial_analyses.empty()) << numeral;
+    }
+
+    const auto direct = test::engine().analyze("bestiasviginti");
+    EXPECT_EQ(direct.status, QueryStatus::unknown);
+
+    constexpr AnalysisOptions legacy{TwoWordsMode::legacy_first_match};
+    const auto recovered = test::engine().analyze("bestiasviginti", legacy);
+    ASSERT_TRUE(recovered.two_word_suggestion.has_value());
+    EXPECT_EQ(recovered.two_word_suggestion->segments[0].surface.normalized_nfc,
+              "bestias");
+    EXPECT_EQ(recovered.two_word_suggestion->segments[1].surface.normalized_nfc,
+              "viginti");
+}
+
+TEST(EngineTest, CoversReportedDeleoFormsAndCurroWithoutTrailingSpace) {
+    struct Fixture final {
+        std::string_view surface;
+        Person person;
+        GrammaticalNumber number;
+    };
+    constexpr std::array fixtures{
+        Fixture{"deleatur", Person::third, GrammaticalNumber::singular},
+        Fixture{"deleantur", Person::third, GrammaticalNumber::plural},
+        Fixture{"deleamini", Person::second, GrammaticalNumber::plural},
+    };
+    for (const auto &[surface, person, number] : fixtures) {
+        const auto result = test::engine().analyze(surface);
+        EXPECT_TRUE(std::ranges::any_of(result.analyses, [&](const AnalysisIR
+                                                                 &analysis) {
+            const auto *verb =
+                std::get_if<VerbMorphology>(&analysis.morphology);
+            return verb != nullptr && verb->conjugation == 2U &&
+                   verb->tense == Tense::present &&
+                   verb->voice == Voice::passive &&
+                   verb->mood == Mood::subjunctive && verb->person == person &&
+                   verb->number == number;
+        })) << surface;
+    }
+
+    const auto curro = test::engine().analyze("curro");
+    ASSERT_EQ(curro.status, QueryStatus::analyzed);
+    EXPECT_TRUE(
+        std::ranges::any_of(curro.analyses, [](const AnalysisIR &analysis) {
+            const auto *verb =
+                std::get_if<VerbMorphology>(&analysis.morphology);
+            return verb != nullptr && verb->tense == Tense::present &&
+                   verb->voice == Voice::active &&
+                   verb->mood == Mood::indicative &&
+                   verb->person == Person::first &&
+                   verb->number == GrammaticalNumber::singular;
+        }));
+}
+
+TEST(EngineTest, PreservesSancteHomographsAndVidesneEnclitic) {
+    const auto sancte = test::engine().analyze("sancte");
+    EXPECT_TRUE(
+        std::ranges::any_of(sancte.analyses, [](const AnalysisIR &analysis) {
+            return std::holds_alternative<AdverbMorphology>(
+                analysis.morphology);
+        }));
+    EXPECT_TRUE(
+        std::ranges::any_of(sancte.analyses, [](const AnalysisIR &analysis) {
+            const auto *adjective =
+                std::get_if<AdjectiveMorphology>(&analysis.morphology);
+            return adjective != nullptr &&
+                   adjective->grammatical_case == GrammaticalCase::vocative;
+        }));
+
+    const auto videsne = test::engine().analyze("videsne");
+    ASSERT_EQ(videsne.status, QueryStatus::analyzed);
+    ASSERT_FALSE(videsne.analyses.empty());
+    EXPECT_TRUE(
+        std::ranges::any_of(videsne.analyses, [](const AnalysisIR &analysis) {
+            const auto *verb =
+                std::get_if<VerbMorphology>(&analysis.morphology);
+            return verb != nullptr && verb->person == Person::second &&
+                   verb->number == GrammaticalNumber::singular;
+        }));
+    EXPECT_TRUE(
+        std::ranges::any_of(videsne.analyses, [](const AnalysisIR &analysis) {
+            return std::ranges::any_of(
+                analysis.derivation.steps(), [](const AddonId addon) {
+                    return test::engine().database().addon_kind(addon) ==
+                           AddonKind::tackon;
+                });
+        }));
 }
 
 TEST(EngineTest, EmitsRomanNumeralsWithoutSyntheticLexemeIds) {

@@ -28,8 +28,11 @@ strings are deliberately absent from WWDB and the WASM module.
 - `semideponent-passive-present-system`
 - `semideponent-active-perfect-system`
 
-The default engine mode is `annotate`, which retains these candidates. The
-explicit `filter` mode reproduces Whitaker's early removal.
+Annotation is the only engine policy. Every candidate remains in the native
+result and in every JSON/browser projection; consumers receive compatibility
+reasons and notices instead of a switch that reproduces Whitaker's removal.
+The schema-v2 option field remains `whitakerTrim: "annotate"` for existing
+readers, but it is descriptive rather than configurable.
 
 ## Reviewed semideponent exceptions
 
@@ -89,16 +92,17 @@ Three additional lossless disagreements are currently encoded:
 - `C.` retains both Whitaker's lexical abbreviation and the independently
   generated Roman-numeral reading. The numeral is flagged because the original
   `words`/`words_json` specialization suppresses it when the period is present;
-  Almeida's abbreviation table (printed page 200, unit `s0104-l`) explicitly
-  records `C.` for *Caius*, *Cicero*, and *Calendae*.
+  Napoleão Mendes de Almeida, *Gramática Latina: curso único e completo*,
+  29th ed., printed page 200, explicitly records `C.` for *Caius*, *Cicero*,
+  and *Calendae*.
 - a finite plural analysis of a lexeme marked `impersonal`, such as the
-  impersonal reading of `licent`, is retained and flagged. Almeida §342
-  (printed page 318, unit `s0163-l`) describes finite impersonals as third
-  singular; the original Whitaker checks person but not singular number.
+  impersonal reading of `licent`, is retained and flagged. Almeida,
+  *Gramática Latina*, §342 (printed page 318), describes finite impersonals as
+  third singular; the original Whitaker checks person but not singular number.
 - a future active participle combined with finite `sum`, such as
   `amaturus est`, retains Whitaker's synthetic passive voice and is flagged.
-  Almeida §285 (printed page 257, unit `s0132-r`) describes future participle
-  plus `sum` as the active periphrastic construction.
+  Almeida, *Gramática Latina*, §285 (printed page 257), describes future
+  participle plus `sum` as the active periphrastic construction.
 
 These notices do not filter or relabel the candidates. They expose the
 disagreement while keeping both the original classification and all generated

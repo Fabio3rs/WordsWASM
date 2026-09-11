@@ -1045,6 +1045,22 @@ TEST(DatabaseTest, SeparatesTickonsTackonsAndPackons) {
     }));
 }
 
+TEST(DatabaseTest, PreservesTheEightiethMeaningByteFromLegacyRecords) {
+    auto database = Database::load_poc(test::read_database());
+    ASSERT_TRUE(database) << database.error().message;
+
+    // DICTFILE.GEN entry 127 has a non-padding byte in position 80. This
+    // catches the historical 79/80 off-by-one across source -> WWDB -> view.
+    constexpr LexemeId abligurio{126U};
+    const auto meaning =
+        (*database)->meaning((*database)->lexeme(abligurio).meaning);
+    EXPECT_EQ(meaning.size(), 80U);
+    EXPECT_EQ(meaning,
+              "eat up (dainties); consume in dainty living; waste, squander; "
+              "waste in feasting;");
+    EXPECT_EQ(meaning.back(), ';');
+}
+
 TEST(DatabaseTest, RejectsWrongMagic) {
     auto bytes = test::read_database();
     bytes[0] = std::byte{'X'};

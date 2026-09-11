@@ -1827,21 +1827,14 @@ assess_morphology(const Database &database, const SurfaceForm &surface,
 }
 
 void apply_whitaker_trim(const Database &database, const SurfaceForm &surface,
-                         const WhitakerTrimMode mode,
                          std::vector<AnalysisIR> &analyses) {
     for (auto &analysis : analyses) {
         analysis.assessment = assess_morphology(database, surface, analysis);
     }
-    if (mode == WhitakerTrimMode::filter) {
-        std::erase_if(analyses, [](const AnalysisIR &analysis) {
-            return !analysis.assessment.whitaker_trim.accepted();
-        });
-    }
 }
 
 void apply_whitaker_trim(const Database &database, QueryResult &result) {
-    apply_whitaker_trim(database, result.surface, result.options.whitaker_trim,
-                        result.analyses);
+    apply_whitaker_trim(database, result.surface, result.analyses);
 }
 
 struct LexicalBatch final {
@@ -1970,8 +1963,7 @@ analyze_two_words(const Database &database, const LatinLexer &lexer,
         }
         auto left = analyze_lexical_surface(database, *left_surface,
                                             options.mechanisms);
-        apply_whitaker_trim(database, *left_surface, options.whitaker_trim,
-                            left.analyses);
+        apply_whitaker_trim(database, *left_surface, left.analyses);
         if (left.state.unsupported || left.analyses.empty()) {
             continue;
         }
@@ -1983,8 +1975,7 @@ analyze_two_words(const Database &database, const LatinLexer &lexer,
         }
         auto right = analyze_lexical_surface(database, *right_surface,
                                              options.mechanisms);
-        apply_whitaker_trim(database, *right_surface, options.whitaker_trim,
-                            right.analyses);
+        apply_whitaker_trim(database, *right_surface, right.analyses);
         if (right.state.unsupported || right.analyses.empty()) {
             continue;
         }
@@ -2755,14 +2746,6 @@ QueryResult Engine::analyze(const TextToken &token,
     const auto finish = [&]() -> QueryResult {
         apply_whitaker_trim(*database_, result);
         annotate_period_abbreviation_conflict(token, result);
-        if (result.options.whitaker_trim == WhitakerTrimMode::filter &&
-            result.status == QueryStatus::analyzed && result.analyses.empty() &&
-            result.artificial_analyses.empty()) {
-            result.status = QueryStatus::unknown;
-            result.diagnostics.push_back({.code = DiagnosticCode::unknown_word,
-                                          .severity = DiagnosticSeverity::info,
-                                          .part_of_speech = std::nullopt});
-        }
         return std::move(result);
     };
     const auto logical_size = result.surface.lookup_ascii.size();

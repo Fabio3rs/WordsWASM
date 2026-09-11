@@ -121,21 +121,6 @@ parse_options(const int argc, char *const argv[]) {
                 return std::unexpected(std::move(parsed.error()));
             }
             options.max_product = *parsed;
-        } else if (argument == "--whitaker-trim") {
-            auto value = require_value();
-            if (!value) {
-                return std::unexpected(std::move(value.error()));
-            }
-            if (*value == "annotate") {
-                options.analysis_options.whitaker_trim =
-                    words::WhitakerTrimMode::annotate;
-            } else if (*value == "filter") {
-                options.analysis_options.whitaker_trim =
-                    words::WhitakerTrimMode::filter;
-            } else {
-                return std::unexpected(
-                    "--whitaker-trim expects annotate or filter");
-            }
         } else if (argument == "--orthography") {
             auto value = require_value();
             if (!value) {
@@ -221,7 +206,6 @@ void usage(std::ostream &output) {
               "  --database FILE           load another full or search WWDB\n"
               "  --dataset-id ID           dataset identifier for the WWDB\n"
               "  --max-product N           exact-enumeration safety budget\n"
-              "  --whitaker-trim MODE      annotate (default) or filter\n"
               "  --orthography MODE        disabled, classical-only, or "
               "classical-and-medieval (default)\n"
               "  --disable-mechanism NAME  disable one core mechanism; may "

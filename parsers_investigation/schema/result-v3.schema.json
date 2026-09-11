@@ -81,7 +81,7 @@
       "type": "object",
       "required": ["whitakerTrim", "orthography", "twoWords", "mechanisms"],
       "properties": {
-        "whitakerTrim": {"enum": ["annotate", "filter"]},
+        "whitakerTrim": {"const": "annotate"},
         "orthography": {"enum": ["disabled", "classical-only", "classical-and-medieval"]},
         "twoWords": {"enum": ["disabled", "legacy-first-match"]},
         "mechanisms": {

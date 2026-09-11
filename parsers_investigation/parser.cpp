@@ -1017,8 +1017,7 @@ void add_relation_candidate(RelationLattice &relations,
            assignment[relation.dependent.token] ==
                relation.dependent.candidate &&
            std::ranges::all_of(
-               relation.contexts,
-               [&](const CandidateRef context) {
+               relation.contexts, [&](const CandidateRef context) {
                    return context.token < assignment.size() &&
                           assignment[context.token] == context.candidate;
                });
@@ -5642,8 +5641,7 @@ std::string to_json(const Result &result, const bool include_morphology_nbest) {
         [](const words::AnalysisOptions &options) {
             const auto &mechanisms = options.mechanisms;
             return Json{
-                {"whitakerTrim",
-                 words::whitaker_trim_mode_name(options.whitaker_trim)},
+                {"whitakerTrim", "annotate"},
                 {"orthography",
                  words::orthography_mode_name(options.orthography)},
                 {"twoWords",

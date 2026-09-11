@@ -23,6 +23,10 @@ coverage.xml
 # Deterministic projections of versioned editorial decisions.
 /whitakers-words/LEXEMES.LAT
 
+# Private research references, scans, and OCR exports are not distributable
+# project inputs. Public documentation cites their bibliographic identity.
+/.study/
+
 # Host metadata and editor leftovers.
 .DS_Store
 *~

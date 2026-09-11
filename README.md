@@ -12,6 +12,8 @@ The project currently provides:
 - compact, validated WWDB datasets;
 - separate full and search-only database profiles;
 - a native command-line interface and an Embind browser API;
+- lossless candidate results with historical/editorial qualifications instead
+  of presentation filters;
 - differential tests against the bundled Ada engine.
 
 ## Relationship to vanilla Whitaker's WORDS
@@ -34,6 +36,13 @@ tree solely as a deterministic adapter for differential testing; neither the
 command nor the JSON contract belongs to vanilla WORDS. The morphological core
 and its data lineage remain those of WORDS; the two Git origins are recorded in
 [`whitakers-words/remotes.txt`](whitakers-words/remotes.txt).
+
+WordsWASM does not expose Whitaker's destructive `Trim_Output` behavior as a
+product option. Analyses that fail those historical presentation checks remain
+available with `assessment.whitakerTrim` reasons. Medieval age/rewrite data and
+reviewed source disagreements are likewise flags, never implicit instructions
+to hide a candidate. See
+[`docs/morphological-assessment.md`](docs/morphological-assessment.md).
 
 ### Architectural differences
 

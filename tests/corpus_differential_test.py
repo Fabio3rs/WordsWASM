@@ -229,9 +229,17 @@ def main() -> None:
             stats["provenance-only"] += 1
             continue
 
-        relation = semantic_relation(ada, native)
+        # The interactive Ada projection removes active finite deponent
+        # candidates. WordsWASM intentionally retains them. Apply the same
+        # projection only to establish the historical comparison relation;
+        # the validated native/search documents above remain lossless.
+        comparable_native = with_deponent_constraints(native)
+        relation = semantic_relation(ada, comparable_native)
         if relation == "same-set":
-            stats["semantic-equivalent"] += 1
+            if semantic_items(native) == semantic_items(comparable_native):
+                stats["semantic-equivalent"] += 1
+            else:
+                stats["lossless-trim-additions"] += 1
         else:
             reviewed_differences[word] = relation
 

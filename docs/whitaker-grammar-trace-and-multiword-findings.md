@@ -49,8 +49,14 @@ O executável original `whitakers-words/bin/words` deve ser usado somente com en
 
 ### Gramáticas locais
 
-- `.study/gramatica-latina-luna-completa`.
-- `.study/pg18251-images.html`, edição digital de Bennett.
+- Napoleão Mendes de Almeida, *Gramática Latina: curso único e completo*,
+  29ª ed., São Paulo: Saraiva, 2000, 5ª tiragem, 2005,
+  ISBN 85-02-00307-0. Exemplar digitalizado e transcrição OCR usados apenas
+  como material local de pesquisa, não distribuídos com o projeto.
+- Benjamin L. D'Ooge, *Latin for Beginners*, Ginn and Company, 1909/1911,
+  edição digital do Project Gutenberg, eBook nº 18251 (SHA-256 da cópia
+  consultada:
+  `3217605c80e1b53db1ecf2b165c3232081a8bd2cee5e140ea0a512c43d558c39`).
 
 ## Conclusão executiva
 
@@ -504,7 +510,7 @@ As opções e rotinas abaixo são relevantes para compatibilidade, mas não indi
 
 Elas devem ser registradas como filtros, apresentação ou tooling.
 
-Por decisão de produto, esses itens são ignoráveis por agora. O runtime já expõe `age` e `frequency` no lexema e na regra, enquanto `WhitakerTrimMode::annotate`, que é o padrão, preserva as análises e acrescenta `assessment.whitakerTrim` e notices. `WhitakerTrimMode::filter` permanece apenas como opção explícita de compatibilidade.
+Por decisão de produto, esses itens são ignoráveis por agora. O runtime já expõe `age` e `frequency` no lexema e na regra. Todas as análises são preservadas; `assessment.whitakerTrim` e os notices qualificam as interpretações sem opção de filtro destrutivo.
 
 ## Ordem recomendada de implementação
 

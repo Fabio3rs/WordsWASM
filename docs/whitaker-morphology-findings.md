@@ -7,9 +7,11 @@ Data da sessão: 2026-09-08
 1. O código Ada em `whitakers-words/src` define o comportamento legado.
 2. A execução do CLI só vale como evidência quando o diretório de dados e os
    arquivos `WORD.MOD`/`WORD.MDV` são controlados pelo teste.
-3. A gramática em `.study/gramatica-latina-luna-completa` serve para avaliar a
-   correção linguística; uma divergência não é silenciosamente convertida em
-   regra normativa.
+3. Napoleão Mendes de Almeida, *Gramática Latina: curso único e completo*,
+   29ª ed., São Paulo: Saraiva, 2000, 5ª tiragem, 2005,
+   ISBN 85-02-00307-0, serve para avaliar a correção linguística; uma
+   divergência não é silenciosamente convertida em regra normativa. O scan e
+   sua transcrição OCR são material local de pesquisa, não parte do projeto.
 4. A documentação gh-pages descreve intenção e operação, mas não prevalece
    sobre código executado e defaults compilados.
 
@@ -98,9 +100,9 @@ juízo gramatical.
 
 ### Semidepoentes: divergência linguística relevante
 
-A gramática local, página/unidade `s0150-r`, §§ 311–313, define semidepoente
-como verbo de forma ativa no sistema do presente e forma passiva com sentido
-ativo no perfeito e derivados: `audeo`, mas `ausus sum`, não `audevi`.
+Almeida, *Gramática Latina*, §§ 311–313, define semidepoente como verbo de
+forma ativa no sistema do presente e forma passiva com sentido ativo no
+perfeito e derivados: `audeo`, mas `ausus sum`, não `audevi`.
 
 - Rejeitar a ativa do perfeito concorda com o paradigma ordinário do § 311,
   mas não é uma proibição histórica universal: `ausim` e a leitura verbal de
@@ -109,8 +111,9 @@ ativo no perfeito e derivados: `audeo`, mas `ausus sum`, não `audevi`.
   tempos não depoentes se processa regularmente.
 
 Decisão: a API chamará esse resultado de compatibilidade com o trim de
-Whitaker, não de validade universal. O padrão conservará e anotará candidatos;
-um modo explícito reproduzirá o filtro legado.
+Whitaker, não de validade universal. O produto conservará e anotará todos os
+candidatos; o filtro legado pertence apenas à caracterização externa do
+oráculo Ada e não é uma opção do WordsWASM.
 
 Uma segunda conferência fornecida durante a sessão reforça essa decisão:
 
@@ -128,19 +131,20 @@ Uma segunda conferência fornecida durante a sessão reforça essa decisão:
 
 Fontes externas indicadas pelo usuário para a auditoria: Bennett/Project
 Gutenberg, Allen & Greenough/Dickinson College Commentaries, UK National
-Archives e Lewis & Short/Scaife ATLAS. O HTML inglês local
-`.study/pg18251-images.html` confirma que depoentes possuem o infinitivo
-futuro ativo (§ 338a) e registra `soleo` como semi-depoente.
+Archives e Lewis & Short/Scaife ATLAS. Benjamin L. D'Ooge, *Latin for
+Beginners*, Ginn and Company, 1909/1911, edição digital do Project Gutenberg,
+eBook nº 18251, confirma que depoentes possuem o infinitivo futuro ativo
+(§ 338a) e registra `soleo` como semi-depoente.
 
 ### Imperativos e impessoais
 
-- `s0127-l`, § 273, confirma imperativo presente curto para `dico`, `duco` e
-  `facio`; `fer`/`ferte` também aparecem no próprio Napoleão, § 316. Portanto,
+- Almeida, *Gramática Latina*, § 273, confirma imperativo presente curto para
+  `dico`, `duco` e `facio`; `fer`/`ferte` também aparecem no § 316. Portanto,
   os quatro casos do Ada não constituem divergência entre as fontes.
 - O mesmo parágrafo confirma presente na segunda pessoa e futuro na segunda ou
   terceira pessoa.
-- `s0164-l`, § 346, descreve construções impessoais sem sujeito e formas na
-  terceira pessoa, apoiando a restrição estrutural do Ada.
+- Almeida, *Gramática Latina*, § 346, descreve construções impessoais sem
+  sujeito e formas na terceira pessoa, apoiando a restrição estrutural do Ada.
 
 ## Reescritas ortográficas
 
@@ -165,7 +169,7 @@ Esta seção será ampliada em cada ciclo com o formato:
 | feature | perfil do oráculo | consultas | red observado | implementação | green |
 |---|---|---|---|---|---|
 | depoentes sem perda | Ada sem trim / C++ IR | `res` | o C++ descartava `reor` antes do IR | candidato retido com `deponent-active-form`; JSON v1 conserva a projeção antiga | unitário e diferenciais existentes |
-| trim morfológico | `WORD.MOD` completo, `TRIM_OUTPUT=Y/N` | `reg`, `dic`, `liceo`, `audetur`, `audemur`, `ausi` | C++ não representava quatro famílias de `Allowed_Stem` | avaliação central e modos `annotate`/`filter` | oráculo configurado coincide por assinatura morfológica |
+| trim morfológico | `WORD.MOD` completo, `TRIM_OUTPUT=N` | `reg`, `dic`, `liceo`, `audetur`, `audemur`, `ausi` | C++ não representava quatro famílias de `Allowed_Stem` | avaliação central, sempre preservada e anotada | oráculo sem trim coincide por assinatura morfológica; o modo destrutivo não faz parte do contrato nativo |
 | semidepoente com uso passivo relacionado | trim ligado e desligado | `audetur`, `audemur` | Ada devolvia `UNKNOWN` com trim | candidato preservado; três notices curados para `audeo` | unitário + diferencial hermético |
 | época ortográfica | `DO_MEDIEVAL_TRICKS=Y/N` | `teologia`, `pretor` | scheduler ignorava `RewriteRule.medieval` | modos disabled/classical/classical+medieval | unitário + diferencial hermético |
 | aplicação da reescrita | C++ v2 | `teologia` | IR guardava somente IDs e forma final | posição, trecho observado, substituição e metadados da regra | unitário JSON v2 |

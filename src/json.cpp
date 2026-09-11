@@ -49,17 +49,6 @@ constexpr std::string_view manual_review_notice_text{
 constexpr std::string_view manual_review_notice_documentation{
     "docs/morphological-assessment.md#review-policy"};
 
-[[nodiscard]] bool
-legacy_projection_visible(const WhitakerTrimAssessment &assessment) noexcept {
-    // analysis-v1/search-v1 predate compatibility assessment.  Their only
-    // eagerly enforced List_Sweep rule was the deponent active-form check, so
-    // preserve that exact contract while newer projections expose all
-    // candidates and their reasons.
-    return std::ranges::find(assessment.values(),
-                             WhitakerTrimReason::deponent_active_form) ==
-           assessment.values().end();
-}
-
 [[nodiscard]] constexpr std::string_view
 dictionary_name(const DictionaryKind dictionary) noexcept {
     return dictionary == DictionaryKind::unique ? unique_dictionary_name
@@ -211,7 +200,9 @@ independent_token_result(const QueryResult &parent,
 [[nodiscard]] Json analysis_options_json(const AnalysisOptions &options) {
     const auto &mechanisms = options.mechanisms;
     return Json{
-        {"whitakerTrim", whitaker_trim_mode_name(options.whitaker_trim)},
+        // Keep the established schema-v2 field while making annotation the
+        // sole product policy. Whitaker compatibility never removes a hit.
+        {"whitakerTrim", "annotate"},
         {"orthography", orthography_mode_name(options.orthography)},
         {"twoWords", options.two_words == TwoWordsMode::legacy_first_match
                          ? "legacy"
@@ -797,10 +788,6 @@ full_two_word_suggestion(const Engine &engine,
         std::vector<std::pair<AnalysisOrderKey, Json>> ordered;
         ordered.reserve(segment.analyses.size());
         for (const auto &analysis : segment.analyses) {
-            if (!extended &&
-                !legacy_projection_visible(analysis.assessment.whitaker_trim)) {
-                continue;
-            }
             auto value =
                 full_analysis(engine, segment.surface, analysis, extended);
             ordered.emplace_back(analysis_order_key(engine.database(),
@@ -836,10 +823,6 @@ search_two_word_suggestion(const TwoWordSuggestionIR &suggestion,
         std::vector<SearchHit> hits;
         hits.reserve(segment.analyses.size());
         for (const auto &analysis : segment.analyses) {
-            if (!extended &&
-                !legacy_projection_visible(analysis.assessment.whitaker_trim)) {
-                continue;
-            }
             append_search_hit(hits, analysis.lexeme, analysis.rule,
                               analysis.derivation, analysis.assessment);
         }
@@ -877,10 +860,6 @@ std::string analysis_json(const Engine &engine, const QueryResult &result) {
         for_each_analysis(result, [&](const auto &analysis) {
             using Analysis = std::remove_cvref_t<decltype(analysis)>;
             if constexpr (std::is_same_v<Analysis, AnalysisIR>) {
-                if (!legacy_projection_visible(
-                        analysis.assessment.whitaker_trim)) {
-                    return;
-                }
                 auto value = full_analysis(engine, result.surface, analysis);
                 ordered.emplace_back(analysis_order_key(engine.database(),
                                                         result.surface,
@@ -1020,9 +999,6 @@ std::string search_json(const Engine &engine, const QueryResult &result) {
         ordered_hits.reserve(result.analyses.size() +
                              result.compound_analyses.size());
         for (const auto &analysis : result.analyses) {
-            if (!legacy_projection_visible(analysis.assessment.whitaker_trim)) {
-                continue;
-            }
             append_search_hit(ordered_hits, analysis.lexeme, analysis.rule,
                               analysis.derivation, analysis.assessment);
         }

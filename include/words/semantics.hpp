@@ -63,8 +63,6 @@ whitaker_trim_reason_name(WhitakerTrimReason value) noexcept;
 [[nodiscard]] std::string_view
 morphological_notice_name(MorphologicalNotice value) noexcept;
 [[nodiscard]] std::string_view
-whitaker_trim_mode_name(WhitakerTrimMode value) noexcept;
-[[nodiscard]] std::string_view
 orthography_mode_name(OrthographyMode value) noexcept;
 [[nodiscard]] std::string_view
 quantity_match_name(QuantityMatch value) noexcept;

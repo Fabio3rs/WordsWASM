@@ -394,15 +394,6 @@ enum class TwoWordsMode : std::uint8_t {
     legacy_first_match,
 };
 
-// The historical List_Sweep routine couples these grammatical checks to the
-// presentation-oriented Trim_Output switch.  Keep the compatibility policy
-// explicit and neutral: a rejected candidate is not necessarily invalid
-// Latin, only one that the configured Whitaker trim would remove.
-enum class WhitakerTrimMode : std::uint8_t {
-    annotate,
-    filter,
-};
-
 enum class WhitakerTrimReason : std::uint8_t {
     unsupported_short_imperative,
     invalid_imperative_person,
@@ -479,7 +470,6 @@ struct AnalysisOptions final {
     // Keep this first for source compatibility with the former one-field
     // aggregate initialization used by native callers.
     TwoWordsMode two_words{TwoWordsMode::disabled};
-    WhitakerTrimMode whitaker_trim{WhitakerTrimMode::annotate};
     OrthographyMode orthography{OrthographyMode::classical_and_medieval};
     MorphologicalMechanisms mechanisms{};
     auto operator<=>(const AnalysisOptions &) const = default;

@@ -61,10 +61,6 @@ parse_options(const int argc, char *const argv[]) {
         } else if (argument == "--two-words=legacy") {
             options.analysis.two_words =
                 words::TwoWordsMode::legacy_first_match;
-        } else if (argument == "--whitaker-trim=annotate") {
-            options.analysis.whitaker_trim = words::WhitakerTrimMode::annotate;
-        } else if (argument == "--whitaker-trim=filter") {
-            options.analysis.whitaker_trim = words::WhitakerTrimMode::filter;
         } else if (argument == "--orthography=disabled") {
             options.analysis.orthography = words::OrthographyMode::disabled;
         } else if (argument == "--orthography=classical") {
@@ -93,9 +89,6 @@ parse_options(const int argc, char *const argv[]) {
             options.batch_json_lines = true;
         } else if (argument.starts_with("--two-words=")) {
             return std::unexpected("two-words mode must be legacy");
-        } else if (argument.starts_with("--whitaker-trim=")) {
-            return std::unexpected(
-                "whitaker-trim mode must be annotate or filter");
         } else if (argument.starts_with("--orthography=")) {
             return std::unexpected(
                 "orthography mode must be disabled, classical, or medieval");
@@ -157,7 +150,6 @@ void usage() {
     std::cerr << "usage: words_cli --database FILE [--dataset-id sha256:...] "
                  "--format analysis|search|analysis-v2|search-v2 "
                  "[--two-words=legacy] "
-                 "[--whitaker-trim=annotate|filter] "
                  "[--orthography=disabled|classical|medieval] "
                  "[--no-fixes] [--no-prefixes] [--no-suffixes] [--no-tickons] "
                  "[--no-tackons] [--no-packons] [--no-syncope] "

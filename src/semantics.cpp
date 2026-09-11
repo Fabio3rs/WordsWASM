@@ -314,12 +314,6 @@ morphological_notice_name(const MorphologicalNotice value) noexcept {
     return enum_token(value, values);
 }
 
-std::string_view
-whitaker_trim_mode_name(const WhitakerTrimMode value) noexcept {
-    constexpr std::array<std::string_view, 2> values{"annotate", "filter"};
-    return enum_token(value, values);
-}
-
 std::string_view orthography_mode_name(const OrthographyMode value) noexcept {
     constexpr std::array<std::string_view, 3> values{
         "disabled", "classical-only", "classical-and-medieval"};

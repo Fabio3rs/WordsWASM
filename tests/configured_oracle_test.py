@@ -145,10 +145,8 @@ def main() -> None:
             return ada
 
     trim_queries = ("reg", "dic", "liceo", "audetur", "audemur", "ausi")
-    compare_profile(trim_queries, native_flags=("--whitaker-trim=filter",))
     untrimmed = compare_profile(
-        trim_queries, mode={"TRIM_OUTPUT": False},
-        native_flags=("--whitaker-trim=annotate",))
+        trim_queries, mode={"TRIM_OUTPUT": False})
     if untrimmed["audetur"]["status"] != "analyzed":
         raise AssertionError("untrimmed Ada witness did not expose audetur")
 

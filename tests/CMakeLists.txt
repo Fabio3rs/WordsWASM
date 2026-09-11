@@ -49,6 +49,14 @@ if(NOT EMSCRIPTEN)
                 --cpp "$<TARGET_FILE:words_cli>"
         )
         add_test(
+            NAME words_upstream_regressions
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/upstream_regression_test.py"
+                --root "${CMAKE_SOURCE_DIR}"
+                --cpp "$<TARGET_FILE:words_cli>"
+        )
+        set_tests_properties(words_upstream_regressions PROPERTIES LABELS unit)
+        add_test(
             NAME words_aeneid_corpus
             COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/corpus_differential_test.py"

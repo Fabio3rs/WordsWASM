@@ -335,7 +335,14 @@ def main() -> None:
         ]
         stable = lambda item: json.dumps(
             item, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        if sorted(actual_analyses, key=stable) != sorted(
+        # The Ada comparison projection models interactive Trim_Output. The
+        # native result is deliberately lossless, so compare after applying
+        # that projection while retaining the extra flagged candidates in the
+        # actual response.
+        comparable_actual = with_deponent_constraints(
+            {"analyses": actual_analyses}
+        )["analyses"]
+        if sorted(comparable_actual, key=stable) != sorted(
                 expected["analyses"], key=stable):
             raise AssertionError(
                 f"C++ Two_Words lexical content differs from Ada for {word}")

@@ -81,22 +81,21 @@ struct ScoredCandidate final {
 [[nodiscard]] Json
 analysis_profile_json(const words::AnalysisOptions &options) {
     const auto &mechanisms = options.mechanisms;
-    return {
-        {"whitakerTrim", words::whitaker_trim_mode_name(options.whitaker_trim)},
-        {"orthography", words::orthography_mode_name(options.orthography)},
-        {"twoWords",
-         options.two_words == words::TwoWordsMode::legacy_first_match
-             ? "legacy-first-match"
-             : "disabled"},
-        {"mechanisms",
-         {{"productiveDerivations", mechanisms.productive_derivations},
-          {"prefixes", mechanisms.prefixes},
-          {"suffixes", mechanisms.suffixes},
-          {"tickons", mechanisms.tickons},
-          {"tackons", mechanisms.tackons},
-          {"packons", mechanisms.packons},
-          {"syncope", mechanisms.syncope},
-          {"verbalCompounds", mechanisms.verbal_compounds}}}};
+    return {{"whitakerTrim", "annotate"},
+            {"orthography", words::orthography_mode_name(options.orthography)},
+            {"twoWords",
+             options.two_words == words::TwoWordsMode::legacy_first_match
+                 ? "legacy-first-match"
+                 : "disabled"},
+            {"mechanisms",
+             {{"productiveDerivations", mechanisms.productive_derivations},
+              {"prefixes", mechanisms.prefixes},
+              {"suffixes", mechanisms.suffixes},
+              {"tickons", mechanisms.tickons},
+              {"tackons", mechanisms.tackons},
+              {"packons", mechanisms.packons},
+              {"syncope", mechanisms.syncope},
+              {"verbalCompounds", mechanisms.verbal_compounds}}}};
 }
 
 [[nodiscard]] std::expected<std::uint64_t, std::string>
