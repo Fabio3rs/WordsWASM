@@ -3,8 +3,10 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace words {
 
@@ -57,6 +59,28 @@ TEST(LatinLexerTest, KeepsDistinctSurfaceAndLookupRepresentations) {
     ASSERT_EQ(result->quantities.size(), 7U);
     EXPECT_EQ(result->quantities[1], VowelQuantity::long_vowel);
     EXPECT_EQ(result->quantities[3], VowelQuantity::short_vowel);
+}
+
+TEST(LatinLexerTest, BuildsEverySurfaceFieldForAsciiLatinWords) {
+    const LatinLexer lexer;
+    const auto result = lexer.lex("JuVenis");
+    ASSERT_TRUE(result) << result.error().message;
+    EXPECT_EQ(result->original_utf8, "JuVenis");
+    EXPECT_EQ(result->normalized_nfc, "juvenis");
+    EXPECT_EQ(result->orthography_ascii, "juvenis");
+    EXPECT_EQ(result->lookup_ascii, "iuuenis");
+    EXPECT_EQ(result->quantities, std::vector(7U, VowelQuantity::unknown));
+    EXPECT_EQ(result->nfc_byte_offsets,
+              (std::vector<std::uint32_t>{0U, 1U, 2U, 3U, 4U, 5U, 6U, 7U}));
+    EXPECT_EQ(result->slice({0U, 2U}), "ju");
+    EXPECT_EQ(result->slice({2U, 5U}), "venis");
+}
+
+TEST(LatinLexerTest, KeepsEmptyInputOnTheDiagnosticPath) {
+    const LatinLexer lexer;
+    const auto result = lexer.lex("");
+    ASSERT_FALSE(result);
+    EXPECT_EQ(result.error().code, DiagnosticCode::empty_input);
 }
 
 TEST(LatinLexerTest, CanonicalizesDecomposedMacronAndSlicesByLogicalLetter) {

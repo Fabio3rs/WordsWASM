@@ -200,6 +200,51 @@ is_supported_original_codepoint(const utf8proc_int32_t codepoint) noexcept {
     return value;
 }
 
+[[nodiscard]] constexpr bool
+is_ascii_latin_letter(const unsigned char value) noexcept {
+    return (value >= static_cast<unsigned char>('A') &&
+            value <= static_cast<unsigned char>('Z')) ||
+           (value >= static_cast<unsigned char>('a') &&
+            value <= static_cast<unsigned char>('z'));
+}
+
+[[nodiscard]] bool is_ascii_latin_word(const std::string_view input) noexcept {
+    return !input.empty() && std::ranges::all_of(input, [](const char value) {
+        return is_ascii_latin_letter(static_cast<unsigned char>(value));
+    });
+}
+
+[[nodiscard]] constexpr char
+ascii_lowercase(const unsigned char value) noexcept {
+    if (value >= static_cast<unsigned char>('A') &&
+        value <= static_cast<unsigned char>('Z')) {
+        return static_cast<char>(value + (static_cast<unsigned char>('a') -
+                                          static_cast<unsigned char>('A')));
+    }
+    return static_cast<char>(value);
+}
+
+[[nodiscard]] SurfaceForm lex_ascii_latin_word(const std::string_view input) {
+    SurfaceForm result;
+    result.original_utf8.assign(input);
+    result.normalized_nfc.resize(input.size());
+    result.orthography_ascii.resize(input.size());
+    result.lookup_ascii.resize(input.size());
+    result.quantities.assign(input.size(), VowelQuantity::unknown);
+    result.nfc_byte_offsets.resize(input.size() + 1U);
+
+    for (std::size_t index{}; index < input.size(); ++index) {
+        const auto letter =
+            ascii_lowercase(static_cast<unsigned char>(input[index]));
+        result.normalized_nfc[index] = letter;
+        result.orthography_ascii[index] = letter;
+        result.lookup_ascii[index] = lookup_letter(letter);
+        result.nfc_byte_offsets[index] = static_cast<std::uint32_t>(index);
+    }
+    result.nfc_byte_offsets.back() = static_cast<std::uint32_t>(input.size());
+    return result;
+}
+
 [[nodiscard]] std::expected<MappedUtf8, LexError>
 map_utf8(const std::string_view input, const utf8proc_option_t options) {
     if (input.size() > static_cast<std::size_t>(
@@ -397,6 +442,15 @@ std::optional<TextToken> TextTokenCursor::next() noexcept {
 
 std::expected<SurfaceForm, LexError>
 LatinLexer::lex(const std::string_view utf8) const {
+    // ASCII Latin words need no Unicode validation, decomposition, composition,
+    // or logical-boundary decoding.  Keep all other inputs on the original
+    // utf8proc path so its diagnostics and Unicode semantics stay unchanged.
+    if (utf8.size() <= static_cast<std::size_t>(
+                           std::numeric_limits<std::int32_t>::max()) &&
+        is_ascii_latin_word(utf8)) {
+        return lex_ascii_latin_word(utf8);
+    }
+
     auto validation = validate_original_input(utf8);
     if (!validation) {
         return std::unexpected(std::move(validation.error()));

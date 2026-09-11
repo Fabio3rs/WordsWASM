@@ -2574,6 +2574,45 @@ O WWDB cresceu 3.602 bytes. A decisão e a metodologia estão em
 O 1.11 foi arquivado como relatório: não integra o schema, loader ou packer de
 produção.
 
+## Resultado: fast path ASCII no lexer
+
+Em 11 de setembro de 2026, o item prioritário do backlog foi integrado em
+`LatinLexer::lex`. Entradas não vazias formadas exclusivamente por
+`[A-Za-z]+` agora constroem `SurfaceForm` diretamente: lowercase ASCII,
+folding `j -> i` e `v -> u`, quantidades desconhecidas e offsets byte a byte.
+Qualquer outro byte, inclusive UTF-8, pontuação, NUL e entrada vazia, continua
+no caminho anterior de validação, decomposição e composição por utf8proc.
+
+O A/B usou o mesmo WWDB 1.10 dense, Eneida IV, afinidade no CPU 2 e binários
+congelados antes/depois. Checksum, unidades, snapshots e análises permaneceram
+idênticos:
+
+| Métrica | Antes | Fast path | Delta |
+| --- | ---: | ---: | ---: |
+| mediana nativa por corpus, 7 pares de 20 passagens | 44,471 ms | 40,824 ms | -8,20% |
+| instruções Callgrind, 1 passagem | 463.386.782 | 410.567.424 | -11,40% |
+| bytes DHAT, loader + warmup + 1 passagem | 59.706.352 | 58.240.040 | -2,46% |
+| blocos DHAT, loader + warmup + 1 passagem | 220.140 | 139.910 | -36,45% |
+| core Wasm, mediana de 5 pares de 20 passagens | 87,312 ms | 81,377 ms | -6,80% |
+| `.text` do benchmark nativo | 697.755 B | 699.699 B | +1.944 B |
+| Wasm Release | 860.438 B | 861.764 B | +1.326 B |
+| Wasm profiling | 1.054.912 B | 1.056.238 B | +1.326 B |
+
+A diferença do DHAT corresponde a 40.115 blocos e 733.156 bytes por passagem,
+pois tanto o warmup quanto a região medida percorrem o corpus uma vez. Ela
+confirma que o ganho de memória é redução de churn, não de footprint vivo. No
+binding de heap Wasm, a memória linear ficou em 17.235.968 bytes antes e depois,
+sem crescimento residual; o pico com resultados vivos caiu somente 1.784 bytes,
+de 14.970.928 para 14.969.144 bytes alocados.
+
+O guardrail novo confere todos os campos para `JuVenis`, inclusive offsets e
+slices, e protege o diagnóstico de entrada vazia. A suíte regular e a suíte
+ASan/UBSan/LeakSanitizer no NativeLab passaram integralmente, 152/152 em cada
+configuração. Os smokes Wasm Release e profiling também passaram com os bancos
+dense e search-only 1.10. Os binários, Callgrind, DHAT e summaries do Node estão
+em `build/*/profiles/ascii-fast-path/` e os módulos anteriores congelados em
+`build/{wasm,wasm-profile}/snapshot-ascii-fast-path-before/`.
+
 ## Limitações
 
 - Os números caracterizam este snapshot, compilador e WWDB; mudanças no banco
