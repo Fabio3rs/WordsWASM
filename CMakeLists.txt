@@ -375,3 +375,7 @@ endif()
 if(ENABLE_TESTS AND GTest_FOUND)
     add_subdirectory(tests)
 endif()
+
+# An isolated research library and its opt-in measurement targets. Nothing in
+# the production words_core or WordsWASM link graph depends on this directory.
+add_subdirectory(whitakers-words/poc/latin-unicode)

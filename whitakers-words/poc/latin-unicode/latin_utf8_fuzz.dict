@@ -1,0 +1,22 @@
+# Valid quantity tokens and spellings.
+macron="\xCC\x84"
+breve="\xCC\x86"
+a_macron="a\xCC\x84"
+a_breve="a\xCC\x86"
+y_macron="y\xCC\x84"
+y_breve="y\xCC\x86"
+precomposed_a_macron="\xC4\x81"
+precomposed_a_breve="\xC4\x83"
+precomposed_y_macron="\xC8\xB3"
+juvenis="juvenis"
+iuuenis="iuuenis"
+
+# Malformed UTF-8 and unsupported-but-valid Unicode.
+unexpected_continuation="\x80"
+overlong_two="\xC0\x80"
+surrogate="\xED\xA0\x80"
+overlong_four="\xF0\x80\x80\x80"
+out_of_range="\xF4\x90\x80\x80"
+replacement_character="\xEF\xBF\xBD"
+kelvin_sign="\xE2\x84\xAA"
+emoji="\xF0\x9F\x98\x80"

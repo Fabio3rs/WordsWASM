@@ -1334,6 +1334,49 @@ Adicionar um caminho de uma passagem para `[A-Za-z]+`:
 O caminho Unicode atual permanece como fallback e deve continuar produzindo a
 mesma `SurfaceForm`.
 
+### Resultado da PoC de normalização finita
+
+A investigação isolada em
+[`investigacao-latin-unicode.md`](investigacao-latin-unicode.md) implementou o
+contrato atual com 52 letras ASCII, duas marcas combinantes e 22 formas
+precompostas. Testes diferenciais cobrem todos os escalares Unicode, todas as
+strings de um a três bytes, 8.388.608 casos estruturais de quatro bytes e todas
+as sequências de até três escalares aceitos. A revisão no HEAD `4bbbe3f`
+repetiu os 19 testes, 200.000 execuções de fuzz e a matriz completa de 148
+testes sem divergência.
+
+As medições instrumentadas ficam mais legíveis separadas por grandeza:
+
+| Instrumento/métrica | PoC proprietária | `normalize_into` | Lexer atual |
+| --- | ---: | ---: | ---: |
+| Callgrind, instruções/varredura | 11,29 M | 5,91 M | 48,18 M |
+| Callgrind, speedup local | 4,27x | 8,15x | baseline |
+| DHAT, blocos/operação | 2,25 | 0 | 7,00 |
+| DHAT, bytes/operação | 37,58 | 0 | 104,16 |
+
+O LLVM fprofile confirmou frequência nos caminhos esperados: propriedades,
+decoding e decomposição no utf8proc; lowercase, decoding, mapping e composição
+no transdutor finito. Ele não mede tempo, instruções ou heap e, por isso, não
+deve ser misturado numericamente com Callgrind ou DHAT.
+
+Aplicados à parcela inclusiva de 11,75% que o lexer ocupou no perfil global,
+os ratios de Callgrind dão somente um teto exploratório de 9,0–10,3% menos
+instruções na engine completa. O A/B integrado continua necessário.
+
+CPU/alocação e tamanho são resultados separáveis. Um micro-WASM que chama
+somente `utf8proc_category`, exigido ainda por `TextTokenCursor`, reteve
+285.496 bytes brutos/36.551 Brotli, contra 332.520/54.494 da transformação
+utf8proc completa. Portanto, integrar apenas o normalizador não retira a maior
+parte da tabela; o ganho binário relevante depende da PoC independente dos 263
+ranges Unicode 17 usados por `boundary_flag`.
+
+Para uma primeira integração, a API proprietária é a comparação de menor
+risco. `normalize_into` transfere cinco buffers e seus lifetimes ao chamador e
+não elimina o ownership do `QueryResult`; ela é mais interessante depois para
+superfícies transitórias de síncope/ortografia, com scratch por nível de chamada
+e fallback para palavras maiores. O caminho Unicode sem ownership também faz
+três passagens para garantir validação e capacidade antes de qualquer escrita.
+
 ## F-08 — Vetores de resultados movem objetos grandes
 
 O GDB mediu:
