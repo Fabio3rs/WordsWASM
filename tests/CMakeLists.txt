@@ -152,6 +152,9 @@ if(NOT EMSCRIPTEN)
             COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/grammar_coverage_test.py"
         )
-        add_dependencies(words_tests wwdb_poc_pack)
+        # Building the unit-test target must also produce every executable
+        # used by a unit-labeled test. The sanitizer workflow deliberately
+        # builds only words_tests before running `ctest -L unit`.
+        add_dependencies(words_tests wwdb_poc_pack words_cli)
     endif()
 endif()
