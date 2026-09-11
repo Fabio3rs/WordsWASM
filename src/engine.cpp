@@ -27,6 +27,27 @@ constexpr std::string_view iri_auxiliary{"iri"};
 constexpr std::string_view dataset_id_prefix{"sha256:"};
 constexpr std::size_t sha256_hex_digit_count{64U};
 
+// FNV-1a is defined modulo 2^64. Express the product through 32-bit limbs so
+// UBSan can validate this intentional modular arithmetic without observing an
+// unsigned 64-bit overflow.
+[[nodiscard]] constexpr std::uint64_t
+fnv1a_wrap_multiply(const std::uint64_t left,
+                    const std::uint64_t right) noexcept {
+    const auto left_low = static_cast<std::uint32_t>(left);
+    const auto left_high = static_cast<std::uint32_t>(left >> 32U);
+    const auto right_low = static_cast<std::uint32_t>(right);
+    const auto right_high = static_cast<std::uint32_t>(right >> 32U);
+    const auto low_product = static_cast<std::uint64_t>(left_low) * right_low;
+    const auto middle =
+        static_cast<std::uint64_t>(static_cast<std::uint32_t>(
+            static_cast<std::uint64_t>(left_low) * right_high)) +
+        static_cast<std::uint64_t>(static_cast<std::uint32_t>(
+            static_cast<std::uint64_t>(left_high) * right_low));
+    const auto high = static_cast<std::uint32_t>((low_product >> 32U) + middle);
+    return static_cast<std::uint32_t>(low_product) |
+           (static_cast<std::uint64_t>(high) << 32U);
+}
+
 constexpr std::uint8_t indeclinable_paradigm{9U};
 // LexemeRecord stores the legacy conjugation digit in its shared declension
 // field for verbs. Keep that representation detail at the comparison boundary.
@@ -2686,7 +2707,7 @@ Engine::dataset_fingerprint(const std::string_view dataset_id) noexcept {
     std::uint64_t fingerprint = offset_basis;
     for (const char value : dataset_id) {
         fingerprint ^= static_cast<unsigned char>(value);
-        fingerprint *= prime;
+        fingerprint = fnv1a_wrap_multiply(fingerprint, prime);
     }
     // Zero denotes anonymous mode and must not be produced by a named dataset.
     return fingerprint == 0U ? 1U : fingerprint;

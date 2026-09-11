@@ -69,7 +69,7 @@
 namespace {
 
 constexpr double score_comparison_epsilon{1.0e-12};
-constexpr std::uint64_t fnv1a_64_offset_basis{1'469'598'103'934'665'603ULL};
+constexpr std::uint64_t fnv1a_64_offset_basis{14'695'981'039'346'656'037ULL};
 constexpr std::uint64_t fnv1a_64_prime{1'099'511'628'211ULL};
 constexpr std::string_view surface_linearization_name{"surface"};
 constexpr std::string_view parser_canonical_linearization_name{
@@ -91,6 +91,26 @@ enum class TrainingControl {
     shuffle_within_sequence,
     counterfactual_analysis
 };
+
+// FNV-1a is defined modulo 2^64. Keep the wrap explicit so unsigned-integer
+// overflow sanitizers do not report the algorithm's intentional reduction.
+[[nodiscard]] constexpr std::uint64_t
+fnv1a_wrap_multiply(const std::uint64_t left,
+                    const std::uint64_t right) noexcept {
+    const auto left_low = static_cast<std::uint32_t>(left);
+    const auto left_high = static_cast<std::uint32_t>(left >> 32U);
+    const auto right_low = static_cast<std::uint32_t>(right);
+    const auto right_high = static_cast<std::uint32_t>(right >> 32U);
+    const auto low_product = static_cast<std::uint64_t>(left_low) * right_low;
+    const auto middle =
+        static_cast<std::uint64_t>(static_cast<std::uint32_t>(
+            static_cast<std::uint64_t>(left_low) * right_high)) +
+        static_cast<std::uint64_t>(static_cast<std::uint32_t>(
+            static_cast<std::uint64_t>(left_high) * right_low));
+    const auto high = static_cast<std::uint32_t>((low_product >> 32U) + middle);
+    return static_cast<std::uint32_t>(low_product) |
+           (static_cast<std::uint64_t>(high) << 32U);
+}
 
 struct Options final {
     std::filesystem::path database{PARSERS_INVESTIGATION_WWDB_PATH};
@@ -893,13 +913,13 @@ stable_shuffle_seed(const std::uint64_t seed, const std::string_view fixture_id,
     const auto append = [&](const std::string_view text) {
         for (const auto byte : text) {
             hash ^= static_cast<unsigned char>(byte);
-            hash *= fnv1a_64_prime;
+            hash = fnv1a_wrap_multiply(hash, fnv1a_64_prime);
         }
     };
     append(fixture_id);
     append(channel);
     hash ^= static_cast<std::uint64_t>(ordinal);
-    hash *= fnv1a_64_prime;
+    hash = fnv1a_wrap_multiply(hash, fnv1a_64_prime);
     return hash;
 }
 
