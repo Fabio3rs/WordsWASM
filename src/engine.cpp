@@ -2721,7 +2721,7 @@ QueryResult Engine::analyze(const TextToken &token,
     const auto utf8 = token.text;
     auto lexed = lexer_.lex(utf8);
     if (!lexed) {
-        QueryResult result{dataset_identity_};
+        QueryResult result;
         result.options = options;
         result.surface.original_utf8.assign(utf8);
         result.status = QueryStatus::error;
@@ -2731,7 +2731,7 @@ QueryResult Engine::analyze(const TextToken &token,
         return result;
     }
 
-    QueryResult result{dataset_identity_};
+    QueryResult result;
     result.options = options;
     result.surface = std::move(*lexed);
     const auto finish = [&]() -> QueryResult {
@@ -2920,7 +2920,7 @@ QueryResult Engine::analyze_text(const std::string_view utf8,
 
     const auto second = cursor.next();
     if (!first || !second || cursor.peek() != nullptr) {
-        QueryResult result{dataset_identity_};
+        QueryResult result;
         result.options = options;
         result.surface.original_utf8.assign(utf8);
         result.multi_token_query = MultiTokenQueryIR{

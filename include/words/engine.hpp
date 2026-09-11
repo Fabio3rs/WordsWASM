@@ -10,6 +10,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace words {
@@ -48,10 +49,7 @@ class Engine final {
     }
     [[nodiscard]] std::string_view
     dataset_id() const noexcept WORDS_LIFETIMEBOUND {
-        return dataset_identity_.value_;
-    }
-    [[nodiscard]] bool owns(const QueryResult &result) const noexcept {
-        return result.origin == dataset_identity_;
+        return dataset_id_;
     }
     [[nodiscard]] bool supports_full_analysis() const noexcept {
         return database_->has_meanings();
@@ -60,10 +58,10 @@ class Engine final {
   private:
     Engine(std::unique_ptr<const Database> database, EngineConfig config)
         : database_{std::move(database)},
-          dataset_identity_{std::move(config.dataset_id)} {}
+          dataset_id_{std::move(config.dataset_id)} {}
 
     std::unique_ptr<const Database> database_;
-    DatasetIdentity dataset_identity_;
+    std::string dataset_id_;
     LatinLexer lexer_;
 };
 

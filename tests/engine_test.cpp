@@ -208,20 +208,17 @@ TEST(EngineTest, SearchDatabasePreservesTheFullDatabaseHitContract) {
         std::logic_error);
 }
 
-TEST(EngineTest, RejectsResultFromDifferentDataset) {
+TEST(EngineTest, KeepsDatasetIdAtEngineScope) {
     auto other_dataset_id = std::string{test::dataset_id};
     other_dataset_id.back() = other_dataset_id.back() == '0' ? '1' : '0';
     auto loaded = Engine::create(test::read_database(),
-                                 EngineConfig{std::move(other_dataset_id)});
+                                 EngineConfig{std::string{other_dataset_id}});
     ASSERT_TRUE(loaded);
 
-    const auto result = test::engine().analyze("puella");
-    EXPECT_TRUE(test::engine().owns(result));
-    EXPECT_FALSE((**loaded).owns(result));
-    EXPECT_THROW(static_cast<void>(analysis_json(**loaded, result)),
-                 std::logic_error);
-    EXPECT_THROW(static_cast<void>(search_json(**loaded, result)),
-                 std::logic_error);
+    EXPECT_EQ((**loaded).dataset_id(), other_dataset_id);
+    const auto result = (**loaded).analyze("puella");
+    const auto document = Json::parse(search_json(**loaded, result));
+    EXPECT_EQ(document.at("datasetId"), other_dataset_id);
 }
 
 TEST(EngineTest, SearchDatabaseResolvesCanonicalLemmaWithoutMeanings) {

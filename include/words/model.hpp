@@ -14,24 +14,7 @@
 
 namespace words {
 
-class Engine;
 class Database;
-
-// Opaque provenance carried by analysis results.  Consumers can compare it
-// only through Engine::owns(), so dataset strings cannot be substituted for a
-// result's actual origin by accident.
-class DatasetIdentity final {
-  public:
-    DatasetIdentity() = default;
-    auto operator<=>(const DatasetIdentity &) const = default;
-
-  private:
-    explicit DatasetIdentity(std::string value) : value_{std::move(value)} {}
-
-    std::string value_;
-
-    friend class Engine;
-};
 
 template <class Tag> class Id final {
   public:
@@ -768,15 +751,10 @@ struct MultiTokenQueryIR final {
 };
 
 struct QueryResult final {
-    QueryResult() = default;
-    explicit QueryResult(DatasetIdentity result_origin)
-        : origin{std::move(result_origin)} {}
-
     // Counts every materialized interpretation, including the owned token
     // snapshots carried by a lossless compound result.
     [[nodiscard]] std::size_t total_analyses() const noexcept;
 
-    DatasetIdentity origin;
     AnalysisOptions options;
     SurfaceForm surface;
     // Single-word analysis continues to use SurfaceForm directly.  Only the

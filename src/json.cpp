@@ -198,7 +198,7 @@ rewrite_category(const RewriteRule &rewrite) noexcept {
 [[nodiscard]] QueryResult
 independent_token_result(const QueryResult &parent,
                          const IndependentTokenAnalysisIR &token) {
-    QueryResult result{parent.origin};
+    QueryResult result;
     result.options = parent.options;
     result.surface = token.surface;
     result.status = token.status;
@@ -860,10 +860,6 @@ search_two_word_suggestion(const TwoWordSuggestionIR &suggestion,
 } // namespace
 
 std::string analysis_json(const Engine &engine, const QueryResult &result) {
-    if (!engine.owns(result)) {
-        throw std::logic_error{
-            "analysis result belongs to a different dataset"};
-    }
     if (!engine.supports_full_analysis()) {
         throw std::logic_error{
             "analysis JSON requires a full WWDB with meanings"};
@@ -929,10 +925,6 @@ std::string analysis_json(const Engine &engine, const QueryResult &result) {
 }
 
 std::string analysis_json_v2(const Engine &engine, const QueryResult &result) {
-    if (!engine.owns(result)) {
-        throw std::logic_error{
-            "analysis result belongs to a different dataset"};
-    }
     if (!engine.supports_full_analysis()) {
         throw std::logic_error{
             "analysis JSON requires a full WWDB with meanings"};
@@ -1011,10 +1003,6 @@ std::string analysis_json_v2(const Engine &engine, const QueryResult &result) {
 }
 
 std::string search_json(const Engine &engine, const QueryResult &result) {
-    if (!engine.owns(result)) {
-        throw std::logic_error{
-            "analysis result belongs to a different dataset"};
-    }
     std::vector<SearchHit> ordered_hits;
     if (result.status == QueryStatus::analyzed) {
         ordered_hits.reserve(result.analyses.size() +
@@ -1072,10 +1060,6 @@ std::string search_json(const Engine &engine, const QueryResult &result) {
 }
 
 std::string search_json_v2(const Engine &engine, const QueryResult &result) {
-    if (!engine.owns(result)) {
-        throw std::logic_error{
-            "analysis result belongs to a different dataset"};
-    }
     Json hits = Json::array();
     if (result.status == QueryStatus::analyzed) {
         std::vector<const AnalysisIR *> ordered;

@@ -2379,7 +2379,7 @@ de API ou formato para resolver um custo que pertence a outra camada.
 | 1 | fast path ASCII no lexer, mantendo utf8proc como fallback | S–M | alto em alocações e moderado em CPU | 49,54% dos blocos no lexer/utf8proc; matriz UTF-8 e propriedades completas de `SurfaceForm` |
 | 2 | **Concluído:** agenda do scheduler por `(kind, stage, priority)` | S–M | -7,73% de instruções e -3,91% de parede na engine | 83.009 visitas em vez de 4,45 milhões; 170 IDs e ordem semântica cobertos |
 | 3 | sink de `analyze_line` com wrapper materializador | M | alto em memória para documentos grandes, pequeno/moderado em CPU | `QueryResult` acumulou 8,95 MB; paridade completa wrapper/sink em lookahead, compostos, erros e Unicode |
-| 4 | digest inline em `DatasetIdentity` | S | pequeno em CPU, moderado na contagem de blocos | 4.573 blocos; preservar igualdade entre engines do mesmo dataset |
+| 4 | **Concluído:** identidade removida de `QueryResult`; `datasetId` mantido uma vez na engine | S | -4.573 blocos por corpus e `QueryResult` 32 bytes menor | projeções internas são síncronas com a mesma engine; contrato externo de `datasetId` preservado |
 | 5 | small buffer para `AddonId` | S–M | moderado em blocos, baixo em bytes | 30.099 blocos/415 KB; cobrir transição inline→heap e move |
 | 6 | descritores compactos/materialização tardia de `AnalysisIR` | L | potencialmente muito alto em bytes | 14,36 MB; risco semântico e de lifetime alto, exige A/B forte |
 
@@ -2612,6 +2612,52 @@ configuração. Os smokes Wasm Release e profiling também passaram com os banco
 dense e search-only 1.10. Os binários, Callgrind, DHAT e summaries do Node estão
 em `build/*/profiles/ascii-fast-path/` e os módulos anteriores congelados em
 `build/{wasm,wasm-profile}/snapshot-ascii-fast-path-before/`.
+
+## Resultado: identidade somente no escopo da engine
+
+O perfil sugeria codificar o SHA-256 em 32 bytes inline dentro de cada
+`QueryResult`. A revisão do contrato mostrou uma solução mais simples:
+`DatasetIdentity`, `QueryResult::origin` e `Engine::owns` foram removidos. O
+`datasetId` textual permanece armazenado uma única vez na `Engine`, validado na
+carga e publicado sem alteração nos envelopes JSON e no browser.
+
+Os IDs do IR continuam locais ao banco. A API C++ documenta que a projeção deve
+receber a mesma engine que produziu o resultado; CLI e Wasm já garantem isso
+estruturalmente porque analisam e projetam dentro da mesma chamada. O binding
+não expõe `QueryResult` nativo e um reload não deixa resultados antigos
+acessíveis ao JavaScript.
+
+O A/B usou o fast path ASCII já integrado, WWDB 1.10 dense e Eneida IV. Cinco
+pares intercalados de 100 passagens no CPU 11 deram:
+
+| Métrica | Antes | Sem identidade por resultado | Delta |
+| --- | ---: | ---: | ---: |
+| mediana nativa por corpus | 42,876 ms | 41,582 ms | -3,02% |
+| instruções Callgrind, 1 passagem | 410.567.424 | 409.044.483 | -0,37% |
+| bytes DHAT, loader + warmup + 1 passagem | 58.240.040 | 56.886.552 | -2,32% |
+| blocos DHAT, loader + warmup + 1 passagem | 139.910 | 130.764 | -6,54% |
+| core Wasm, mediana de 5 pares de 20 passagens | 86,970 ms | 85,613 ms | -1,56% |
+| `.text` do benchmark nativo | 699.699 B | 698.315 B | -1.384 B |
+| Wasm Release | 861.764 B | 860.726 B | -1.038 B |
+| Wasm profiling | 1.056.238 B | 1.055.198 B | -1.040 B |
+
+Como warmup e região medida processam o corpus uma vez cada, a diferença do
+DHAT corresponde exatamente a 4.573 alocações e 676.744 bytes por passagem. O
+volume supera os 329.256 bytes das strings porque remover o campo também reduz
+`QueryResult` em 32 bytes e, portanto, os buffers dos vetores de resultados.
+
+No heap Wasm, os resultados vivos passaram de 7.854.864 para 7.389.592 bytes
+acima do baseline, redução de 465.272 bytes. A memória linear reservada ficou
+inalterada em 17.235.968 bytes, e ambas as variantes voltaram exatamente ao
+baseline após destruir os resultados.
+
+O teste antigo de rejeição entre engines foi substituído por um guardrail que
+confere a retenção do `datasetId` na engine e sua publicação no JSON. As suítes
+regular e ASan/UBSan/LeakSanitizer no NativeLab passaram 152/152; os smokes
+Wasm Release e profiling passaram com os bancos dense e search-only 1.10.
+Artefatos: `build/perf-investigation-clang/profiles/dataset-identity/`,
+`build/wasm-profile/profiles/dataset-identity/` e snapshots anteriores em
+`build/{wasm,wasm-profile}/snapshot-dataset-identity-before/`.
 
 ## Limitações
 

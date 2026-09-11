@@ -737,10 +737,6 @@ void canonicalize_hits(std::vector<BrowserSearchHit> &hits) {
 browser_search_result(const words::Engine &engine,
                       const words::QueryResult &result,
                       const bool include_meanings) {
-    if (!engine.owns(result)) {
-        throw std::logic_error{
-            "analysis result belongs to a different dataset"};
-    }
     BrowserSearchResult output;
     if (include_meanings) {
         output.schema = "whitakers-words.browser-analysis";
@@ -841,7 +837,7 @@ browser_search_result(const words::Engine &engine,
     }
     output.tokens.reserve(result.independent_tokens.size());
     for (const auto &token : result.independent_tokens) {
-        words::QueryResult token_result{result.origin};
+        words::QueryResult token_result;
         token_result.options = result.options;
         token_result.surface = token.surface;
         token_result.status = token.status;
