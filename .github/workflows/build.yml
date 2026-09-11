@@ -49,7 +49,7 @@ jobs:
       - name: Build the native engine and WWDB packer
         run: |
           cmake --build build/native \
-            --target words_cli words_tests wwdb_poc_pack \
+            --target words_cli words_tests latin_unicode_poc_tests wwdb_poc_pack \
             -j"$(nproc)"
 
       - name: Generate the full and search test/release datasets
