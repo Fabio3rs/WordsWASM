@@ -1,6 +1,6 @@
 # Estado atual da implementação
 
-Data do snapshot: 2026-09-08.
+Data do snapshot: 2026-09-11.
 
 Este documento é o índice operacional do projeto. Ele registra o que já está
 implementado e testado, o que existe apenas no pipeline de preparação dos
@@ -22,7 +22,7 @@ navegador e o procedimento de publicação estão em
 As regras de versionamento, artefatos regeneráveis e publicação por tag estão
 em [`repositorio-e-releases.md`](repositorio-e-releases.md).
 
-Os bancos atuais são duas projeções WWDB PoC 1.9 dos mesmos dados legados:
+Os bancos atuais são duas projeções WWDB 1.10 dos mesmos dados legados:
 `words-full.wwdb`, com significados, e `words-search.wwdb`, sem textos
 editoriais. A arquitetura de
 revisão para enriquecimento lexical já existe — auditoria, fila, schemas e
@@ -34,7 +34,7 @@ deliberadamente ausente nesse caso.
 
 ```mermaid
 flowchart LR
-    A[fontes Ada e dados humanos] --> P[packer WWDB PoC 1.9]
+    A[fontes Ada e dados humanos] --> P[packer WWDB 1.10]
     P --> F[words-full.wwdb]
     P --> SDB[words-search.wwdb]
     F --> E[engine C++23]
@@ -177,7 +177,9 @@ para medição: `simple`, `dense`, `columnar` e `search-only`. O runtime atual l
 `dense` por linhas e `search-only` diretamente em colunas, sem reconstruir um
 array intermediário de registros.
 
-O WWDB PoC 1.9 full possui 24 seções e inclui:
+O WWDB 1.10 full possui as mesmas 24 seções do 1.9 e persiste a ordem canônica
+exata das referências de stems. O packer gera 1.10 por padrão; o runtime aceita
+1.9 e 1.10. O perfil full inclui:
 
 - 39.339 registros lexicais legados;
 - 62.086 referências de radical;

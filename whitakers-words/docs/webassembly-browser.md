@@ -150,8 +150,9 @@ O diretório contém:
 `words-full.wwdb` é o perfil denso atual renomeado pela finalidade e pode
 produzir análise completa ou busca resolvida. `words-search.wwdb` é a projeção
 física `search-only`, sem significados, para clientes que resolvem lema e
-morfologia sem carregar definições. O loader lê suas colunas diretamente. Os dois bancos WWDB 1.9
-compartilham IDs e regras; metadados tipados de PACKON evitam qualquer
+morfologia sem carregar definições. O loader lê suas colunas diretamente. Os
+dois bancos WWDB 1.10 compartilham IDs e regras; o runtime também aceita 1.9
+para retrocompatibilidade. Metadados tipados de PACKON evitam qualquer
 dependência indireta dos textos omitidos.
 
 O exportador de assets usa o `node:zlib` e produz `.br` (Brotli nível 11) e

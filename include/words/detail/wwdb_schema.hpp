@@ -37,6 +37,10 @@ inline constexpr std::uint16_t legacy_minor_version = 6U;
 inline constexpr std::uint16_t quantity_minor_version = 7U;
 inline constexpr std::uint16_t typed_packon_minor_version = 8U;
 inline constexpr std::uint16_t morphological_notices_minor_version = 9U;
+// Version 1.10 keeps the same sections and record shapes as 1.9, but makes
+// the stem_references section a persisted exact lookup index.  References are
+// ordered by canonical stem spelling and then by their stable lexical tuple.
+inline constexpr std::uint16_t persisted_stem_index_minor_version = 10U;
 
 enum class Profile : std::uint32_t {
     simple = 1U,

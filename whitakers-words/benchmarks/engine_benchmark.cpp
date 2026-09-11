@@ -197,15 +197,14 @@ parse_options(const int argc, char *const argv[]) {
 }
 
 void usage() {
-    std::println(
-        stderr,
-        "usage: words_engine_benchmark --database FILE --corpus FILE "
-        "[--dataset-id sha256:...] [--mode queries|lines|corpus] "
-        "[--iterations N] [--warmup N] "
-        "[--orthography=disabled|classical|medieval] "
-        "[--no-fixes] [--no-prefixes] [--no-suffixes] [--no-tickons] "
-        "[--no-tackons] [--no-packons] [--no-syncope] "
-        "[--no-verbal-compounds]");
+    std::println(stderr,
+                 "usage: words_engine_benchmark --database FILE --corpus FILE "
+                 "[--dataset-id sha256:...] [--mode queries|lines|corpus] "
+                 "[--iterations N] [--warmup N] "
+                 "[--orthography=disabled|classical|medieval] "
+                 "[--no-fixes] [--no-prefixes] [--no-suffixes] [--no-tickons] "
+                 "[--no-tackons] [--no-packons] [--no-syncope] "
+                 "[--no-verbal-compounds]");
 }
 
 [[nodiscard]] std::expected<std::vector<std::byte>, std::string>
@@ -287,10 +286,11 @@ void consume(const std::vector<words::QueryResult> &results,
     }
 }
 
-[[nodiscard]] Counts
-run_iteration(const words::Engine &engine, const std::string_view corpus,
-              const std::vector<std::string_view> &lines, const Mode mode,
-              const words::AnalysisOptions options) {
+[[nodiscard]] Counts run_iteration(const words::Engine &engine,
+                                   const std::string_view corpus,
+                                   const std::vector<std::string_view> &lines,
+                                   const Mode mode,
+                                   const words::AnalysisOptions options) {
     Counts counts;
     if (mode == Mode::queries) {
         for (const auto line : lines) {
@@ -306,11 +306,12 @@ run_iteration(const words::Engine &engine, const std::string_view corpus,
     return counts;
 }
 
-[[nodiscard]] Counts
-run_iterations(const words::Engine &engine, const std::string_view corpus,
-               const std::vector<std::string_view> &lines, const Mode mode,
-               const words::AnalysisOptions options,
-               const std::size_t iterations) {
+[[nodiscard]] Counts run_iterations(const words::Engine &engine,
+                                    const std::string_view corpus,
+                                    const std::vector<std::string_view> &lines,
+                                    const Mode mode,
+                                    const words::AnalysisOptions options,
+                                    const std::size_t iterations) {
     Counts total;
     for (std::size_t iteration{}; iteration < iterations; ++iteration) {
         total += run_iteration(engine, corpus, lines, mode, options);
@@ -384,16 +385,16 @@ int main(const int argc, char *argv[]) try {
     const auto stopped = std::chrono::steady_clock::now();
     callgrind_stop();
 
-    const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
-        stopped - started);
+    const auto elapsed =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(stopped - started);
     const auto elapsed_ns = static_cast<std::uint64_t>(elapsed.count());
     const auto nanoseconds_per_unit =
         measured.units == 0U ? 0U : elapsed_ns / measured.units;
 
     std::println("mode={} iterations={} warmup={} corpus_bytes={} "
                  "source_lines={}",
-                 mode_name(options->mode), options->iterations,
-                 options->warmup, corpus->size(), lines.size());
+                 mode_name(options->mode), options->iterations, options->warmup,
+                 corpus->size(), lines.size());
     std::println(
         "checksum={} units={} tokens={} analyses={} warmup_checksum={}",
         measured.checksum(), measured.units, measured.tokens, measured.analyses,

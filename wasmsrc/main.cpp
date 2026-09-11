@@ -123,10 +123,8 @@ browser_benchmark_result(const BenchmarkCounts counts) {
 [[nodiscard]] BrowserHeapSnapshot browser_heap_snapshot() noexcept {
     const auto allocation = mallinfo();
     return BrowserHeapSnapshot{
-        .linear_memory_bytes =
-            static_cast<double>(emscripten_get_heap_size()),
-        .dynamic_top_bytes =
-            static_cast<double>(*emscripten_get_sbrk_ptr()),
+        .linear_memory_bytes = static_cast<double>(emscripten_get_heap_size()),
+        .dynamic_top_bytes = static_cast<double>(*emscripten_get_sbrk_ptr()),
         .arena_bytes = static_cast<double>(allocation.arena),
         .allocated_bytes = static_cast<double>(allocation.uordblks),
         .free_bytes = static_cast<double>(allocation.fordblks),
@@ -336,9 +334,9 @@ using words::source_name;
 using words::status_name;
 using words::subject_name;
 using words::tense_name;
-using words::whitaker_trim_reason_name;
 using words::verb_kind_name;
 using words::voice_name;
+using words::whitaker_trim_reason_name;
 
 [[nodiscard]] BrowserMorphology
 browser_morphology(const words::Morphology &morphology,
@@ -584,8 +582,7 @@ browser_rewrite_step(const words::Database &database, const words::RewriteId id,
         std::size_t rewrite_index{};
         for (const auto id : derivation.rewritten_form->steps()) {
             output.steps.push_back(
-                browser_rewrite_step(database, id,
-                                     *derivation.rewritten_form,
+                browser_rewrite_step(database, id, *derivation.rewritten_form,
                                      rewrite_index, include_meaning, target));
             ++rewrite_index;
         }
@@ -609,20 +606,19 @@ browser_rewrite_step(const words::Database &database, const words::RewriteId id,
     return output;
 }
 
-[[nodiscard]] BrowserMorphologicalAssessment browser_assessment(
-    const words::MorphologicalAssessmentIR &assessment) {
+[[nodiscard]] BrowserMorphologicalAssessment
+browser_assessment(const words::MorphologicalAssessmentIR &assessment) {
     BrowserMorphologicalAssessment output;
     output.generated_by_whitaker = assessment.generated_by_whitaker;
-    output.whitaker_trim_compatible =
-        assessment.whitaker_trim.accepted();
+    output.whitaker_trim_compatible = assessment.whitaker_trim.accepted();
     output.whitaker_trim_reasons.reserve(
         assessment.whitaker_trim.values().size());
-    std::ranges::transform(
-        assessment.whitaker_trim.values(),
-        std::back_inserter(output.whitaker_trim_reasons),
-        [](const words::WhitakerTrimReason reason) {
-            return std::string{whitaker_trim_reason_name(reason)};
-        });
+    std::ranges::transform(assessment.whitaker_trim.values(),
+                           std::back_inserter(output.whitaker_trim_reasons),
+                           [](const words::WhitakerTrimReason reason) {
+                               return std::string{
+                                   whitaker_trim_reason_name(reason)};
+                           });
     output.notices.reserve(assessment.notice_values().size());
     std::ranges::transform(
         assessment.notice_values(), std::back_inserter(output.notices),

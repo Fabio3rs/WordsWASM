@@ -1253,8 +1253,7 @@ void append_word_analyses(const Database &database, const SurfaceForm &surface,
                 analysis.morphology);
         });
     if (mechanisms.productive_derivations && mechanisms.prefixes &&
-        !had_direct_analysis && !regular_hit &&
-        !state.unsupported) {
+        !had_direct_analysis && !regular_hit && !state.unsupported) {
         append_prefix_analyses(database, surface, candidates,
                                surface_has_quantity, initial_derivation, output,
                                state);
@@ -1717,7 +1716,8 @@ void sort_and_deduplicate_analyses(std::vector<AnalysisIR> &analyses) {
            mood == Mood::imperative;
 }
 
-[[nodiscard]] bool is_supported_imperative(const VerbMorphology &verb) noexcept {
+[[nodiscard]] bool
+is_supported_imperative(const VerbMorphology &verb) noexcept {
     const auto present_second =
         verb.tense == Tense::present && verb.person == Person::second;
     const auto future_second_or_third =
@@ -1725,21 +1725,20 @@ void sort_and_deduplicate_analyses(std::vector<AnalysisIR> &analyses) {
     return present_second || future_second_or_third;
 }
 
-[[nodiscard]] bool is_disallowed_deponent_active_form(
-    const VerbMorphology &verb) noexcept {
+[[nodiscard]] bool
+is_disallowed_deponent_active_form(const VerbMorphology &verb) noexcept {
     const auto future_infinitive =
         verb.mood == Mood::infinitive && verb.tense == Tense::future;
     return verb.voice == Voice::active && is_finite_or_infinitive(verb.mood) &&
            !future_infinitive;
 }
 
-void add_trim_reason_with_notices(
-    const Database &database, const LexemeId lexeme,
-    const WhitakerTrimReason reason,
-    MorphologicalAssessmentIR &assessment) {
+void add_trim_reason_with_notices(const Database &database,
+                                  const LexemeId lexeme,
+                                  const WhitakerTrimReason reason,
+                                  MorphologicalAssessmentIR &assessment) {
     assessment.whitaker_trim.add(reason);
-    const auto notices =
-        database.lookup_morphological_notices(lexeme, reason);
+    const auto notices = database.lookup_morphological_notices(lexeme, reason);
     for (const auto notice : all_morphological_notices) {
         if (notices.contains(notice)) {
             assessment.add_notice(notice);
@@ -1757,21 +1756,21 @@ assess_morphology(const Database &database, const SurfaceForm &surface,
     }
 
     const auto &lexeme = database.lexeme(analysis.lexeme);
-    const auto stem = analysis.derivation.rewritten_form
-                          ? std::string_view{
-                                analysis.derivation.rewritten_form->stem}
-                          : surface.slice(analysis.stem);
-    const auto ending_empty = analysis.derivation.rewritten_form
-                                  ? analysis.derivation.rewritten_form->ending
-                                        .empty()
-                                  : analysis.ending.count == 0U;
+    const auto stem =
+        analysis.derivation.rewritten_form
+            ? std::string_view{analysis.derivation.rewritten_form->stem}
+            : surface.slice(analysis.stem);
+    const auto ending_empty =
+        analysis.derivation.rewritten_form
+            ? analysis.derivation.rewritten_form->ending.empty()
+            : analysis.ending.count == 0U;
 
     if (verb->conjugation == 3U && verb->variant == 1U &&
         verb->tense == Tense::present && verb->voice == Voice::active &&
         verb->mood == Mood::imperative && verb->person == Person::second &&
         verb->number == GrammaticalNumber::singular && ending_empty) {
-        constexpr std::array<std::string_view, 4> licensed{"dic", "duc",
-                                                           "fac", "fer"};
+        constexpr std::array<std::string_view, 4> licensed{"dic", "duc", "fac",
+                                                           "fer"};
         const auto suffix = stem.size() < 3U ? std::string_view{}
                                              : stem.substr(stem.size() - 3U);
         if (!std::ranges::contains(licensed, suffix)) {
@@ -1801,15 +1800,13 @@ assess_morphology(const Database &database, const SurfaceForm &surface,
 
     if (lexeme.verb_kind == VerbKind::deponent &&
         is_disallowed_deponent_active_form(*verb)) {
-        assessment.whitaker_trim.add(
-            WhitakerTrimReason::deponent_active_form);
+        assessment.whitaker_trim.add(WhitakerTrimReason::deponent_active_form);
     }
 
     if (lexeme.verb_kind == VerbKind::semideponent &&
         is_finite_mood(verb->mood)) {
         if (verb->voice == Voice::passive &&
-            (verb->tense == Tense::present ||
-             verb->tense == Tense::imperfect ||
+            (verb->tense == Tense::present || verb->tense == Tense::imperfect ||
              verb->tense == Tense::future)) {
             constexpr auto trigger =
                 WhitakerTrimReason::semideponent_passive_present_system;
@@ -1843,8 +1840,8 @@ void apply_whitaker_trim(const Database &database, const SurfaceForm &surface,
 }
 
 void apply_whitaker_trim(const Database &database, QueryResult &result) {
-    apply_whitaker_trim(database, result.surface,
-                        result.options.whitaker_trim, result.analyses);
+    apply_whitaker_trim(database, result.surface, result.options.whitaker_trim,
+                        result.analyses);
 }
 
 struct LexicalBatch final {
@@ -1852,10 +1849,9 @@ struct LexicalBatch final {
     EnumerationState state;
 };
 
-[[nodiscard]] LexicalBatch analyze_lexical_surface(const Database &database,
-                                                   const SurfaceForm &surface,
-                                                   const MorphologicalMechanisms
-                                                       &mechanisms) {
+[[nodiscard]] LexicalBatch
+analyze_lexical_surface(const Database &database, const SurfaceForm &surface,
+                        const MorphologicalMechanisms &mechanisms) {
     LexicalBatch result;
     const auto logical_size = surface.lookup_ascii.size();
     const auto quantity_match = has_quantity(surface)
@@ -1948,8 +1944,7 @@ is_legacy_common_prefix(const std::string_view value) noexcept {
 
 [[nodiscard]] std::optional<TwoWordSuggestionIR>
 analyze_two_words(const Database &database, const LatinLexer &lexer,
-                  const SurfaceForm &surface,
-                  const AnalysisOptions &options) {
+                  const SurfaceForm &surface, const AnalysisOptions &options) {
     constexpr std::size_t minimum_left = 2U;
     constexpr std::size_t minimum_right = 3U;
     const auto logical_size = surface.lookup_ascii.size();
@@ -1973,9 +1968,8 @@ analyze_two_words(const Database &database, const LatinLexer &lexer,
         if (!left_surface) {
             continue;
         }
-        auto left =
-            analyze_lexical_surface(database, *left_surface,
-                                    options.mechanisms);
+        auto left = analyze_lexical_surface(database, *left_surface,
+                                            options.mechanisms);
         apply_whitaker_trim(database, *left_surface, options.whitaker_trim,
                             left.analyses);
         if (left.state.unsupported || left.analyses.empty()) {
@@ -1987,9 +1981,8 @@ analyze_two_words(const Database &database, const LatinLexer &lexer,
         if (!right_surface) {
             continue;
         }
-        auto right =
-            analyze_lexical_surface(database, *right_surface,
-                                    options.mechanisms);
+        auto right = analyze_lexical_surface(database, *right_surface,
+                                             options.mechanisms);
         apply_whitaker_trim(database, *right_surface, options.whitaker_trim,
                             right.analyses);
         if (right.state.unsupported || right.analyses.empty()) {
@@ -2264,8 +2257,7 @@ analyze_syncope(const Database &database, const LatinLexer &lexer,
         rewritten.replacements.begin() +
             static_cast<std::ptrdiff_t>(rewritten.count) + 1);
     rewritten.rules.front() = attempt.rule->id;
-    rewritten.positions.front() =
-        static_cast<std::uint32_t>(attempt.position);
+    rewritten.positions.front() = static_cast<std::uint32_t>(attempt.position);
     rewritten.remove_counts.front() =
         static_cast<std::uint32_t>(attempt.remove_count);
     rewritten.observed.front() = source_surface.slice(
@@ -2298,13 +2290,13 @@ analyze_orthography(const Database &database, const LatinLexer &lexer,
                 continue;
             }
 
-            auto batch = analyze_lexical_surface(
-                database, *transformed_surface, options.mechanisms);
-            auto syncopated = options.mechanisms.syncope
-                                  ? analyze_syncope(database, lexer,
-                                                    *transformed_surface,
-                                                    options.mechanisms)
-                                  : std::vector<AnalysisIR>{};
+            auto batch = analyze_lexical_surface(database, *transformed_surface,
+                                                 options.mechanisms);
+            auto syncopated =
+                options.mechanisms.syncope
+                    ? analyze_syncope(database, lexer, *transformed_surface,
+                                      options.mechanisms)
+                    : std::vector<AnalysisIR>{};
             if (!syncopated.empty() && !batch.analyses.empty() &&
                 std::ranges::all_of(batch.analyses,
                                     [](const AnalysisIR &analysis) {
@@ -2350,11 +2342,9 @@ analyze_orthography(const Database &database, const LatinLexer &lexer,
     return {};
 }
 
-[[nodiscard]] std::vector<AnalysisIR>
-analyze_orthography_with_tackon(const Database &database,
-                                const LatinLexer &lexer,
-                                const SurfaceForm &surface,
-                                const AnalysisOptions &options) {
+[[nodiscard]] std::vector<AnalysisIR> analyze_orthography_with_tackon(
+    const Database &database, const LatinLexer &lexer,
+    const SurfaceForm &surface, const AnalysisOptions &options) {
     const std::string_view word = surface.lookup_ascii;
     std::vector<AddonId> ids;
     add_matching_tackons(database, word, false, ids);
@@ -2372,9 +2362,8 @@ analyze_orthography_with_tackon(const Database &database,
         if (!base) {
             return {};
         }
-        auto analyses =
-            analyze_orthography(database, lexer, *base, RewriteStage::early,
-                                options);
+        auto analyses = analyze_orthography(database, lexer, *base,
+                                            RewriteStage::early, options);
         if (analyses.empty()) {
             analyses = analyze_orthography(database, lexer, *base,
                                            RewriteStage::fallback, options);
@@ -2632,7 +2621,7 @@ independent_token(QueryResult &&result) noexcept {
 }
 
 void annotate_period_abbreviation_conflict(const TextToken &token,
-                                            QueryResult &result) {
+                                           QueryResult &result) {
     constexpr std::string_view roman_abbreviation_letters{"ACDLM"};
     if (!has_any_flag(token.boundary_after.flags, BoundaryFlag::period) ||
         token.text.size() != 1U ||
@@ -2749,13 +2738,12 @@ QueryResult Engine::analyze(const TextToken &token,
         apply_whitaker_trim(*database_, result);
         annotate_period_abbreviation_conflict(token, result);
         if (result.options.whitaker_trim == WhitakerTrimMode::filter &&
-            result.status == QueryStatus::analyzed &&
-            result.analyses.empty() && result.artificial_analyses.empty()) {
+            result.status == QueryStatus::analyzed && result.analyses.empty() &&
+            result.artificial_analyses.empty()) {
             result.status = QueryStatus::unknown;
-            result.diagnostics.push_back(
-                {.code = DiagnosticCode::unknown_word,
-                 .severity = DiagnosticSeverity::info,
-                 .part_of_speech = std::nullopt});
+            result.diagnostics.push_back({.code = DiagnosticCode::unknown_word,
+                                          .severity = DiagnosticSeverity::info,
+                                          .part_of_speech = std::nullopt});
         }
         return std::move(result);
     };
@@ -2773,8 +2761,8 @@ QueryResult Engine::analyze(const TextToken &token,
         result.artificial_analyses.emplace_back(direct_roman);
     }
 
-    auto lexical = analyze_lexical_surface(*database_, result.surface,
-                                           options.mechanisms);
+    auto lexical =
+        analyze_lexical_surface(*database_, result.surface, options.mechanisms);
     auto enumeration = lexical.state;
     result.analyses = std::move(lexical.analyses);
 
@@ -2888,9 +2876,9 @@ QueryResult Engine::analyze(const TextToken &token,
             return finish();
         }
         if (options.orthography != OrthographyMode::disabled) {
-            result.analyses = analyze_orthography(
-                *database_, lexer_, result.surface, RewriteStage::fallback,
-                options);
+            result.analyses =
+                analyze_orthography(*database_, lexer_, result.surface,
+                                    RewriteStage::fallback, options);
         }
         if (!result.analyses.empty()) {
             result.status = QueryStatus::analyzed;
@@ -2898,8 +2886,7 @@ QueryResult Engine::analyze(const TextToken &token,
         }
         if (options.two_words == TwoWordsMode::legacy_first_match) {
             result.two_word_suggestion =
-                analyze_two_words(*database_, lexer_, result.surface,
-                                  options);
+                analyze_two_words(*database_, lexer_, result.surface, options);
         }
         result.status = QueryStatus::unknown;
         result.diagnostics.push_back({.code = DiagnosticCode::unknown_word,

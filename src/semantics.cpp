@@ -274,15 +274,14 @@ std::string_view rewrite_kind_name(const RewriteKind value) noexcept {
 }
 
 std::string_view rewrite_scope_name(const RewriteScope value) noexcept {
-    constexpr std::array<std::string_view, 4> values{"", "initial",
-                                                     "internal", "final"};
+    constexpr std::array<std::string_view, 4> values{"", "initial", "internal",
+                                                     "final"};
     return enum_token(value, values);
 }
 
-std::string_view
-rewrite_operation_name(const RewriteOperation value) noexcept {
-    constexpr std::array<std::string_view, 4> values{
-        "", "literal", "slur", "double-consonant"};
+std::string_view rewrite_operation_name(const RewriteOperation value) noexcept {
+    constexpr std::array<std::string_view, 4> values{"", "literal", "slur",
+                                                     "double-consonant"};
     return enum_token(value, values);
 }
 

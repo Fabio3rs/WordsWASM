@@ -313,6 +313,9 @@ python3 poc/compact-db/compile_lexemes.py \
 /tmp/wwdb_poc_pack . poc/compact-db/output/words-poc-columnar.wwdb columnar
 /tmp/wwdb_poc_pack . poc/compact-db/output/words-poc-search-only.wwdb search-only
 
+# Esses comandos geram WWDB 1.10 com o índice canônico de stems persistido.
+# Para um fixture de retrocompatibilidade 1.9, acrescente --legacy-stem-order.
+
 gzip -9 -n -c poc/compact-db/output/words-poc.wwdb \
   > poc/compact-db/output/words-poc.wwdb.gz
 gzip -9 -n -c poc/compact-db/output/words-poc-dense.wwdb \

@@ -62,8 +62,7 @@ parse_options(const int argc, char *const argv[]) {
             options.analysis.two_words =
                 words::TwoWordsMode::legacy_first_match;
         } else if (argument == "--whitaker-trim=annotate") {
-            options.analysis.whitaker_trim =
-                words::WhitakerTrimMode::annotate;
+            options.analysis.whitaker_trim = words::WhitakerTrimMode::annotate;
         } else if (argument == "--whitaker-trim=filter") {
             options.analysis.whitaker_trim = words::WhitakerTrimMode::filter;
         } else if (argument == "--orthography=disabled") {
@@ -218,8 +217,7 @@ int main(const int argc, char *argv[]) try {
                   << engine.error().message << '\n';
         return 3;
     }
-    if ((options->format == "analysis" ||
-         options->format == "analysis-v2") &&
+    if ((options->format == "analysis" || options->format == "analysis-v2") &&
         !(*engine)->supports_full_analysis()) {
         std::cerr << "words_cli: unsupported-output: analysis format requires "
                      "a full WWDB with meanings\n";

@@ -19,9 +19,11 @@
 #include <stdint.h>
 
 #if defined(__cplusplus)
-#define WW_LEGACY_STATIC_ASSERT(condition, message) static_assert(condition, message)
+#define WW_LEGACY_STATIC_ASSERT(condition, message)                            \
+    static_assert(condition, message)
 #else
-#define WW_LEGACY_STATIC_ASSERT(condition, message) _Static_assert(condition, message)
+#define WW_LEGACY_STATIC_ASSERT(condition, message)                            \
+    _Static_assert(condition, message)
 #endif
 
 typedef uint8_t ww_legacy_pofs_t;
@@ -66,11 +68,7 @@ enum {
 };
 
 typedef uint8_t ww_legacy_number_t;
-enum {
-    WW_LEGACY_NUMBER_X = 0,
-    WW_LEGACY_NUMBER_S = 1,
-    WW_LEGACY_NUMBER_P = 2
-};
+enum { WW_LEGACY_NUMBER_X = 0, WW_LEGACY_NUMBER_S = 1, WW_LEGACY_NUMBER_P = 2 };
 
 typedef uint8_t ww_legacy_comparison_t;
 enum {
@@ -429,21 +427,35 @@ enum {
 };
 
 WW_LEGACY_STATIC_ASSERT(sizeof(ww_legacy_decn_record) == 8, "decn layout");
-WW_LEGACY_STATIC_ASSERT(sizeof(ww_legacy_dictionary_part) == 20, "dictionary part layout");
-WW_LEGACY_STATIC_ASSERT(sizeof(ww_legacy_dictionary_entry) == 180, "DICTFILE record layout");
-WW_LEGACY_STATIC_ASSERT(offsetof(ww_legacy_dictionary_entry, part) == 72, "DICTFILE part offset");
-WW_LEGACY_STATIC_ASSERT(offsetof(ww_legacy_dictionary_entry, translation) == 92, "DICTFILE translation offset");
-WW_LEGACY_STATIC_ASSERT(offsetof(ww_legacy_dictionary_entry, meaning) == 97, "DICTFILE meaning offset");
-WW_LEGACY_STATIC_ASSERT(sizeof(ww_legacy_dictionary_stem) == 56, "STEMFILE record layout");
-WW_LEGACY_STATIC_ASSERT(offsetof(ww_legacy_dictionary_stem, part) == 20, "STEMFILE part offset");
-WW_LEGACY_STATIC_ASSERT(offsetof(ww_legacy_dictionary_stem, stem_key) == 40, "STEMFILE key offset");
-WW_LEGACY_STATIC_ASSERT(offsetof(ww_legacy_dictionary_stem, mnpc) == 48, "STEMFILE MNPC offset");
-WW_LEGACY_STATIC_ASSERT(sizeof(ww_legacy_inflection_quality) == 20, "quality layout");
+WW_LEGACY_STATIC_ASSERT(sizeof(ww_legacy_dictionary_part) == 20,
+                        "dictionary part layout");
+WW_LEGACY_STATIC_ASSERT(sizeof(ww_legacy_dictionary_entry) == 180,
+                        "DICTFILE record layout");
+WW_LEGACY_STATIC_ASSERT(offsetof(ww_legacy_dictionary_entry, part) == 72,
+                        "DICTFILE part offset");
+WW_LEGACY_STATIC_ASSERT(offsetof(ww_legacy_dictionary_entry, translation) == 92,
+                        "DICTFILE translation offset");
+WW_LEGACY_STATIC_ASSERT(offsetof(ww_legacy_dictionary_entry, meaning) == 97,
+                        "DICTFILE meaning offset");
+WW_LEGACY_STATIC_ASSERT(sizeof(ww_legacy_dictionary_stem) == 56,
+                        "STEMFILE record layout");
+WW_LEGACY_STATIC_ASSERT(offsetof(ww_legacy_dictionary_stem, part) == 20,
+                        "STEMFILE part offset");
+WW_LEGACY_STATIC_ASSERT(offsetof(ww_legacy_dictionary_stem, stem_key) == 40,
+                        "STEMFILE key offset");
+WW_LEGACY_STATIC_ASSERT(offsetof(ww_legacy_dictionary_stem, mnpc) == 48,
+                        "STEMFILE MNPC offset");
+WW_LEGACY_STATIC_ASSERT(sizeof(ww_legacy_inflection_quality) == 20,
+                        "quality layout");
 WW_LEGACY_STATIC_ASSERT(sizeof(ww_legacy_ending_record) == 12, "ending layout");
-WW_LEGACY_STATIC_ASSERT(sizeof(ww_legacy_inflection_record) == 40, "INFLECTS record layout");
-WW_LEGACY_STATIC_ASSERT(offsetof(ww_legacy_inflection_record, stem_key) == 20, "INFLECTS key offset");
-WW_LEGACY_STATIC_ASSERT(offsetof(ww_legacy_inflection_record, ending) == 24, "INFLECTS ending offset");
-WW_LEGACY_STATIC_ASSERT(offsetof(ww_legacy_inflection_record, age) == 36, "INFLECTS age offset");
+WW_LEGACY_STATIC_ASSERT(sizeof(ww_legacy_inflection_record) == 40,
+                        "INFLECTS record layout");
+WW_LEGACY_STATIC_ASSERT(offsetof(ww_legacy_inflection_record, stem_key) == 20,
+                        "INFLECTS key offset");
+WW_LEGACY_STATIC_ASSERT(offsetof(ww_legacy_inflection_record, ending) == 24,
+                        "INFLECTS ending offset");
+WW_LEGACY_STATIC_ASSERT(offsetof(ww_legacy_inflection_record, age) == 36,
+                        "INFLECTS age offset");
 
 #undef WW_LEGACY_STATIC_ASSERT
 

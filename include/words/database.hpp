@@ -211,8 +211,8 @@ class Database final {
     [[nodiscard]] QuantityMask
     stem_quantity(LexemeId id, std::uint8_t lexical_slot) const noexcept;
     [[nodiscard]] MorphologicalNoticeSet
-    lookup_morphological_notices(
-        LexemeId id, WhitakerTrimReason trigger) const noexcept;
+    lookup_morphological_notices(LexemeId id,
+                                 WhitakerTrimReason trigger) const noexcept;
     [[nodiscard]] const SuffixRule &
     suffix(AddonId id) const WORDS_LIFETIMEBOUND;
     [[nodiscard]] const PrefixRule &

@@ -210,8 +210,8 @@ mesmos strides byte-alinhados.
 
 ## Diferenças entre o WWDB atual e o WWAX estendido
 
-Nesta comparação, “produção” significa o WWDB 1.9 atualmente gerado pelo
-packer e aceito por `Database::load_poc`. O WWAX é somente o contêiner de
+Nesta comparação histórica, “produção” significava o WWDB 1.9 então gerado
+pelo packer e aceito por `Database::load_poc`. O WWAX é somente o contêiner de
 apêndice deste experimento; ele não é uma nova versão pronta do WWDB.
 
 Fontes da comparação: esquema wire

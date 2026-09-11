@@ -196,6 +196,7 @@ cmake --build build/native \
   -j"$(nproc)"
 
 # 3. Generate both database profiles expected by the tests.
+# The packer emits production WWDB 1.10 by default; the runtime also reads 1.9.
 mkdir -p whitakers-words/poc/compact-db/output
 build/native/wwdb_poc_pack \
   whitakers-words \

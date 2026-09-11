@@ -2556,6 +2556,24 @@ Artefatos: `snapshot-copy-{before,after,single-copy}-{compound,aeneid}.*` em
 `build/wasm-profile/snapshot-copy-*` e os summaries `snapshot-copy-*` e
 `ab-repeat-*` em `build/wasm-profile/profiles/`.
 
+## PoC posterior: índice de stems persistido no WWDB
+
+O experimento isolado de WWDB 1.10 confirmou a hipótese de F-06 para o maior
+índice: sem aumentar o arquivo, a mediana de `Database::load_poc` caiu 27,0%
+no dense e 36,8% no search-only. Instruções caíram 37,8% e 46,9%, e o vetor
+temporário de 1,49 MB desapareceu. Em 11 de setembro de 2026, o formato 1.10
+foi promovido a saída padrão do packer e dos fixtures; o runtime mantém leitura
+1.9 para retrocompatibilidade. Desenho, guardrails e medições completas estão em
+[`wwdb-persisted-stem-index-poc.md`](wwdb-persisted-stem-index-poc.md).
+
+O follow-up 1.11 persistiu também os ranks dos 1.785 endings sem mudar
+`RuleId`. O ganho incremental ficou pequeno mas mensurável: -0,63% no dense e
+-1,41% no search-only com afinidade fixa; instruções caíram 0,85% e 1,23%.
+O WWDB cresceu 3.602 bytes. A decisão e a metodologia estão em
+[`wwdb-persisted-ending-index-poc.md`](wwdb-persisted-ending-index-poc.md).
+O 1.11 foi arquivado como relatório: não integra o schema, loader ou packer de
+produção.
+
 ## Limitações
 
 - Os números caracterizam este snapshot, compilador e WWDB; mudanças no banco

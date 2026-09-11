@@ -35,17 +35,15 @@ std::uint32_t read_u32_le(const std::vector<std::byte> &bytes,
     return value;
 }
 
-std::uint32_t section_flags(
-    const std::vector<std::byte> &bytes,
-    const detail::wwdb::SectionType requested_type) {
+std::uint32_t section_flags(const std::vector<std::byte> &bytes,
+                            const detail::wwdb::SectionType requested_type) {
     const auto count =
         read_u32_le(bytes, detail::wwdb::header_section_count_offset);
     for (std::uint32_t index = 0; index < count; ++index) {
         const auto offset = detail::wwdb::fixed_header_size +
                             (static_cast<std::size_t>(index) *
                              detail::wwdb::directory_entry_size);
-        if (read_u32_le(bytes,
-                        offset + detail::wwdb::directory_type_offset) ==
+        if (read_u32_le(bytes, offset + detail::wwdb::directory_type_offset) ==
             std::to_underlying(requested_type)) {
             return read_u32_le(bytes,
                                offset + detail::wwdb::directory_flags_offset);
@@ -112,10 +110,12 @@ TEST(DatabaseTest, CanonicalLookupIndexesRemainInternallyConsistent) {
             const auto spelling = database.stem_string(lexeme.stems.front());
             const auto references =
                 database.lookup_unique(canonical_lookup(spelling));
-            EXPECT_TRUE(std::ranges::any_of(
-                references, [id](const UniqueReference &reference) {
-                    return reference.lexeme == id;
-                })) << spelling;
+            EXPECT_TRUE(
+                std::ranges::any_of(references,
+                                    [id](const UniqueReference &reference) {
+                                        return reference.lexeme == id;
+                                    }))
+                << spelling;
             continue;
         }
 
@@ -218,17 +218,15 @@ TEST(DatabaseTest, LoadsCuratedMorphologicalNoticesFromBothProfiles) {
         MorphologicalNotice::related_passive_usage_attested));
     EXPECT_TRUE(
         dense_notices.contains(MorphologicalNotice::source_disagreement));
-    EXPECT_TRUE(dense_notices.contains(
-        MorphologicalNotice::manual_review_recommended));
+    EXPECT_TRUE(
+        dense_notices.contains(MorphologicalNotice::manual_review_recommended));
 
     constexpr auto active_perfect_trigger =
         WhitakerTrimReason::semideponent_active_perfect_system;
-    const auto active_perfect_notices =
-        (*dense)->lookup_morphological_notices(first_audeo,
-                                               active_perfect_trigger);
-    EXPECT_EQ(active_perfect_notices,
-              (*search)->lookup_morphological_notices(
-                  first_audeo, active_perfect_trigger));
+    const auto active_perfect_notices = (*dense)->lookup_morphological_notices(
+        first_audeo, active_perfect_trigger);
+    EXPECT_EQ(active_perfect_notices, (*search)->lookup_morphological_notices(
+                                          first_audeo, active_perfect_trigger));
     EXPECT_TRUE(active_perfect_notices.contains(
         MorphologicalNotice::source_disagreement));
     EXPECT_TRUE(active_perfect_notices.contains(
@@ -246,9 +244,8 @@ TEST(DatabaseTest, LoadsCuratedMorphologicalNoticesFromBothProfiles) {
     EXPECT_TRUE(diffido_notices.contains(
         MorphologicalNotice::manual_review_recommended));
 
-    EXPECT_TRUE((*dense)
-                    ->lookup_morphological_notices(LexemeId{0U}, trigger)
-                    .empty());
+    EXPECT_TRUE(
+        (*dense)->lookup_morphological_notices(LexemeId{0U}, trigger).empty());
 }
 
 TEST(DatabaseTest, KeepsSparseNoticesRowMajorAcrossRuntimeProfiles) {
@@ -263,12 +260,12 @@ TEST(DatabaseTest, KeepsSparseNoticesRowMajorAcrossRuntimeProfiles) {
               detail::wwdb::section_flag_row_major);
     EXPECT_EQ(section_flags(search, detail::wwdb::SectionType::lexemes),
               detail::wwdb::section_flag_columnar);
-    EXPECT_EQ(section_flags(
-                  dense, detail::wwdb::SectionType::morphological_notices),
-              detail::wwdb::section_flag_row_major);
-    EXPECT_EQ(section_flags(
-                  search, detail::wwdb::SectionType::morphological_notices),
-              detail::wwdb::section_flag_row_major);
+    EXPECT_EQ(
+        section_flags(dense, detail::wwdb::SectionType::morphological_notices),
+        detail::wwdb::section_flag_row_major);
+    EXPECT_EQ(
+        section_flags(search, detail::wwdb::SectionType::morphological_notices),
+        detail::wwdb::section_flag_row_major);
 }
 
 TEST(DatabaseTest, DenseAndSearchProfilesAgreeOnWireSemantics) {
@@ -763,8 +760,7 @@ TEST(DatabaseTest, ClosedSemanticDomainsHaveTypedCanonicalNames) {
               "supine");
     EXPECT_EQ(diagnostic_code_name(DiagnosticCode::unsupported_character),
               "unsupported-character");
-    EXPECT_EQ(diagnostic_severity_name(DiagnosticSeverity::warning),
-              "warning");
+    EXPECT_EQ(diagnostic_severity_name(DiagnosticSeverity::warning), "warning");
 
     EXPECT_EQ(governed_case(VerbKind::governs_genitive),
               GrammaticalCase::genitive);
@@ -1066,7 +1062,7 @@ TEST(DatabaseTest, RejectsUnsupportedProfile) {
 }
 
 TEST(DatabaseTest, RejectsUnsupportedVersionAndHeaderSize) {
-    for (const auto minor : {std::uint16_t{5U}, std::uint16_t{10U}}) {
+    for (const auto minor : {std::uint16_t{5U}, std::uint16_t{11U}}) {
         SCOPED_TRACE(minor);
         auto bytes = test::read_database();
         write_u16_le(bytes, test_header_minor_offset, minor);
@@ -1086,6 +1082,15 @@ TEST(DatabaseTest, RejectsUnsupportedVersionAndHeaderSize) {
     const auto header_result = Database::load_poc(std::move(wrong_header_size));
     ASSERT_FALSE(header_result);
     EXPECT_EQ(header_result.error().code, "unsupported-version");
+}
+
+TEST(DatabaseTest, AcceptsProductionStemOrderThroughLegacyCompatibilityPath) {
+    auto bytes = test::read_database();
+    write_u16_le(bytes, test_header_minor_offset,
+                 detail::wwdb::morphological_notices_minor_version);
+    const auto database = Database::load_poc(std::move(bytes));
+    ASSERT_TRUE(database) << database.error().message;
+    EXPECT_FALSE((*database)->lookup_stem("puell").empty());
 }
 
 TEST(DatabaseTest, RejectsUnsafeSectionCountsAndTypes) {
@@ -1142,8 +1147,7 @@ TEST(DatabaseTest, WhitakerImperativeRulesUseOnlyLicensedPersons) {
         EXPECT_TRUE(
             (rule.tense == Tense::present && rule.person == Person::second) ||
             (rule.tense == Tense::future &&
-             (rule.person == Person::second ||
-              rule.person == Person::third)))
+             (rule.person == Person::second || rule.person == Person::third)))
             << rule.id.value();
     }
     EXPECT_EQ(imperative_count, 93U);

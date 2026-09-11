@@ -132,6 +132,14 @@ if(NOT EMSCRIPTEN)
                 "${CMAKE_CURRENT_SOURCE_DIR}/rewrite_import_test.py"
         )
         add_test(
+            NAME words_persisted_stem_index
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/persisted_stem_index_test.py"
+                --root "${CMAKE_SOURCE_DIR}"
+                --packer "$<TARGET_FILE:wwdb_poc_pack>"
+                --cli "$<TARGET_FILE:words_cli>"
+        )
+        add_test(
             NAME words_grammar_coverage
             COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/grammar_coverage_test.py"

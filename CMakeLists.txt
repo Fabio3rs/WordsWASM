@@ -342,6 +342,14 @@ else()
     target_link_libraries(words_engine_benchmark PRIVATE words_core)
     words_apply_project_options(words_engine_benchmark)
 
+    # Measures only Database::load_poc after the WWDB image is resident.  This
+    # keeps persisted-index A/B experiments separate from morphology and JSON.
+    add_executable(words_database_load_benchmark EXCLUDE_FROM_ALL
+        whitakers-words/benchmarks/database_load_benchmark.cpp
+    )
+    target_link_libraries(words_database_load_benchmark PRIVATE words_core)
+    words_apply_project_options(words_database_load_benchmark)
+
     if(ENABLE_STATIC_CLI)
         if(BUILD_SHARED_LIBS)
             message(FATAL_ERROR

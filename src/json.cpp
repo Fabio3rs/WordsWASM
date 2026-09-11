@@ -49,8 +49,8 @@ constexpr std::string_view manual_review_notice_text{
 constexpr std::string_view manual_review_notice_documentation{
     "docs/morphological-assessment.md#review-policy"};
 
-[[nodiscard]] bool legacy_projection_visible(
-    const WhitakerTrimAssessment &assessment) noexcept {
+[[nodiscard]] bool
+legacy_projection_visible(const WhitakerTrimAssessment &assessment) noexcept {
     // analysis-v1/search-v1 predate compatibility assessment.  Their only
     // eagerly enforced List_Sweep rule was the deponent active-form check, so
     // preserve that exact contract while newer projections expose all
@@ -213,12 +213,11 @@ independent_token_result(const QueryResult &parent,
     return Json{
         {"whitakerTrim", whitaker_trim_mode_name(options.whitaker_trim)},
         {"orthography", orthography_mode_name(options.orthography)},
-        {"twoWords",
-         options.two_words == TwoWordsMode::legacy_first_match ? "legacy"
-                                                                : "disabled"},
+        {"twoWords", options.two_words == TwoWordsMode::legacy_first_match
+                         ? "legacy"
+                         : "disabled"},
         {"mechanisms",
-         Json{{"productiveDerivations",
-               mechanisms.productive_derivations},
+         Json{{"productiveDerivations", mechanisms.productive_derivations},
               {"prefixes", mechanisms.prefixes},
               {"suffixes", mechanisms.suffixes},
               {"tickons", mechanisms.tickons},
@@ -427,16 +426,13 @@ derivation_json(const Database &database, const DerivationIR &derivation,
             if (extended) {
                 step["category"] = rewrite_category(rewrite);
                 step["scope"] = rewrite_scope_name(rewrite.scope);
-                step["operation"] =
-                    rewrite_operation_name(rewrite.operation);
+                step["operation"] = rewrite_operation_name(rewrite.operation);
                 step["stage"] = rewrite_stage_name(rewrite.stage);
                 step["application"] = Json{
-                    {"position",
-                     rewritten_form->positions.at(rewrite_index)},
+                    {"position", rewritten_form->positions.at(rewrite_index)},
                     {"removeCount",
                      rewritten_form->remove_counts.at(rewrite_index)},
-                    {"observed",
-                     rewritten_form->observed.at(rewrite_index)},
+                    {"observed", rewritten_form->observed.at(rewrite_index)},
                     {"replacement",
                      rewritten_form->replacements.at(rewrite_index)},
                 };
@@ -462,8 +458,7 @@ derivation_json(const Database &database, const DerivationIR &derivation,
     return output;
 }
 
-[[nodiscard]] Json
-morphological_notice_json(const MorphologicalNotice notice) {
+[[nodiscard]] Json morphological_notice_json(const MorphologicalNotice notice) {
     Json output{{"code", morphological_notice_name(notice)}};
     if (notice == MorphologicalNotice::related_passive_usage_attested) {
         output["note"] = related_passive_notice_text;
@@ -471,8 +466,7 @@ morphological_notice_json(const MorphologicalNotice notice) {
     } else if (notice == MorphologicalNotice::source_disagreement) {
         output["note"] = source_disagreement_notice_text;
         output["documentation"] = source_disagreement_notice_documentation;
-    } else if (notice ==
-               MorphologicalNotice::manual_review_recommended) {
+    } else if (notice == MorphologicalNotice::manual_review_recommended) {
         output["note"] = manual_review_notice_text;
         output["documentation"] = manual_review_notice_documentation;
     }
@@ -803,8 +797,8 @@ full_two_word_suggestion(const Engine &engine,
         std::vector<std::pair<AnalysisOrderKey, Json>> ordered;
         ordered.reserve(segment.analyses.size());
         for (const auto &analysis : segment.analyses) {
-            if (!extended && !legacy_projection_visible(
-                                 analysis.assessment.whitaker_trim)) {
+            if (!extended &&
+                !legacy_projection_visible(analysis.assessment.whitaker_trim)) {
                 continue;
             }
             auto value =
@@ -842,8 +836,8 @@ search_two_word_suggestion(const TwoWordSuggestionIR &suggestion,
         std::vector<SearchHit> hits;
         hits.reserve(segment.analyses.size());
         for (const auto &analysis : segment.analyses) {
-            if (!extended && !legacy_projection_visible(
-                                 analysis.assessment.whitaker_trim)) {
+            if (!extended &&
+                !legacy_projection_visible(analysis.assessment.whitaker_trim)) {
                 continue;
             }
             append_search_hit(hits, analysis.lexeme, analysis.rule,
@@ -934,8 +928,7 @@ std::string analysis_json(const Engine &engine, const QueryResult &result) {
     return output.dump();
 }
 
-std::string analysis_json_v2(const Engine &engine,
-                             const QueryResult &result) {
+std::string analysis_json_v2(const Engine &engine, const QueryResult &result) {
     if (!engine.owns(result)) {
         throw std::logic_error{
             "analysis result belongs to a different dataset"};
@@ -959,8 +952,7 @@ std::string analysis_json_v2(const Engine &engine,
                                                         result.surface,
                                                         analysis),
                                      std::move(value));
-            } else if constexpr (std::is_same_v<Analysis,
-                                                CompoundAnalysisIR>) {
+            } else if constexpr (std::is_same_v<Analysis, CompoundAnalysisIR>) {
                 auto value =
                     full_compound_analysis(engine, result, analysis, true);
                 ordered.emplace_back(
@@ -968,7 +960,7 @@ std::string analysis_json_v2(const Engine &engine,
                     std::move(value));
             } else if constexpr (std::is_same_v<Analysis, RomanNumeralIR>) {
                 auto value = full_roman_analysis(engine.database(), result,
-                                                  analysis, true);
+                                                 analysis, true);
                 ordered.emplace_back(analysis_order_key(analysis),
                                      std::move(value));
             } else {
@@ -1028,8 +1020,7 @@ std::string search_json(const Engine &engine, const QueryResult &result) {
         ordered_hits.reserve(result.analyses.size() +
                              result.compound_analyses.size());
         for (const auto &analysis : result.analyses) {
-            if (!legacy_projection_visible(
-                    analysis.assessment.whitaker_trim)) {
+            if (!legacy_projection_visible(analysis.assessment.whitaker_trim)) {
                 continue;
             }
             append_search_hit(ordered_hits, analysis.lexeme, analysis.rule,
@@ -1038,8 +1029,8 @@ std::string search_json(const Engine &engine, const QueryResult &result) {
         for (const auto &analysis : result.compound_analyses) {
             append_search_hit(ordered_hits, analysis.lexeme,
                               analysis.source_rule, analysis.source_derivation,
-                              analysis.assessment,
-                              analysis.kind, analysis.auxiliary);
+                              analysis.assessment, analysis.kind,
+                              analysis.auxiliary);
         }
     }
 
@@ -1092,13 +1083,13 @@ std::string search_json_v2(const Engine &engine, const QueryResult &result) {
         for (const auto &analysis : result.analyses) {
             ordered.push_back(&analysis);
         }
-        std::ranges::sort(ordered, [&](const AnalysisIR *left,
-                                      const AnalysisIR *right) {
-            return analysis_order_key(engine.database(), result.surface,
-                                      *left) <
-                   analysis_order_key(engine.database(), result.surface,
-                                      *right);
-        });
+        std::ranges::sort(ordered,
+                          [&](const AnalysisIR *left, const AnalysisIR *right) {
+                              return analysis_order_key(engine.database(),
+                                                        result.surface, *left) <
+                                     analysis_order_key(engine.database(),
+                                                        result.surface, *right);
+                          });
         for (const auto *analysis : ordered) {
             Json addon_ids = Json::array();
             for (const auto id : analysis->derivation.steps()) {
@@ -1106,9 +1097,8 @@ std::string search_json_v2(const Engine &engine, const QueryResult &result) {
             }
             Json hit{
                 {"lexemeId", analysis->lexeme.value()},
-                {"ruleId", analysis->rule
-                               ? Json(analysis->rule->value())
-                               : Json(nullptr)},
+                {"ruleId", analysis->rule ? Json(analysis->rule->value())
+                                          : Json(nullptr)},
                 {"addonIds", std::move(addon_ids)},
                 {"scoreFlags", 0},
                 {"assessment",
@@ -1156,10 +1146,9 @@ std::string search_json_v2(const Engine &engine, const QueryResult &result) {
                     {"ruleId", nullptr},
                     {"addonIds", std::move(addon_ids)},
                     {"scoreFlags", 0},
-                    {"artificial",
-                     Json{{"method", roman_dictionary_name},
-                          {"value", analysis.value},
-                          {"wellFormed", analysis.well_formed}}},
+                    {"artificial", Json{{"method", roman_dictionary_name},
+                                        {"value", analysis.value},
+                                        {"wellFormed", analysis.well_formed}}},
                     {"assessment",
                      morphological_assessment_json(analysis.assessment)},
                 });

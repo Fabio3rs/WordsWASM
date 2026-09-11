@@ -1,13 +1,12 @@
 // Quick proof of concept for the compact layout described in
 // docs/auditoria-binarios-e-formato-compacto.md.
 //
-// This is deliberately a measurement tool, not the production wwpack. It
-// reads the concrete GNAT/x86-64 legacy files in this repository and writes a
-// portable, explicitly little-endian image. Version 1.9 retains the vowel
+// This fixture/release generator reads the concrete GNAT/x86-64 legacy files
+// in this repository and writes a portable, explicitly little-endian image.
+// Version 1.9 retains the vowel
 // quantity masks and typed PACKON selector from 1.8 and adds sparse, packed
-// morphological notices, which both runtime profiles can query without
-// inspecting editorial meanings.
-// This tool still is not the production wwpack.
+// morphological notices. Version 1.10 persists the exact canonical order of
+// stem references so production loaders do not rebuild and sort that index.
 
 #include <algorithm>
 #include <array>
@@ -50,8 +49,8 @@ constexpr std::size_t inflection_record_size = 40;
 constexpr std::size_t inflections_per_section = 570;
 constexpr std::size_t inflection_section_count = wwdb::inflection_section_count;
 constexpr std::uint8_t legacy_pack_part_of_speech = 3U;
-constexpr auto legacy_verb_part_of_speech = static_cast<std::uint8_t>(
-    std::to_underlying(words::PartOfSpeech::verb));
+constexpr auto legacy_verb_part_of_speech =
+    static_cast<std::uint8_t>(std::to_underlying(words::PartOfSpeech::verb));
 constexpr auto legacy_semideponent_kind = static_cast<std::uint8_t>(
     std::to_underlying(words::VerbKind::semideponent));
 constexpr auto semideponent_passive_present_trigger =
@@ -62,12 +61,9 @@ constexpr std::uint16_t maximum_encoded_packon_plus_one = 511U;
 constexpr std::string_view morphological_notices_file{
     "MORPHOLOGICAL_NOTICES.LAT"};
 constexpr std::array<std::string_view, 6U> whitaker_trim_reason_names{
-    "UNSUPPORTED_SHORT_IMPERATIVE",
-    "INVALID_IMPERATIVE_PERSON",
-    "IMPERSONAL_NON_THIRD_PERSON",
-    "DEPONENT_ACTIVE_FORM",
-    "SEMIDEPONENT_PASSIVE_PRESENT_SYSTEM",
-    "SEMIDEPONENT_ACTIVE_PERFECT_SYSTEM",
+    "UNSUPPORTED_SHORT_IMPERATIVE",        "INVALID_IMPERATIVE_PERSON",
+    "IMPERSONAL_NON_THIRD_PERSON",         "DEPONENT_ACTIVE_FORM",
+    "SEMIDEPONENT_PASSIVE_PRESENT_SYSTEM", "SEMIDEPONENT_ACTIVE_PERFECT_SYSTEM",
 };
 constexpr std::array<std::string_view, 3U> morphological_notice_names{
     "RELATED_PASSIVE_USAGE_ATTESTED",
@@ -1206,10 +1202,9 @@ read_morphological_notices(const std::filesystem::path &path) {
             fail("invalid " + std::string(morphological_notices_file) +
                  " record shape: " + line);
         }
-        const auto entry = parse_u32(fields[0], entry_field,
-                                     morphological_notices_file);
-        if (entry == 0U ||
-            entry > std::numeric_limits<std::uint16_t>::max()) {
+        const auto entry =
+            parse_u32(fields[0], entry_field, morphological_notices_file);
+        if (entry == 0U || entry > std::numeric_limits<std::uint16_t>::max()) {
             fail("dictionary entry exceeds one-based u16 in " +
                  std::string(morphological_notices_file));
         }
@@ -1333,25 +1328,25 @@ std::uint16_t pack_inflection_morphology(std::span<const std::byte> record,
     }
 }
 
+char canonical_stem_character(char value) {
+    if (value >= 'A' && value <= 'Z') {
+        value = static_cast<char>(value - 'A' + 'a');
+    }
+    // The legacy stem index folds the Latin orthographic pairs i/j and u/v.
+    if (value == 'j') {
+        return 'i';
+    }
+    if (value == 'v') {
+        return 'u';
+    }
+    return value;
+}
+
 std::size_t stem_bucket(std::string_view stem) {
     if (stem.empty()) {
         return 0;
     }
-    const auto lower_ascii = [](char ch) {
-        if (ch >= 'A' && ch <= 'Z') {
-            ch = static_cast<char>(ch - 'A' + 'a');
-        }
-        // The legacy stem index folds the Latin orthographic pairs i/j and
-        // u/v before choosing its one- or two-letter bucket.
-        if (ch == 'j') {
-            return 'i';
-        }
-        if (ch == 'v') {
-            return 'u';
-        }
-        return ch;
-    };
-    const auto first_character = lower_ascii(stem.front());
+    const auto first_character = canonical_stem_character(stem.front());
     if (first_character < 'a' || first_character > 'z') {
         fail("stem outside lowercase a-z index: " + std::string(stem));
     }
@@ -1361,12 +1356,25 @@ std::size_t stem_bucket(std::string_view stem) {
     if (stem.size() == 1) {
         return base;
     }
-    const auto second_character = lower_ascii(stem[1]);
+    const auto second_character = canonical_stem_character(stem[1]);
     if (second_character < 'a' || second_character > 'z') {
         fail("second stem character outside lowercase a-z index: " +
              std::string(stem));
     }
     return base + 1 + static_cast<std::size_t>(second_character - 'a');
+}
+
+std::strong_ordering canonical_stem_compare(const std::string_view left,
+                                            const std::string_view right) {
+    const auto common = std::min(left.size(), right.size());
+    for (std::size_t index = 0; index < common; ++index) {
+        const auto left_value = canonical_stem_character(left[index]);
+        const auto right_value = canonical_stem_character(right[index]);
+        if (left_value != right_value) {
+            return left_value <=> right_value;
+        }
+    }
+    return left.size() <=> right.size();
 }
 
 std::uint32_t crc32(std::span<const std::byte> bytes,
@@ -1397,7 +1405,8 @@ Bytes byte_shuffle(Bytes rows, std::size_t count, std::size_t stride) {
     return columns;
 }
 
-Bytes make_image(std::vector<Section> sections, PackingProfile profile) {
+Bytes make_image(std::vector<Section> sections, PackingProfile profile,
+                 const std::uint16_t minor_version) {
     const auto section_count = static_cast<std::uint32_t>(sections.size());
     const auto header_bytes =
         wwdb::fixed_header_size + (section_count * wwdb::directory_entry_size);
@@ -1415,7 +1424,7 @@ Bytes make_image(std::vector<Section> sections, PackingProfile profile) {
         append_u8(output, byte);
     }
     append_u16_le(output, wwdb::major_version);
-    append_u16_le(output, wwdb::morphological_notices_minor_version);
+    append_u16_le(output, minor_version);
     append_u32_le(output, wwdb::fixed_header_size);
     append_u32_le(output, section_count);
     append_u32_le(output, std::to_underlying(profile));
@@ -1447,16 +1456,17 @@ Bytes make_image(std::vector<Section> sections, PackingProfile profile) {
 } // namespace
 
 int main(int argc, char **argv) try {
-    if (argc != 3 && argc != 4) {
+    if (argc < 3 || argc > 5) {
         std::cerr << "usage: wwdb_poc_pack REPOSITORY_ROOT OUTPUT.wwdb "
-                     "[simple|dense|columnar|search-only]\n";
+                     "[simple|dense|columnar|search-only] "
+                     "[--legacy-stem-order]\n";
         return 2;
     }
 
     const std::filesystem::path root = argv[1];
     const std::filesystem::path output_path = argv[2];
     PackingProfile profile = PackingProfile::simple;
-    if (argc == 4) {
+    if (argc >= 4) {
         const std::string_view requested_profile = argv[3];
         if (requested_profile == "dense") {
             profile = PackingProfile::dense;
@@ -1466,6 +1476,15 @@ int main(int argc, char **argv) try {
             profile = PackingProfile::search_only;
         } else if (requested_profile != "simple") {
             fail("unknown packing profile: " + std::string(requested_profile));
+        }
+    }
+    bool persist_stem_index{true};
+    if (argc == 5) {
+        const std::string_view option = argv[4];
+        if (option == "--legacy-stem-order") {
+            persist_stem_index = false;
+        } else {
+            fail("unknown packing option: " + std::string{option});
         }
     }
 
@@ -1478,8 +1497,8 @@ int main(int argc, char **argv) try {
     const auto uniques = read_uniques(root / "UNIQUES.LAT");
     const auto rewrites = read_rewrites(root / "REWRITES.LAT");
     const auto quantities = read_quantities(root / "QUANTITIES.LAT");
-    auto morphological_notices = read_morphological_notices(
-        root / morphological_notices_file);
+    auto morphological_notices =
+        read_morphological_notices(root / morphological_notices_file);
     const auto compiled_lexemes = read_compiled_lexemes(root / "LEXEMES.LAT");
 
     if (dictionary.size() % dictionary_record_size != 0 ||
@@ -1521,8 +1540,8 @@ int main(int argc, char **argv) try {
     std::vector<PackedMorphologicalNotice> packed_morphological_notices;
     packed_morphological_notices.reserve(morphological_notices.size());
     for (const auto &notice : morphological_notices) {
-        const auto bit = static_cast<std::uint8_t>(
-            std::uint8_t{1U} << notice.notice);
+        const auto bit =
+            static_cast<std::uint8_t>(std::uint8_t{1U} << notice.notice);
         if (!packed_morphological_notices.empty() &&
             packed_morphological_notices.back().dictionary_entry ==
                 notice.dictionary_entry &&
@@ -1922,12 +1941,27 @@ int main(int argc, char **argv) try {
     }
 
     for (auto &bucket : stem_buckets) {
-        const auto imported = std::ranges::find_if(
-            bucket, [&](const PendingStemReference &reference) {
-                return reference.lexeme_id >= legacy_lexeme_count;
+        if (persist_stem_index) {
+            std::ranges::sort(bucket, [](const PendingStemReference &left,
+                                         const PendingStemReference &right) {
+                const auto order =
+                    canonical_stem_compare(left.stem, right.stem);
+                if (!std::is_eq(order)) {
+                    return std::is_lt(order);
+                }
+                return std::tuple{left.lexeme_id, left.lexical_slot,
+                                  left.stem_key} <
+                       std::tuple{right.lexeme_id, right.lexical_slot,
+                                  right.stem_key};
             });
-        std::ranges::sort(imported, bucket.end(), {},
-                          &PendingStemReference::stem);
+        } else {
+            const auto imported = std::ranges::find_if(
+                bucket, [&](const PendingStemReference &reference) {
+                    return reference.lexeme_id >= legacy_lexeme_count;
+                });
+            std::ranges::sort(imported, bucket.end(), {},
+                              &PendingStemReference::stem);
+        }
         for (const auto &reference : bucket) {
             if (!use_dense_records) {
                 append_u16_le(stem_reference_records,
@@ -2126,9 +2160,8 @@ int main(int argc, char **argv) try {
     }
 
     Bytes morphological_notice_records;
-    morphological_notice_records.reserve(
-        packed_morphological_notices.size() *
-        wwdb::morphological_notice_stride);
+    morphological_notice_records.reserve(packed_morphological_notices.size() *
+                                         wwdb::morphological_notice_stride);
     for (const auto &notice : packed_morphological_notices) {
         append_u16_le(morphological_notice_records,
                       static_cast<std::uint16_t>(notice.dictionary_entry - 1U));
@@ -2411,13 +2444,17 @@ int main(int argc, char **argv) try {
                         static_cast<std::uint32_t>(rewrites.size()),
                         rewrite_stride, std::move(rewrite_records)});
 
-    const auto image = make_image(std::move(sections), profile);
+    const auto minor_version = persist_stem_index
+                                   ? wwdb::persisted_stem_index_minor_version
+                                   : wwdb::morphological_notices_minor_version;
+    const auto image = make_image(std::move(sections), profile, minor_version);
     std::filesystem::create_directories(output_path.parent_path());
     write_file(output_path, image);
 
     std::cout << "wrote " << output_path << "\n"
               << "bytes=" << image.size() << "\n"
               << "profile=" << std::to_underlying(profile) << "\n"
+              << "minor_version=" << minor_version << "\n"
               << "lexemes=" << lexeme_count << "\n"
               << "stem_strings=" << stem_pool.size() << "\n"
               << "meaning_strings=" << meaning_pool.size() << "\n"
