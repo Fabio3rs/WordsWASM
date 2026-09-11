@@ -37,14 +37,16 @@ function fakeFactory(
   loadResult = {ok: true, code: "", message: ""},
   databaseKind = "full",
 ) {
+  let loadedDatasetId = datasetId;
   return async () => ({
     AnalysisEngine: class {
       loadDatabase(bytes, id) {
+        loadedDatasetId = id;
         log.push(["load", [...bytes], id]);
         return {...loadResult, databaseBytes: bytes.byteLength};
       }
 
-      datasetId() { return datasetId; }
+      datasetId() { return loadedDatasetId; }
       databaseBytes() { return 3; }
       databaseKind() { return databaseKind; }
 
@@ -176,6 +178,18 @@ test("rejects malformed configuration before instantiating WebAssembly", async (
     /datasetId/,
   );
   assert.equal(instantiated, false);
+});
+
+test("uses anonymous dataset mode when datasetId is omitted", async () => {
+  const log = [];
+  const engine = await createWordsAnalysisEngine({
+    databaseBytes: new Uint8Array([1, 2, 3]),
+    moduleFactory: fakeFactory(log),
+  });
+
+  assert.equal(engine.datasetId, "");
+  assert.deepEqual(log[0], ["load", [1, 2, 3], ""]);
+  engine.dispose();
 });
 
 test("validates the database source before instantiating WebAssembly", async () => {

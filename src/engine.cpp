@@ -2684,11 +2684,29 @@ void preserve_independent_tokens(QueryResult &result, QueryResult &&auxiliary) {
 
 } // namespace
 
+std::uint64_t
+Engine::dataset_fingerprint(const std::string_view dataset_id) noexcept {
+    if (dataset_id.empty()) {
+        return 0U;
+    }
+
+    constexpr std::uint64_t offset_basis = 14'695'981'039'346'656'037ULL;
+    constexpr std::uint64_t prime = 1'099'511'628'211ULL;
+    std::uint64_t fingerprint = offset_basis;
+    for (const char value : dataset_id) {
+        fingerprint ^= static_cast<unsigned char>(value);
+        fingerprint *= prime;
+    }
+    // Zero denotes anonymous mode and must not be produced by a named dataset.
+    return fingerprint == 0U ? 1U : fingerprint;
+}
+
 bool valid_dataset_id(const std::string_view value) noexcept {
-    return value.size() == dataset_id_prefix.size() + sha256_hex_digit_count &&
-           value.starts_with(dataset_id_prefix) &&
-           std::ranges::all_of(value.substr(dataset_id_prefix.size()),
-                               is_lower_hex);
+    return value.empty() ||
+           (value.size() == dataset_id_prefix.size() + sha256_hex_digit_count &&
+            value.starts_with(dataset_id_prefix) &&
+            std::ranges::all_of(value.substr(dataset_id_prefix.size()),
+                                is_lower_hex));
 }
 
 std::expected<std::unique_ptr<const Engine>, LoadError>
@@ -2696,8 +2714,8 @@ Engine::create(std::vector<std::byte> database_image, EngineConfig config) {
     if (!valid_dataset_id(config.dataset_id)) {
         return std::unexpected(
             LoadError{.code = "invalid-dataset-id",
-                      .message = "datasetId must be sha256: followed by 64 "
-                                 "lowercase hex digits"});
+                      .message = "datasetId must be empty or sha256: followed "
+                                 "by 64 lowercase hex digits"});
     }
     auto database = Database::load_poc(std::move(database_image));
     if (!database) {
@@ -2721,7 +2739,7 @@ QueryResult Engine::analyze(const TextToken &token,
     const auto utf8 = token.text;
     auto lexed = lexer_.lex(utf8);
     if (!lexed) {
-        QueryResult result;
+        QueryResult result{dataset_identity_};
         result.options = options;
         result.surface.original_utf8.assign(utf8);
         result.status = QueryStatus::error;
@@ -2731,7 +2749,7 @@ QueryResult Engine::analyze(const TextToken &token,
         return result;
     }
 
-    QueryResult result;
+    QueryResult result{dataset_identity_};
     result.options = options;
     result.surface = std::move(*lexed);
     const auto finish = [&]() -> QueryResult {
@@ -2920,7 +2938,7 @@ QueryResult Engine::analyze_text(const std::string_view utf8,
 
     const auto second = cursor.next();
     if (!first || !second || cursor.peek() != nullptr) {
-        QueryResult result;
+        QueryResult result{dataset_identity_};
         result.options = options;
         result.surface.original_utf8.assign(utf8);
         result.multi_token_query = MultiTokenQueryIR{

@@ -109,11 +109,9 @@ parse_options(const int argc, char *const argv[]) {
         }
     }
 
-    if (options.database.empty() || options.dataset_id.empty() ||
-        options.format.empty() ||
+    if (options.database.empty() || options.format.empty() ||
         (!options.batch_json_lines && options.word.empty())) {
-        return std::unexpected(
-            "database, dataset-id, format, and word are required");
+        return std::unexpected("database, format, and word are required");
     }
     if (options.batch_json_lines && !options.word.empty()) {
         return std::unexpected(
@@ -156,7 +154,7 @@ read_file(const std::filesystem::path &path) {
 }
 
 void usage() {
-    std::cerr << "usage: words_cli --database FILE --dataset-id sha256:... "
+    std::cerr << "usage: words_cli --database FILE [--dataset-id sha256:...] "
                  "--format analysis|search|analysis-v2|search-v2 "
                  "[--two-words=legacy] "
                  "[--whitaker-trim=annotate|filter] "

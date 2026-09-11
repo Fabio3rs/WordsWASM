@@ -16,13 +16,15 @@
 namespace words {
 
 struct EngineConfig final {
+    // Empty disables dataset provenance. Non-empty values must use the
+    // canonical "sha256:" form accepted by valid_dataset_id().
     std::string dataset_id;
 };
 
 class Engine final {
   public:
     [[nodiscard]] static std::expected<std::unique_ptr<const Engine>, LoadError>
-    create(std::vector<std::byte> database_image, EngineConfig config);
+    create(std::vector<std::byte> database_image, EngineConfig config = {});
 
     Engine(const Engine &) = delete;
     Engine &operator=(const Engine &) = delete;
@@ -51,17 +53,27 @@ class Engine final {
     dataset_id() const noexcept WORDS_LIFETIMEBOUND {
         return dataset_id_;
     }
+    [[nodiscard]] bool owns(const QueryResult &result) const noexcept {
+        // Anonymous engines and default-constructed results all use tag zero;
+        // callers selecting that mode intentionally waive cross-engine checks.
+        return result.origin == dataset_identity_;
+    }
     [[nodiscard]] bool supports_full_analysis() const noexcept {
         return database_->has_meanings();
     }
 
   private:
+    [[nodiscard]] static std::uint64_t
+    dataset_fingerprint(std::string_view dataset_id) noexcept;
+
     Engine(std::unique_ptr<const Database> database, EngineConfig config)
         : database_{std::move(database)},
-          dataset_id_{std::move(config.dataset_id)} {}
+          dataset_id_{std::move(config.dataset_id)},
+          dataset_identity_{dataset_fingerprint(dataset_id_)} {}
 
     std::unique_ptr<const Database> database_;
     std::string dataset_id_;
+    DatasetIdentity dataset_identity_;
     LatinLexer lexer_;
 };
 

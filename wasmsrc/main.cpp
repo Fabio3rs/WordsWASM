@@ -737,6 +737,10 @@ void canonicalize_hits(std::vector<BrowserSearchHit> &hits) {
 browser_search_result(const words::Engine &engine,
                       const words::QueryResult &result,
                       const bool include_meanings) {
+    if (!engine.owns(result)) {
+        throw std::logic_error{
+            "analysis result belongs to a different dataset"};
+    }
     BrowserSearchResult output;
     if (include_meanings) {
         output.schema = "whitakers-words.browser-analysis";
@@ -837,7 +841,7 @@ browser_search_result(const words::Engine &engine,
     }
     output.tokens.reserve(result.independent_tokens.size());
     for (const auto &token : result.independent_tokens) {
-        words::QueryResult token_result;
+        words::QueryResult token_result{result.origin};
         token_result.options = result.options;
         token_result.surface = token.surface;
         token_result.status = token.status;
@@ -876,7 +880,7 @@ class BrowserAnalysisEngine final {
                                            const std::string &dataset_id) {
         try {
             const auto uint8_array = emscripten::val::global("Uint8Array");
-            if (!bytes.instanceof(uint8_array)) {
+            if (!bytes.instanceof (uint8_array)) {
                 return failure("invalid-database-buffer",
                                "database must be a Uint8Array", 0U);
             }

@@ -2379,7 +2379,7 @@ de API ou formato para resolver um custo que pertence a outra camada.
 | 1 | fast path ASCII no lexer, mantendo utf8proc como fallback | S–M | alto em alocações e moderado em CPU | 49,54% dos blocos no lexer/utf8proc; matriz UTF-8 e propriedades completas de `SurfaceForm` |
 | 2 | **Concluído:** agenda do scheduler por `(kind, stage, priority)` | S–M | -7,73% de instruções e -3,91% de parede na engine | 83.009 visitas em vez de 4,45 milhões; 170 IDs e ordem semântica cobertos |
 | 3 | sink de `analyze_line` com wrapper materializador | M | alto em memória para documentos grandes, pequeno/moderado em CPU | `QueryResult` acumulou 8,95 MB; paridade completa wrapper/sink em lookahead, compostos, erros e Unicode |
-| 4 | **Concluído:** identidade removida de `QueryResult`; `datasetId` mantido uma vez na engine | S | -4.573 blocos por corpus e `QueryResult` 32 bytes menor | projeções internas são síncronas com a mesma engine; contrato externo de `datasetId` preservado |
+| 4 | **Concluído:** tag `uint64_t` em `QueryResult`; `datasetId` textual mantido uma vez na engine | S | -4.573 blocos por corpus e `QueryResult` nativo 32 bytes menor | rejeição entre datasets preservada sem alocação por resultado; modo anônimo explícito usa tag zero |
 | 5 | small buffer para `AddonId` | S–M | moderado em blocos, baixo em bytes | 30.099 blocos/415 KB; cobrir transição inline→heap e move |
 | 6 | descritores compactos/materialização tardia de `AnalysisIR` | L | potencialmente muito alto em bytes | 14,36 MB; risco semântico e de lifetime alto, exige A/B forte |
 
@@ -2613,51 +2613,69 @@ dense e search-only 1.10. Os binários, Callgrind, DHAT e summaries do Node est�
 em `build/*/profiles/ascii-fast-path/` e os módulos anteriores congelados em
 `build/{wasm,wasm-profile}/snapshot-ascii-fast-path-before/`.
 
-## Resultado: identidade somente no escopo da engine
+## Resultado: identidade compacta por resultado
 
-O perfil sugeria codificar o SHA-256 em 32 bytes inline dentro de cada
-`QueryResult`. A revisão do contrato mostrou uma solução mais simples:
-`DatasetIdentity`, `QueryResult::origin` e `Engine::owns` foram removidos. O
-`datasetId` textual permanece armazenado uma única vez na `Engine`, validado na
-carga e publicado sem alteração nos envelopes JSON e no browser.
+O estado inicial copiava o `datasetId` textual para cada `QueryResult`; como o
+valor excede SSO, isso custava uma pequena alocação por resultado. Um primeiro
+POC removeu a identidade por resultado e confirmou o teto do ganho. A solução
+integrada recupera o guardrail com `DatasetIdentity`: a engine conserva uma
+única string canônica e calcula uma tag FNV-1a de 64 bits; cada resultado leva
+somente esse `uint64_t`. A tag não é um mecanismo criptográfico nem é
+serializada. Ela serve para detectar o uso acidental de IDs locais com uma
+engine de outro dataset confiável.
 
-Os IDs do IR continuam locais ao banco. A API C++ documenta que a projeção deve
-receber a mesma engine que produziu o resultado; CLI e Wasm já garantem isso
-estruturalmente porque analisam e projetam dentro da mesma chamada. O binding
-não expõe `QueryResult` nativo e um reload não deixa resultados antigos
-acessíveis ao JavaScript.
+Os campos foram ordenados de acordo com os dois ABIs. Em x86-64/libstdc++, a
+tag ocupa os bytes 264--271 que já separavam `QueryStatus` dos vetores, mantém
+os membros pesados nos mesmos offsets e deixa `sizeof(QueryResult)` em 816
+bytes, contra 848 com a string. Em wasm32/libc++, não existe um padding externo
+de oito bytes: o resultado cresce de 352 bytes no POC sem tag para 360 bytes.
+Foi mantido o acesso alinhado a `uint64_t`; empacotar o campo e introduzir loads
+desalinhados não se justificaria para economizar cerca de 33 KB na Eneida.
 
-O A/B usou o fast path ASCII já integrado, WWDB 1.10 dense e Eneida IV. Cinco
-pares intercalados de 100 passagens no CPU 11 deram:
+O `datasetId` passou também a ser opcional. String vazia é um modo anônimo
+explícito: `Engine::dataset_id()` e os envelopes publicam `""`, e a tag interna
+é zero. Resultados anônimos podem ser aceitos por qualquer engine anônima,
+inclusive um `QueryResult` default; engines com ID rejeitam resultados
+anônimos, e vice-versa. CLI e wrapper JavaScript aceitam omitir o ID. Um valor
+não vazio continua obrigado a usar `sha256:` seguido de 64 dígitos hexadecimais
+minúsculos. Artefatos publicados e respostas persistidas devem usar esse ID
+canônico, pois o modo anônimo deliberadamente abre mão da proveniência.
 
-| Métrica | Antes | Sem identidade por resultado | Delta |
-| --- | ---: | ---: | ---: |
-| mediana nativa por corpus | 42,876 ms | 41,582 ms | -3,02% |
-| instruções Callgrind, 1 passagem | 410.567.424 | 409.044.483 | -0,37% |
-| bytes DHAT, loader + warmup + 1 passagem | 58.240.040 | 56.886.552 | -2,32% |
-| blocos DHAT, loader + warmup + 1 passagem | 139.910 | 130.764 | -6,54% |
-| core Wasm, mediana de 5 pares de 20 passagens | 86,970 ms | 85,613 ms | -1,56% |
-| `.text` do benchmark nativo | 699.699 B | 698.315 B | -1.384 B |
-| Wasm Release | 861.764 B | 860.726 B | -1.038 B |
-| Wasm profiling | 1.056.238 B | 1.055.198 B | -1.040 B |
+O A/B final usou o fast path ASCII, WWDB 1.10 dense e Eneida IV. A coluna
+"sem tag" é o POC intermediário congelado; ela isola o custo incremental do
+guardrail compacto:
 
-Como warmup e região medida processam o corpus uma vez cada, a diferença do
-DHAT corresponde exatamente a 4.573 alocações e 676.744 bytes por passagem. O
-volume supera os 329.256 bytes das strings porque remover o campo também reduz
-`QueryResult` em 32 bytes e, portanto, os buffers dos vetores de resultados.
+| Métrica | String por resultado | Sem tag | Tag `uint64_t` | Tag vs. sem tag |
+| --- | ---: | ---: | ---: | ---: |
+| `sizeof(QueryResult)`, x86-64 | 848 B | 816 B | 816 B | 0 B |
+| bytes DHAT, loader + warmup + 1 passagem | 58.240.040 | 56.886.552 | 56.886.560 | +8 B |
+| blocos DHAT, loader + warmup + 1 passagem | 139.910 | 130.764 | 130.764 | 0 |
+| instruções Callgrind, 1 passagem | 410.567.424 | 409.209.719 | 409.218.865 | +0,002% |
+| `.text` do benchmark nativo | 699.699 B | 698.315 B | 698.911 B | +596 B |
+| `sizeof(QueryResult)`, wasm32 | maior pela string | 352 B | 360 B | +8 B |
+| core Wasm, mediana controlada de 6 pares x 20 | -- | 86,287 ms | 86,585 ms | +0,35% |
+| pico vivo do resultado no heap Wasm | 7.854.864 B | 7.389.592 B | 7.422.504 B | +32.912 B |
+| Wasm Release | 861.764 B | 860.726 B | 861.174 B | +448 B |
+| Wasm profiling | 1.056.238 B | 1.055.198 B | 1.055.634 B | +436 B |
 
-No heap Wasm, os resultados vivos passaram de 7.854.864 para 7.389.592 bytes
-acima do baseline, redução de 465.272 bytes. A memória linear reservada ficou
-inalterada em 17.235.968 bytes, e ambas as variantes voltaram exatamente ao
-baseline após destruir os resultados.
+Contra a string original, a solução final ainda elimina 4.573 alocações por
+passagem e reduz em 432.360 bytes o pico vivo de resultados Wasm. No DHAT,
+warmup e região medida percorrem o corpus uma vez cada, logo os 9.146 blocos
+eliminados correspondem exatamente a duas passagens. A memória linear Wasm
+permaneceu em 17.235.968 bytes e voltou ao baseline depois da destruição dos
+resultados. A diferença de +0,35% no core está dentro da dispersão observada e
+é coerente com Callgrind essencialmente neutro.
 
-O teste antigo de rejeição entre engines foi substituído por um guardrail que
-confere a retenção do `datasetId` na engine e sua publicação no JSON. As suítes
-regular e ASan/UBSan/LeakSanitizer no NativeLab passaram 152/152; os smokes
-Wasm Release e profiling passaram com os bancos dense e search-only 1.10.
-Artefatos: `build/perf-investigation-clang/profiles/dataset-identity/`,
-`build/wasm-profile/profiles/dataset-identity/` e snapshots anteriores em
-`build/{wasm,wasm-profile}/snapshot-dataset-identity-before/`.
+Os guardrails cobrem engines com o mesmo ID, IDs distintos e modo anônimo, além
+da publicação da string vazia em JSON. A suíte regular e a suíte
+ASan/UBSan/LeakSanitizer no NativeLab passaram 153/153; os testes Node e de
+tipos passaram, e os smokes Wasm Release e profiling passaram com bancos dense
+e search-only 1.10, incluindo um smoke real com ID vazio. Artefatos do POC sem
+tag e da solução final estão em
+`build/perf-investigation-clang/profiles/dataset-tag/` e
+`build/wasm-profile/profiles/dataset-tag/`; os módulos sem tag estão congelados
+em `build/{wasm,wasm-profile}/snapshot-dataset-tag-before/`. O A/B original da
+string está em `build/perf-investigation-clang/profiles/dataset-identity/`.
 
 ## Limitações
 

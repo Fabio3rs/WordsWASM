@@ -541,7 +541,7 @@ Para Unicode:
 ## API e CLI atuais
 
 ```cpp
-Engine::create(std::vector<std::byte>, EngineConfig)
+Engine::create(std::vector<std::byte>, EngineConfig = {})
     -> std::expected<std::unique_ptr<const Engine>, LoadError>;
 
 Engine::analyze(std::string_view) const
@@ -588,13 +588,18 @@ Em `analyze_line`, cada resultado corresponde à unidade delimitada pelos
 offsets dos tokens: pontuação externa não integra `query.text`, enquanto o
 whitespace interno de um composto reconhecido é preservado no trecho original.
 
-`EngineConfig` exige um `datasetId` no formato `sha256:`. O PoC ainda não
-armazena esse valor, portanto ele é fornecido pelo host.
+`EngineConfig` aceita um `datasetId` no formato `sha256:` e mantém esse valor na
+engine. Ele é opcional: a string vazia seleciona o modo anônimo, cujo tag
+inteiro é zero. Nesse modo, resultados não têm proveniência distinguível e
+podem ser projetados por qualquer outra engine anônima; uma engine com ID
+continua rejeitando resultados anônimos ou de outro dataset. O modo anônimo é
+conveniente para testes e integrações locais, enquanto artefatos publicados
+devem preferir o ID canônico do manifesto.
 
 O CLI nativo é:
 
 ```text
-words_cli --database FILE --dataset-id sha256:... \
+words_cli --database FILE [--dataset-id sha256:...] \
           --format analysis|search LATIN_TEXT
 ```
 

@@ -51,6 +51,9 @@ void createWordsAnalysisEngine({
   datasetId: "sha256:test",
   databaseUrl: "/words-search.wwdb",
 });
+void createWordsAnalysisEngine({
+  databaseBytes: new Uint8Array(),
+});
 // @ts-expect-error Exactly one database source is required.
 void createWordsAnalysisEngine({datasetId: "sha256:test"});
 // @ts-expect-error The two database sources are mutually exclusive.

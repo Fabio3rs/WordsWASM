@@ -208,7 +208,12 @@ TEST(EngineTest, SearchDatabasePreservesTheFullDatabaseHitContract) {
         std::logic_error);
 }
 
-TEST(EngineTest, KeepsDatasetIdAtEngineScope) {
+TEST(EngineTest, UsesCompactDatasetTagForResultOwnership) {
+    const auto result = test::engine().analyze("puella");
+    EXPECT_TRUE(test::engine().owns(result));
+    EXPECT_TRUE(test::search_engine().owns(result));
+    EXPECT_FALSE(test::engine().owns(QueryResult{}));
+
     auto other_dataset_id = std::string{test::dataset_id};
     other_dataset_id.back() = other_dataset_id.back() == '0' ? '1' : '0';
     auto loaded = Engine::create(test::read_database(),
@@ -216,9 +221,33 @@ TEST(EngineTest, KeepsDatasetIdAtEngineScope) {
     ASSERT_TRUE(loaded);
 
     EXPECT_EQ((**loaded).dataset_id(), other_dataset_id);
-    const auto result = (**loaded).analyze("puella");
-    const auto document = Json::parse(search_json(**loaded, result));
+    EXPECT_FALSE((**loaded).owns(result));
+    EXPECT_THROW(static_cast<void>(analysis_json(**loaded, result)),
+                 std::logic_error);
+    EXPECT_THROW(static_cast<void>(search_json(**loaded, result)),
+                 std::logic_error);
+
+    const auto other_result = (**loaded).analyze("puella");
+    const auto document = Json::parse(search_json(**loaded, other_result));
     EXPECT_EQ(document.at("datasetId"), other_dataset_id);
+}
+
+TEST(EngineTest, AllowsAnEmptyDatasetIdAsAnonymousMode) {
+    auto first = Engine::create(test::read_database());
+    auto second = Engine::create(test::read_database(), EngineConfig{});
+    ASSERT_TRUE(first);
+    ASSERT_TRUE(second);
+
+    const auto anonymous_result = (**first).analyze("puella");
+    EXPECT_TRUE((**first).dataset_id().empty());
+    EXPECT_TRUE((**first).owns(anonymous_result));
+    EXPECT_TRUE((**second).owns(anonymous_result));
+    EXPECT_TRUE((**first).owns(QueryResult{}));
+    EXPECT_FALSE(test::engine().owns(anonymous_result));
+    EXPECT_FALSE((**first).owns(test::engine().analyze("puella")));
+
+    const auto document = Json::parse(search_json(**first, anonymous_result));
+    EXPECT_EQ(document.at("datasetId"), "");
 }
 
 TEST(EngineTest, SearchDatabaseResolvesCanonicalLemmaWithoutMeanings) {

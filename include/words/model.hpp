@@ -14,7 +14,25 @@
 
 namespace words {
 
+class Engine;
 class Database;
+
+// Compact, process-local provenance for dataset-scoped IDs. The canonical
+// sha256 text remains owned once by Engine; results carry only this tag. Zero
+// denotes the explicitly anonymous mode selected by an empty dataset ID.
+class DatasetIdentity final {
+  public:
+    DatasetIdentity() = default;
+    auto operator<=>(const DatasetIdentity &) const = default;
+
+  private:
+    explicit constexpr DatasetIdentity(const std::uint64_t value) noexcept
+        : value_{value} {}
+
+    std::uint64_t value_{};
+
+    friend class Engine;
+};
 
 template <class Tag> class Id final {
   public:
@@ -751,17 +769,22 @@ struct MultiTokenQueryIR final {
 };
 
 struct QueryResult final {
+    QueryResult() = default;
+    explicit QueryResult(const DatasetIdentity result_origin) noexcept
+        : origin{result_origin} {}
+
     // Counts every materialized interpretation, including the owned token
     // snapshots carried by a lossless compound result.
     [[nodiscard]] std::size_t total_analyses() const noexcept;
 
     AnalysisOptions options;
+    QueryStatus status{QueryStatus::unknown};
     SurfaceForm surface;
     // Single-word analysis continues to use SurfaceForm directly.  Only the
     // bounded two-token API allocates these strings, keeping ranges in the IR
     // anchored to the first token while exposing the complete public query.
     std::optional<MultiTokenQueryIR> multi_token_query;
-    QueryStatus status{QueryStatus::unknown};
+    DatasetIdentity origin;
     std::vector<AnalysisIR> analyses;
     std::vector<CompoundAnalysisIR> compound_analyses;
     // A recognized compound supplements, rather than replaces, the analyses

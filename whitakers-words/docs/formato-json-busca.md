@@ -50,6 +50,12 @@ valor não é o hash do WWDB que o contém, o que criaria uma autorreferência. 
 devem usar o mesmo valor. Resultados de datasets diferentes não podem ser
 misturados.
 
+Para testes e bancos locais, a engine também admite o modo anônimo. Nesse caso
+`datasetId` é a string vazia no documento e o tag interno de proveniência é
+zero. Esse modo não distingue resultados produzidos por engines anônimas
+diferentes; portanto, respostas persistidas ou intercambiadas entre processos
+devem usar o identificador canônico, não o modo anônimo.
+
 `status` segue as mesmas regras do contrato completo:
 
 - `analyzed` exige ao menos um elemento em `hits`;

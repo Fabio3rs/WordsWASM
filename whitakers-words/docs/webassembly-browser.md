@@ -183,6 +183,12 @@ identidade do snapshot legado. O ledger obrigatório
 ressalva morfológica muda o `datasetId`. Cada arquivo também tem seu SHA-256
 físico em `manifest.json`.
 
+O wrapper também aceita omitir `datasetId` (ou fornecer `""`). Isso seleciona
+o modo anônimo: a engine e seus documentos expõem a string vazia e o tag
+interno de proveniência é zero. Como duas engines anônimas não podem ser
+distinguidas por esse guardrail, o modo é apropriado para testes e bancos
+locais; builds publicadas devem continuar usando o `datasetId` do manifesto.
+
 O módulo foi gerado para `web`, `worker` e `node`. Análises isoladas podem ser
 feitas na thread principal; uma interface interativa com lotes deve hospedar
 uma engine persistente em Web Worker para não bloquear renderização. O proxy

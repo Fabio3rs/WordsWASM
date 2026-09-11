@@ -2,9 +2,9 @@ const defaultModuleUrl = new URL("./words_wasm.mjs", import.meta.url);
 
 function requireDatasetId(datasetId) {
   if (typeof datasetId !== "string" ||
-      !/^sha256:[0-9a-f]{64}$/.test(datasetId)) {
+      (datasetId !== "" && !/^sha256:[0-9a-f]{64}$/.test(datasetId))) {
     throw new TypeError(
-      "datasetId must be sha256: followed by 64 lowercase hex digits",
+      "datasetId must be empty or sha256: followed by 64 lowercase hex digits",
     );
   }
 }
@@ -374,9 +374,10 @@ function copyResult(raw) {
  *
  * Pass either databaseUrl or databaseBytes. moduleFactory and fetchImpl exist
  * primarily so hosts and tests can control loading without global state.
+ * datasetId is optional; omitting it selects anonymous provenance tag zero.
  */
 export async function createWordsAnalysisEngine({
-  datasetId,
+  datasetId = "",
   databaseUrl,
   databaseBytes,
   moduleUrl = defaultModuleUrl,

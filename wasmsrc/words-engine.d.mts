@@ -343,7 +343,12 @@ type DatabaseSource =
   | {databaseBytes: Uint8Array | ArrayBuffer; databaseUrl?: never};
 
 export type CreateWordsAnalysisEngineOptions = DatabaseSource & {
-  datasetId: string;
+  /**
+   * Canonical dataset identity. Omit or use an empty string to disable
+   * provenance checks; named datasets require `sha256:` plus 64 lowercase
+   * hexadecimal digits.
+   */
+  datasetId?: string;
   moduleUrl?: string | URL;
   moduleFactory?: (options?: unknown) => Promise<unknown>;
   moduleOptions?: Record<string, unknown>;
