@@ -124,5 +124,38 @@ node whitakers-words/poc/latin-unicode/measure_compression.mjs \
   build/latin-unicode-wasm/whitakers-words/poc/latin-unicode/latin_unicode_utf8proc_size.wasm
 ```
 
+Para comparar também as representações destiladas de
+`utf8proc_category`, gere as fontes com a tool nativa e compile-as diretamente
+com os mesmos objetivos de tamanho dos microtargets:
+
+```sh
+cmake --build build --target utf8proc_destilation
+(cd build/tools && ./utf8proc_destilation)
+
+/mnt/projects/Projects/emsdk/upstream/emscripten/em++ \
+  build/tools/unicode_table.cpp \
+  -std=c++23 -Oz -flto \
+  -sWASM=1 -sFILESYSTEM=0 -sENVIRONMENT=node \
+  -o build/tools/unicode_table.mjs
+
+/mnt/projects/Projects/emsdk/upstream/emscripten/em++ \
+  build/tools/unicode_switch.cpp \
+  -std=c++23 -Oz -flto \
+  -sWASM=1 -sFILESYSTEM=0 -sENVIRONMENT=node \
+  -o build/tools/unicode_switch.mjs
+
+node whitakers-words/poc/latin-unicode/measure_compression.mjs \
+  build/latin-unicode-wasm/whitakers-words/poc/latin-unicode/latin_unicode_poc_size.wasm \
+  build/latin-unicode-wasm/whitakers-words/poc/latin-unicode/latin_unicode_poc_into_size.wasm \
+  build/latin-unicode-wasm/whitakers-words/poc/latin-unicode/latin_unicode_utf8proc_size.wasm \
+  build/tools/unicode_table.wasm \
+  build/tools/unicode_switch.wasm
+```
+
+As fontes geradas marcam `get_unicode_category` com `EMSCRIPTEN_KEEPALIVE`,
+disponibilizando `_get_unicode_category` pelo módulo Emscripten e impedindo que
+o LTO elimine o lookup ou seus dados. O gerador permanece nativo; fontes e
+artefatos destilados continuam somente nos diretórios de build.
+
 `measure_compression.mjs` não grava cópias: imprime tamanho bruto, gzip nível 9,
 Brotli qualidade 11 e SHA-256.

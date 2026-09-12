@@ -59,11 +59,18 @@ int main() {
     }
 
     table_dmp << "#include <array>\n";
+    table_dmp << "#include <cstddef>\n";
     table_dmp << "#include <cstdint>\n";
-    table_dmp << "#include <print>\n";
     table_dmp << "#include <utility>\n";
     table_dmp << "\n";
-    table_dmp << "using pair_t = std::pair<int32_t, int8_t>;\n";
+    table_dmp << "#if defined(__EMSCRIPTEN__)\n";
+    table_dmp << "#include <emscripten/emscripten.h>\n";
+    table_dmp << "#else\n";
+    table_dmp << "#include <print>\n";
+    table_dmp << "#include <string>\n";
+    table_dmp << "#endif\n";
+    table_dmp << "\n";
+    table_dmp << "using pair_t = std::pair<std::int32_t, std::int8_t>;\n";
     table_dmp << "\n";
     table_dmp << "constexpr std::array<pair_t, " << codepoints.size()
               << "> codepoints = {\n";
@@ -74,12 +81,50 @@ int main() {
 
     table_dmp << "\n";
     table_dmp << R"cpp(
-int main() {
+#if defined(__EMSCRIPTEN__)
+#define UTF8PROC_DESTILATION_KEEPALIVE EMSCRIPTEN_KEEPALIVE
+#else
+#define UTF8PROC_DESTILATION_KEEPALIVE
+#endif
+
+extern "C" UTF8PROC_DESTILATION_KEEPALIVE std::int8_t
+get_unicode_category(const std::int32_t codepoint) {
+    std::size_t first{};
+    auto count = codepoints.size();
+    while (count != 0U) {
+        const auto step = count / 2U;
+        const auto index = first + step;
+        if (codepoints[index].first < codepoint) {
+            first = index + 1U;
+            count -= step + 1U;
+        } else {
+            count = step;
+        }
+    }
+    if (first == codepoints.size() ||
+        codepoints[first].first != codepoint) {
+        return -1;
+    }
+    return codepoints[first].second;
+}
+
+#undef UTF8PROC_DESTILATION_KEEPALIVE
+
+#if defined(__EMSCRIPTEN__)
+int main() { return 0; }
+#else
+int main(const int argc, const char *const argv[]) {
     std::print("Unicode codepoints count: {}\n", codepoints.size());
     std::print("Unicode table size: {}\n", sizeof(codepoints));
+    if (argc > 1) {
+        const auto codepoint = std::stoi(argv[1], nullptr, 16);
+        std::print("Unicode category: {}\n",
+                   static_cast<int>(get_unicode_category(codepoint)));
+    }
     return 0;
 }
-    )cpp";
+#endif
+)cpp";
     table_dmp.close();
 
     // switch table generation
@@ -90,12 +135,27 @@ int main() {
     }
 
     switch_dmp << "#include <cstdint>\n";
+    switch_dmp << "\n";
+    switch_dmp << "#if defined(__EMSCRIPTEN__)\n";
+    switch_dmp << "#include <emscripten/emscripten.h>\n";
+    switch_dmp << "#else\n";
     switch_dmp << "#include <print>\n";
+    switch_dmp << "#include <string>\n";
+    switch_dmp << "#endif\n";
     switch_dmp << "\n";
     switch_dmp << "// NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers, "
                   "readability-magic-numbers)\n";
     switch_dmp << "// NOLINTNEXTLINE\n";
-    switch_dmp << "int8_t get_unicode_category(int32_t codepoint) {\n";
+    switch_dmp << "#if defined(__EMSCRIPTEN__)\n";
+    switch_dmp << "#define UTF8PROC_DESTILATION_KEEPALIVE "
+                  "EMSCRIPTEN_KEEPALIVE\n";
+    switch_dmp << "#else\n";
+    switch_dmp << "#define UTF8PROC_DESTILATION_KEEPALIVE\n";
+    switch_dmp << "#endif\n";
+    switch_dmp << "\n";
+    switch_dmp << "extern \"C\" UTF8PROC_DESTILATION_KEEPALIVE "
+                  "std::int8_t\n";
+    switch_dmp << "get_unicode_category(const std::int32_t codepoint) {\n";
     switch_dmp << "    switch (codepoint) {\n";
 
     int last = -1;
@@ -122,14 +182,21 @@ int main() {
                   "readability-magic-numbers)\n";
 
     switch_dmp << R"cpp(
-int main(int argc, char **argv) {
+#undef UTF8PROC_DESTILATION_KEEPALIVE
+
+#if defined(__EMSCRIPTEN__)
+int main() { return 0; }
+#else
+int main(const int argc, const char *const argv[]) {
     if (argc > 1) {
-        int32_t codepoint = std::stoi(argv[1], nullptr, 16);
-        std::print("Unicode category: {}\n", get_unicode_category(codepoint));
+        const auto codepoint = std::stoi(argv[1], nullptr, 16);
+        std::print("Unicode category: {}\n",
+                   static_cast<int>(get_unicode_category(codepoint)));
     }
     return 0;
 }
-    )cpp";
+#endif
+)cpp";
 
     switch_dmp.close();
 
