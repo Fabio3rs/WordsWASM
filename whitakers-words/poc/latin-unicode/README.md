@@ -63,12 +63,20 @@ largura de `iterate` nas enumerações de bytes e compara `encode_char` em todo
 escalar válido. Os bits internos gerados têm `static_assert` contra
 `words::BoundaryFlag`.
 
-## Fachada selecionável, ainda fora de produção
+## Fachada selecionável e integração interna
 
 `unicode_backend_selected.hpp` resolve somente por compile time. A opção
 experimental `WORDS_POC_UNICODE_BACKEND=AUTO|FULL|COMPACT` controla o target
 `unicode_backend_selected_size`; `AUTO` significa FULL nativo e COMPACT no
 Emscripten. Os targets com nomes `compact` e `full` sempre forçam cada lado.
+
+A fachada promovida em `src/unicode_backend.*` é a fronteira privada de
+`words_core`. A opção de produção `WORDS_UNICODE_BACKEND=AUTO|FULL|COMPACT`
+tem a mesma resolução: FULL nativo e COMPACT no Emscripten em `AUTO`, com os
+dois modos explícitos disponíveis em qualquer plataforma. `TextTokenCursor`
+usa `iterate` e `words_category`; o caminho não-ASCII de `LatinLexer` usa o
+normalizador finito somente em COMPACT. O fast path ASCII não foi alterado.
+FULL preserva a implementação utf8proc anterior.
 
 `words_category(codepoint)` já devolve a projeção de quatro `BoundaryFlag`. O
 backend full contém a sequência atual de testes sobre `utf8proc_category`; o
@@ -226,10 +234,39 @@ variante de fallback também omite os 22 codepoints já interceptados pelo switc
 especializado anterior em `boundary_flag`. Esta última só representa o fallback,
 não a função completa quando chamada isoladamente.
 
-As fontes geradas marcam seus lookups com `EMSCRIPTEN_KEEPALIVE`, impedindo que
+As fontes geradas de microbenchmark marcam seus lookups com
+`EMSCRIPTEN_KEEPALIVE`, impedindo que
 o LTO elimine o código ou seus dados. O gerador permanece nativo; fontes e
-artefatos destilados continuam somente nos diretórios de build. Nenhuma dessas
-variantes participa do link de produção.
+artefatos isolados continuam somente nos diretórios de build. A fonte de
+biblioteca `generated/compact_words_category.cpp`, sem exports nem I/O,
+participa do link somente quando o backend COMPACT é selecionado.
 
 `measure_compression.mjs` não grava cópias: imprime tamanho bruto, gzip nível 9,
 Brotli qualidade 11 e SHA-256.
+
+## Primeiro A/B no WASM principal
+
+Medição de 2026-09-12 com Emscripten 5.0.6, `Release`, LTO do target principal,
+testes e geração automática de arquivos comprimidos desabilitados. FULL e
+COMPACT foram configurados em árvores separadas; os números comprimidos foram
+calculados sobre o mesmo `.wasm` por `measure_compression.mjs`.
+
+| backend | `.wasm` bruto | gzip-9 | Brotli-11 | `.mjs` bruto |
+| --- | ---: | ---: | ---: | ---: |
+| FULL | 896.863 B | 251.558 B | 172.667 B | 56.721 B |
+| COMPACT | 581.317 B | 170.431 B | 122.126 B | 56.721 B |
+| redução | 315.546 B (35,18%) | 81.127 B (32,25%) | 50.541 B (29,27%) | 0 B |
+
+`AUTO` no Emscripten gerou um `.wasm` byte a byte idêntico ao COMPACT
+(SHA-256 `26431712921f31bf7cc787f6101b47b096ee689b460f6c94cb2f6d518a547f82`).
+O fixture de contrato principal produziu exatamente os mesmos 191.786 bytes de
+JSON nos três builds (FULL, COMPACT e AUTO), e o smoke test completo passou nos
+dois backends explícitos. No executável nativo COMPACT, a inspeção de símbolos
+e dependências também não encontrou `utf8proc`; o build FULL continua contendo
+e expondo a dependência anterior.
+
+O cursor mantém a interface raw de `iterate` (ponteiro, comprimento e inteiro),
+e o decoder compacto subjacente é `always_inline`. Forçar também a fachada
+interna a `always_inline` aumentou o WASM COMPACT para 581.414 B bruto e
+122.366 B em Brotli (+97 B e +240 B); por isso a fachada permanece `inline`
+normal e deixa a decisão de duplicação para o otimizador.

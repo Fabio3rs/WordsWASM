@@ -1,7 +1,7 @@
 add_library(latin_unicode_poc STATIC EXCLUDE_FROM_ALL
     latin_utf8.cpp
 )
-target_include_directories(latin_unicode_poc PUBLIC
+target_include_directories(latin_unicode_poc PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 words_apply_project_options(latin_unicode_poc)
@@ -10,7 +10,7 @@ add_library(unicode_backend_compact_poc STATIC EXCLUDE_FROM_ALL
     unicode_backend_compact.cpp
     generated/compact_words_category.cpp
 )
-target_include_directories(unicode_backend_compact_poc PUBLIC
+target_include_directories(unicode_backend_compact_poc PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/generated"
 )
@@ -34,6 +34,7 @@ if(ENABLE_TESTS AND GTest_FOUND AND NOT EMSCRIPTEN)
     target_link_libraries(latin_unicode_poc_tests PRIVATE
         latin_unicode_poc
         words_core
+        utf8proc::utf8proc
         GTest::GTest
         GTest::Main
     )

@@ -161,6 +161,12 @@ The supported distribution compiler floors are GCC 14 and LLVM 19. Newer
 versions are supported; the CI exercises GCC 14 and LLVM 19 directly, while
 the Windows MinGW job rejects older GCC versions explicitly.
 
+`WORDS_UNICODE_BACKEND=AUTO|FULL|COMPACT` selects the private Unicode backend
+used by `words_core`. `AUTO` keeps the complete vendored utf8proc backend in
+native builds and selects the finite compact backend under Emscripten. `FULL`
+and `COMPACT` force either implementation on both targets, which keeps release
+selection separate from A/B verification. The public lexer API is unchanged.
+
 ### Sanitizer builds
 
 Sanitizers are test-only and are never enabled in published Release binaries.

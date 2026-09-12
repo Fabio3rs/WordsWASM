@@ -1,6 +1,9 @@
 #include "words/lexer.hpp"
+#include "unicode_backend.hpp"
 
+#if defined(WORDS_UNICODE_BACKEND_FULL)
 #include <utf8proc.h>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -16,6 +19,7 @@
 namespace words {
 namespace {
 
+#if defined(WORDS_UNICODE_BACKEND_FULL)
 struct Utf8ProcDeleter final {
     void operator()(utf8proc_uint8_t *value) const noexcept {
         utf8proc_free(value);
@@ -33,17 +37,19 @@ struct Glyph final {
     char base{};
     VowelQuantity quantity{VowelQuantity::unknown};
 };
+#endif
 
 struct CodepointRange final {
-    utf8proc_int32_t first;
-    utf8proc_int32_t last;
+    detail::unicode_backend::codepoint_t first;
+    detail::unicode_backend::codepoint_t last;
 
-    [[nodiscard]] constexpr bool
-    contains(const utf8proc_int32_t codepoint) const noexcept {
+    [[nodiscard]] constexpr bool contains(
+        const detail::unicode_backend::codepoint_t codepoint) const noexcept {
         return codepoint >= first && codepoint <= last;
     }
 };
 
+#if defined(WORDS_UNICODE_BACKEND_FULL)
 constexpr utf8proc_int32_t macron = 0x0304;
 constexpr utf8proc_int32_t breve = 0x0306;
 // WHY: keeping the allowlist ordered lets validation remain allocation-free
@@ -52,6 +58,7 @@ constexpr std::array<utf8proc_int32_t, 22> precomposed_quantity_characters{
     U'Ā', U'ā', U'Ă', U'ă', U'Ē', U'ē', U'Ĕ', U'ĕ', U'Ī', U'ī', U'Ĭ',
     U'ĭ', U'Ō', U'ō', U'Ŏ', U'ŏ', U'Ū', U'ū', U'Ŭ', U'ŭ', U'Ȳ', U'ȳ',
 };
+#endif
 // Unicode PropList.txt, binary property White_Space. Ranges keep the standard
 // data together instead of scattering codepoint literals through control flow.
 constexpr std::array unicode_whitespace_ranges{
@@ -67,13 +74,15 @@ constexpr std::array unicode_whitespace_ranges{
     CodepointRange{.first = 0x3000, .last = 0x3000},
 };
 
+#if defined(WORDS_UNICODE_BACKEND_FULL)
 [[nodiscard]] constexpr bool
 is_supported_quantity_mark(const utf8proc_int32_t codepoint) noexcept {
     return codepoint == macron || codepoint == breve;
 }
+#endif
 
-[[nodiscard]] constexpr bool
-is_unicode_whitespace(const utf8proc_int32_t codepoint) noexcept {
+[[nodiscard]] constexpr bool is_unicode_whitespace(
+    const detail::unicode_backend::codepoint_t codepoint) noexcept {
     return std::ranges::any_of(unicode_whitespace_ranges,
                                [codepoint](const CodepointRange range) {
                                    return range.contains(codepoint);
@@ -81,7 +90,7 @@ is_unicode_whitespace(const utf8proc_int32_t codepoint) noexcept {
 }
 
 [[nodiscard]] BoundaryFlag
-boundary_flag(const utf8proc_int32_t codepoint) noexcept {
+boundary_flag(const detail::unicode_backend::codepoint_t codepoint) noexcept {
     if (is_unicode_whitespace(codepoint)) {
         return BoundaryFlag::whitespace;
     }
@@ -121,46 +130,10 @@ boundary_flag(const utf8proc_int32_t codepoint) noexcept {
         break;
     }
 
-    const auto category = utf8proc_category(codepoint);
-    if (category == UTF8PROC_CATEGORY_PI || category == UTF8PROC_CATEGORY_PF) {
-        return BoundaryFlag::quote;
-    }
-    if (category == UTF8PROC_CATEGORY_PD) {
-        return BoundaryFlag::dash;
-    }
-    if (category == UTF8PROC_CATEGORY_PS || category == UTF8PROC_CATEGORY_PE) {
-        return BoundaryFlag::bracket;
-    }
-    if (category >= UTF8PROC_CATEGORY_PC && category <= UTF8PROC_CATEGORY_PO) {
-        return BoundaryFlag::other_punctuation;
-    }
-    return BoundaryFlag::none;
+    return detail::unicode_backend::words_category(codepoint);
 }
 
-struct DecodedCodepoint final {
-    utf8proc_int32_t value{};
-    std::size_t byte_count{1U};
-    bool valid{};
-};
-
-[[nodiscard]] DecodedCodepoint
-decode_at(const std::span<const utf8proc_uint8_t> bytes,
-          const std::size_t byte_offset) noexcept {
-    const auto remaining = bytes.subspan(byte_offset);
-    const auto available = static_cast<utf8proc_ssize_t>(std::min(
-        remaining.size(), static_cast<std::size_t>(
-                              std::numeric_limits<utf8proc_ssize_t>::max())));
-    utf8proc_int32_t codepoint{};
-    const auto consumed =
-        utf8proc_iterate(remaining.data(), available, &codepoint);
-    if (consumed <= 0) {
-        return {};
-    }
-    return DecodedCodepoint{.value = codepoint,
-                            .byte_count = static_cast<std::size_t>(consumed),
-                            .valid = true};
-}
-
+#if defined(WORDS_UNICODE_BACKEND_FULL)
 [[nodiscard]] constexpr bool
 is_supported_original_codepoint(const utf8proc_int32_t codepoint) noexcept {
     if ((codepoint >= 'A' && codepoint <= 'Z') ||
@@ -189,6 +162,7 @@ is_supported_original_codepoint(const utf8proc_int32_t codepoint) noexcept {
         return false;
     }
 }
+#endif
 
 [[nodiscard]] char lookup_letter(const char value) noexcept {
     if (value == 'j') {
@@ -245,6 +219,7 @@ ascii_lowercase(const unsigned char value) noexcept {
     return result;
 }
 
+#if defined(WORDS_UNICODE_BACKEND_FULL)
 [[nodiscard]] std::expected<MappedUtf8, LexError>
 map_utf8(const std::string_view input, const utf8proc_option_t options) {
     if (input.size() > static_cast<std::size_t>(
@@ -363,18 +338,20 @@ build_logical_offsets(SurfaceForm &surface) {
     }
     return {};
 }
+#endif
 
 } // namespace
 
 std::optional<TextTokenCursor::CachedToken>
 TextTokenCursor::scan(const std::size_t byte_offset) const noexcept {
-    const auto bytes = std::span<const utf8proc_uint8_t>{
-        reinterpret_cast<const utf8proc_uint8_t *>(input_.data()),
+    const auto bytes = std::span<const detail::unicode_backend::byte_t>{
+        reinterpret_cast<const detail::unicode_backend::byte_t *>(
+            input_.data()),
         input_.size()};
     auto cursor = byte_offset;
 
     while (cursor < bytes.size()) {
-        const auto decoded = decode_at(bytes, cursor);
+        const auto decoded = detail::unicode_backend::decode_at(bytes, cursor);
         if (!decoded.valid ||
             boundary_flag(decoded.value) == BoundaryFlag::none) {
             break;
@@ -387,7 +364,7 @@ TextTokenCursor::scan(const std::size_t byte_offset) const noexcept {
 
     const auto word_begin = cursor;
     while (cursor < bytes.size()) {
-        const auto decoded = decode_at(bytes, cursor);
+        const auto decoded = detail::unicode_backend::decode_at(bytes, cursor);
         if (decoded.valid &&
             boundary_flag(decoded.value) != BoundaryFlag::none) {
             break;
@@ -398,7 +375,7 @@ TextTokenCursor::scan(const std::size_t byte_offset) const noexcept {
 
     TextBoundary boundary{.byte_begin = word_end, .byte_end = word_end};
     while (cursor < bytes.size()) {
-        const auto decoded = decode_at(bytes, cursor);
+        const auto decoded = detail::unicode_backend::decode_at(bytes, cursor);
         if (!decoded.valid) {
             break;
         }
@@ -443,14 +420,17 @@ std::optional<TextToken> TextTokenCursor::next() noexcept {
 std::expected<SurfaceForm, LexError>
 LatinLexer::lex(const std::string_view utf8) const {
     // ASCII Latin words need no Unicode validation, decomposition, composition,
-    // or logical-boundary decoding.  Keep all other inputs on the original
-    // utf8proc path so its diagnostics and Unicode semantics stay unchanged.
+    // or logical-boundary decoding. Both backends share this fast path and
+    // handle only the remaining inputs.
     if (utf8.size() <= static_cast<std::size_t>(
                            std::numeric_limits<std::int32_t>::max()) &&
         is_ascii_latin_word(utf8)) {
         return lex_ascii_latin_word(utf8);
     }
 
+#if defined(WORDS_UNICODE_BACKEND_COMPACT)
+    return detail::unicode_backend::normalize_latin(utf8);
+#else
     auto validation = validate_original_input(utf8);
     if (!validation) {
         return std::unexpected(std::move(validation.error()));
@@ -564,6 +544,7 @@ LatinLexer::lex(const std::string_view utf8) const {
         return std::unexpected(std::move(offsets.error()));
     }
     return result;
+#endif
 }
 
 } // namespace words

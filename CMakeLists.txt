@@ -41,6 +41,31 @@ option(WORDS_WASM_PROFILING
     "Keep Wasm function names and expose benchmark-only bindings" OFF)
 option(WORDS_WASM_SOURCE_MAPS
     "Generate Wasm source maps for source-level profiling" OFF)
+set(WORDS_UNICODE_BACKEND "AUTO" CACHE STRING
+    "Unicode backend used by words_core: AUTO, FULL, or COMPACT"
+)
+set_property(CACHE WORDS_UNICODE_BACKEND PROPERTY STRINGS AUTO FULL COMPACT)
+
+string(TOUPPER "${WORDS_UNICODE_BACKEND}" WORDS_UNICODE_BACKEND_NORMALIZED)
+if(WORDS_UNICODE_BACKEND_NORMALIZED STREQUAL "AUTO")
+    if(EMSCRIPTEN)
+        set(WORDS_UNICODE_BACKEND_RESOLVED "COMPACT")
+    else()
+        set(WORDS_UNICODE_BACKEND_RESOLVED "FULL")
+    endif()
+elseif(WORDS_UNICODE_BACKEND_NORMALIZED MATCHES "^(FULL|COMPACT)$")
+    set(WORDS_UNICODE_BACKEND_RESOLVED
+        "${WORDS_UNICODE_BACKEND_NORMALIZED}"
+    )
+else()
+    message(FATAL_ERROR
+        "WORDS_UNICODE_BACKEND must be AUTO, FULL, or COMPACT"
+    )
+endif()
+message(STATUS
+    "words_core Unicode backend: ${WORDS_UNICODE_BACKEND_RESOLVED} "
+    "(requested ${WORDS_UNICODE_BACKEND_NORMALIZED})"
+)
 
 if(ENABLE_STATIC_CLI AND ENABLE_SANITIZERS)
     message(FATAL_ERROR
@@ -195,13 +220,32 @@ target_sources(words_core PRIVATE
     src/model.cpp
     src/projection.cpp
     src/semantics.cpp
+    src/unicode_backend.cpp
 )
 target_include_directories(words_core PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
 )
-target_link_libraries(words_core
-    PUBLIC utf8proc::utf8proc
+target_include_directories(words_core PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
 )
+if(WORDS_UNICODE_BACKEND_RESOLVED STREQUAL "COMPACT")
+    target_compile_definitions(words_core PRIVATE
+        WORDS_UNICODE_BACKEND_COMPACT=1
+    )
+    # Only the implementation archive is part of words_core. Its POC-facing
+    # include directories must not leak into production compilation (where the
+    # internal façade intentionally has the same short header name).
+    target_link_libraries(words_core PRIVATE
+        "$<LINK_ONLY:unicode_backend_compact_poc>"
+    )
+else()
+    target_compile_definitions(words_core PRIVATE
+        WORDS_UNICODE_BACKEND_FULL=1
+    )
+    # Preserve the native/full target's existing transitive dependency while
+    # the compact target intentionally removes utf8proc from its link graph.
+    target_link_libraries(words_core PUBLIC utf8proc::utf8proc)
+endif()
 words_apply_project_options(words_core)
 add_library(WordsWASM_lib ALIAS words_core)
 
@@ -385,6 +429,8 @@ if(ENABLE_TESTS AND GTest_FOUND)
     add_subdirectory(tests)
 endif()
 
-# An isolated research library and its opt-in measurement targets. Nothing in
-# the production words_core or WordsWASM link graph depends on this directory.
+# The compact implementation remains beside its differential tests and
+# generators for the A/B phase. words_core reaches it only through the private
+# façade in src/unicode_backend.* when COMPACT is selected; research executables
+# remain opt-in.
 add_subdirectory(whitakers-words/poc/latin-unicode)
