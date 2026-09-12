@@ -552,6 +552,33 @@ settings dos três targets de tamanho. O resultado foi:
 | --- | ---: | ---: | ---: | ---: |
 | somente `utf8proc_category` | 285.496 B | 285.070 B | 58.252 B | 36.551 B |
 | transformação utf8proc do estudo | 332.520 B | 318.716 B | 88.076 B | 54.494 B |
+| tabela destilada, sete categorias | 7.409 B | 6.952 B | 2.165 B | 1.664 B |
+| switch destilado, sete categorias | 2.823 B | 99 B | 1.481 B | 1.387 B |
+| switch destilado, quatro flags | 2.670 B | 99 B | 1.382 B | 1.293 B |
+| switch de fallback, quatro flags/834 casos | 2.669 B | 99 B | 1.394 B | 1.281 B |
+
+As quatro últimas linhas foram medidas em 12/09/2026 com a tool versionada,
+Emscripten 5.0.6 e os mesmos `-Oz`, LTO e settings dos microtargets. Os três
+micro-WASM originais reproduziram exatamente os tamanhos acima na mesma rodada.
+A tabela contém 856 `pair<int32_t,int8_t>` de 8 bytes: 6.848 bytes lógicos dos
+6.952 da seção DATA e 7.409 do arquivo podem ser atribuídos diretamente ao
+array e ao pequeno scaffold.
+
+Colapsar Pi/Pf, Ps/Pe e Pc/Po nos quatro resultados efetivamente consumidos
+reduziu os grupos de retorno do fonte de 245 para 99 e economizou 153 bytes
+RAW, 99 em gzip e 94 em Brotli sobre o switch de categorias. Remover também os
+22 codepoints já tratados pelo switch especializado de `boundary_flag` deixou
+834 casos, mas economizou somente 1 byte RAW; gzip cresceu 12 bytes e Brotli
+caiu 12. Portanto a especialização semântica trouxe um ganho pequeno, porém
+reproduzível, enquanto a poda foi essencialmente neutralizada pelo lowering do
+LLVM e pela compressão.
+
+O switch de fallback ocupa 0,93% do RAW, 2,39% do gzip e 3,50% do Brotli do
+micro-WASM que chama apenas `utf8proc_category`, reduções respectivas de
+99,07%, 97,61% e 96,50%. Ele não é substituto isolado para `boundary_flag`: os
+22 casos omitidos só são corretos sob a precedência do switch especializado em
+`src/lexer.cpp`. Estas medições ainda não avaliam custo de misses, ranges nem o
+delta no WordsWASM completo e não escolhem uma representação para produção.
 
 Portanto, trocar somente a normalização e conservar
 `TextTokenCursor::boundary_flag` mantém 85,9% dos bytes brutos e 67,1% do
@@ -562,10 +589,10 @@ foram novamente enumerados diretamente contra o vendorizado e coincidiram com
 o relatório: 22/11, 27/20, 156/38 e 651/194 codepoints/ranges, totalizando 856
 codepoints em 263 ranges.
 
-O programa que gerou originalmente os ranges ainda não está versionado. Antes
-de substituir `utf8proc_category`, a geração precisa tornar-se um artefato
-reproduzível ou os arrays finais precisam entrar no repositório junto de um
-teste exaustivo contra o oracle.
+O gerador dos codepoints está agora versionado em
+`tools/utf8proc_destilation`. Além dos microexecutáveis, ele emite uma unidade
+de biblioteca sem scaffold, fixada em utf8proc 2.11.3/Unicode 17.0.0. A fonte
+gerada e o teste exaustivo ficam no POC; produção continua intocada.
 
 ### Leitura para a engine
 
@@ -602,3 +629,134 @@ Outras limitações observadas na revisão:
 - o `dist/words-web/words_wasm.wasm` de 767.066 bytes citado no estudo data de
   30/08. O artefato local de produção do HEAD da revisão mede 859.224 bytes;
   futuros A/Bs precisam congelar ambos os lados no mesmo commit e toolchain.
+
+## 12. Fachada completa antes do A/B de produção
+
+Em 12/09/2026 foi preparado um material isolado que reúne os três usos
+necessários sem alterar `words_core` ou `src/lexer.cpp`:
+
+- tipos próprios baseados em `cstdint`/`cstddef`;
+- `iterate` estrito com o subconjunto explícito consumido pelo Words;
+- `encode_char` estrito para escalares válidos;
+- `words_category(codepoint) -> boundary_flag_t`;
+- `LatinSurfaceNormalizer` como substituto do bloco inteiro que hoje usa os
+  dois `utf8proc_map`.
+
+`words_category` é o seam semântico: no backend full ele executa exatamente a
+sequência atual sobre `utf8proc_category`; no compacto, o switch gerado grava
+diretamente `quote`, `dash`, `bracket` ou `other_punctuation`. Os bits do enum
+isolado são verificados em compile time contra `words::BoundaryFlag`. Full e
+compact vivem em namespaces distintos para coexistirem no executável
+diferencial; `unicode_backend_selected.hpp` reduz a seleção a um alias de
+namespace, sem dispatch runtime.
+
+A opção de pesquisa `WORDS_POC_UNICODE_BACKEND=AUTO|FULL|COMPACT` demonstra o
+contrato de configuração. `AUTO` escolhe full nativo e compact no Emscripten;
+os outros valores forçam a escolha. Ela só governa targets do POC. Em WASM, o
+target AUTO compacto foi byte a byte idêntico ao target COMPACT forçado.
+
+### 12.1 Prova diferencial da fachada
+
+Cinco testes adicionais passaram sem divergência:
+
+| Interface | Matriz |
+| --- | --- |
+| `words_category` | todos os 1.112.064 escalares válidos |
+| `iterate` | comprimento zero e todas as 16.843.008 strings de 1–3 bytes |
+| `iterate` de quatro bytes | 8.388.608 combinações estruturais F0–F7 |
+| `encode_char` | todos os escalares válidos, excluindo surrogates |
+| metadata/bits | versões 2.11.3/17.0.0 e equivalência com `BoundaryFlag` |
+
+A mesma matriz passou em Clang 21, GCC 14 e no build Clang com ASan/UBSan,
+implicit-conversion e unsigned-integer-overflow. Nesse ambiente foi necessário
+desligar somente LeakSanitizer, incompatível com o `ptrace` do executor.
+
+Ao contrário da verificação anterior do decoder rico, a nova comparação de
+`iterate` exige igualdade do retorno `-3/0/1..4`, do escalar escrito e da
+largura, inclusive em rejeição. Null-terminated mode e encoding de surrogate
+permanecem fora do contrato porque nenhum call site do Words os usa.
+
+### 12.2 Decoding raw e custo da abstração
+
+A primeira fachada reutilizava `decode_utf8_scalar` por `string_view` e
+`std::expected`. Era semanticamente correta, mas o Callgrind encontrou 124,60 M
+instruções na etapa de decode contra 73,69 M no full. A implementação foi então
+reduzida a acesso direto a `uint8_t*`, comprimento `ptrdiff_t`, bounds checks e
+inteiros, mantendo a enumeração exaustiva verde.
+
+O decode raw caiu para aproximadamente 77 M instruções quando fora de linha.
+`constexpr inline` reduziu o micro-WASM do mesmo algoritmo de 18.027 para
+17.978 bytes, mas `-Os` ainda preservou a chamada no ELF. Com
+`always_inline`, símbolo e call site desapareceram, o decode caiu novamente
+para 51,41 M instruções e o WASM continuou nos mesmos 17.978 bytes. Isso é 199
+bytes maior que o adaptador antigo de 17.779 bytes, mas reduz 58,7% das
+instruções daquela primeira fachada. O raw `always_inline` é, portanto, a
+variante candidata; o alias de backend também não gera dispatch.
+
+### 12.3 Tamanho conjunto
+
+Os microexecutáveis abaixo exercitam decoding, categoria e normalização. Foram
+compilados com Emscripten 5.0.6, MinSizeRel/`-Oz` e LTO:
+
+| Backend | CODE | DATA | RAW | gzip-9 | Brotli-11 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| compacto raw `always_inline` | 16.569 B | 1.134 B | 17.978 B | 8.819 B | 7.596 B |
+| utf8proc full | 13.770 B | 318.716 B | 332.675 B | 88.143 B | 54.252 B |
+
+O compacto adiciona 2.799 bytes de CODE, mas elimina 317.582 bytes de DATA. O
+resultado líquido é redução de 94,6% RAW, 90,0% em gzip e 86,0% em Brotli no
+micro-WASM conjunto. Isso continua sendo potencial isolado, não delta do
+WordsWASM principal.
+
+Nos ELF nativos MinSizeRel, os arquivos mediram 36.360 B compacto e 358.832 B
+full. O tamanho residente do benchmark combinado foi aproximadamente 11,9 MiB
+nos dois modos e não discrimina os backends: ambos estão linkados e o corpus
+pré-construído domina o pico.
+
+### 12.4 Callgrind, tempo e DHAT
+
+O workload conjunto pré-constrói a entrada fora da região medida, percorre uma
+vez todos os escalares no decoder e em `words_category` e normaliza 6.877
+palavras/40.321 bytes. Callgrind 3.22 registrou:
+
+| Etapa | Compacto, Ir | Full, Ir | Variação compacta |
+| --- | ---: | ---: | ---: |
+| decode | 51,41 M | 73,69 M | -30,2% |
+| categoria | 37,54 M | 48,93 M | -23,3% |
+| normalização | 12,86 M | 23,32 M | -44,9% |
+| conjunto | 101,80 M | 145,95 M | -30,2% |
+
+Cinco pares intercalados de três iterações MinSizeRel deram medianas de 19,37
+ms compacto e 27,04 ms full no host da investigação, vantagem exploratória de
+28,4%. O corpus de todos os escalares é deliberadamente adverso e não modela a
+frequência editorial; o A/B principal ainda é a medida decisiva.
+
+No DHAT, filtrando as stacks sob as funções de normalização e excluindo a
+preparação compartilhada:
+
+| Backend | Blocos | Blocos/operação | Bytes | Bytes/operação |
+| --- | ---: | ---: | ---: | ---: |
+| compacto com ownership | 13.754 | 2,00 | 229.113 | 33,32 |
+| `LatinLexer`/utf8proc | 25.274 | 3,68 | 382.457 | 55,61 |
+
+O compacto reduziu 45,6% dos blocos e 40,1% dos bytes neste mix. Decoder e
+categoria não alocaram. A diferença é menor que no benchmark latino anterior
+porque 4.573 das 6.877 palavras usam o fast path ASCII em ambos os lados.
+
+### 12.5 LLVM fprofile
+
+O build Release instrumentado com LLVM 21 confirmou que o workload atingiu
+exatamente os contratos pretendidos, sem usar contagens como aproximação de
+custo:
+
+- `iterate`: 1.112.064 chamadas por backend;
+- `words_category`: 1.112.064 chamadas por backend;
+- normalização: 6.877 operações por backend;
+- `utf8proc_map`: 4.608 chamadas no full, duas para cada uma das 2.304 formas
+  não ASCII;
+- switch compacto: 856 cases atingidos e 1.111.208 defaults.
+
+Callgrind continua sendo a fonte das instruções; fprofile demonstra frequência
+e cobertura. Com a fachada, a geração reproduzível e esses perfis concluídos,
+o próximo passo já pode ser o A/B no código principal, começando por uma
+integração simples com ownership e builds separados.
