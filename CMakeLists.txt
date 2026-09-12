@@ -377,6 +377,7 @@ else()
         endif()
     endif()
 
+    add_subdirectory(tools)
     add_subdirectory(parsers_investigation)
 endif()
 

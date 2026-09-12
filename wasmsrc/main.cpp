@@ -885,7 +885,7 @@ class BrowserAnalysisEngine final {
                                            const std::string &dataset_id) {
         try {
             const auto uint8_array = emscripten::val::global("Uint8Array");
-            if (!bytes.instanceof (uint8_array)) {
+            if (!bytes.instanceof(uint8_array)) {
                 return failure("invalid-database-buffer",
                                "database must be a Uint8Array", 0U);
             }
@@ -1070,8 +1070,8 @@ class BrowserAnalysisEngine final {
     [[nodiscard]] static words::AnalysisOptions
     analysis_options(const bool two_words) noexcept {
         return words::AnalysisOptions{
-            two_words ? words::TwoWordsMode::legacy_first_match
-                      : words::TwoWordsMode::disabled};
+            .two_words = two_words ? words::TwoWordsMode::legacy_first_match
+                                   : words::TwoWordsMode::disabled};
     }
 
 #if defined(WORDS_WASM_PROFILING)
