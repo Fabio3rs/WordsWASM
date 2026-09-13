@@ -320,6 +320,39 @@ TEST(EngineTest, FoldsIAndJAndUAndVWithoutChangingAnalysisSemantics) {
     }
 }
 
+TEST(EngineTest, ExpandsLigaturesBeforeLookingUpRealWords) {
+    struct Fixture final {
+        std::string_view ligature;
+        std::string_view expanded;
+        std::size_t analysis_count;
+    };
+    constexpr std::array fixtures{
+        Fixture{"rosæ", "rosae", 9U},    Fixture{"Æneas", "aeneas", 1U},
+        Fixture{"cælum", "caelum", 13U}, Fixture{"pœna", "poena", 9U},
+        Fixture{"fœdus", "foedus", 13U},
+    };
+
+    for (const auto &fixture : fixtures) {
+        const auto ligature = test::engine().analyze(fixture.ligature);
+        const auto expanded = test::engine().analyze(fixture.expanded);
+
+        ASSERT_EQ(ligature.status, QueryStatus::analyzed) << fixture.ligature;
+        ASSERT_EQ(expanded.status, QueryStatus::analyzed) << fixture.expanded;
+        EXPECT_EQ(ligature.surface.original_utf8, fixture.ligature);
+        EXPECT_EQ(ligature.surface.normalized_nfc, fixture.expanded);
+        EXPECT_EQ(ligature.surface.orthography_ascii, fixture.expanded);
+        EXPECT_EQ(ligature.surface.lookup_ascii, fixture.expanded);
+        ASSERT_EQ(ligature.analyses.size(), fixture.analysis_count)
+            << fixture.ligature;
+        ASSERT_EQ(expanded.analyses.size(), fixture.analysis_count)
+            << fixture.expanded;
+        EXPECT_EQ(semantic_signatures(ligature.analyses),
+                  semantic_signatures(expanded.analyses))
+            << fixture.ligature;
+        EXPECT_TRUE(ligature.diagnostics.empty()) << fixture.ligature;
+    }
+}
+
 TEST(EngineTest, AnalyzesNounOnlyFixtures) {
     constexpr std::array<std::pair<std::string_view, std::size_t>, 6> fixtures{{
         {"puella", 3U},
@@ -936,8 +969,8 @@ TEST(EngineTest, PreservesHistoricalFinalTokensAndIssue70Split) {
     EXPECT_EQ(line.back().status, QueryStatus::analyzed);
 
     constexpr std::array roman_numerals{
-        std::pair{"I", 1U},   std::pair{"V", 5U},   std::pair{"X", 10U},
-        std::pair{"L", 50U},  std::pair{"C", 100U}, std::pair{"D", 500U},
+        std::pair{"I", 1U},    std::pair{"V", 5U},   std::pair{"X", 10U},
+        std::pair{"L", 50U},   std::pair{"C", 100U}, std::pair{"D", 500U},
         std::pair{"M", 1000U},
     };
     for (const auto &[numeral, expected_value] : roman_numerals) {
@@ -945,8 +978,8 @@ TEST(EngineTest, PreservesHistoricalFinalTokensAndIssue70Split) {
         ASSERT_EQ(result.size(), 1U) << numeral;
         EXPECT_EQ(result.front().status, QueryStatus::analyzed) << numeral;
         ASSERT_EQ(result.front().artificial_analyses.size(), 1U) << numeral;
-        const auto *roman =
-            std::get_if<RomanNumeralIR>(&result.front().artificial_analyses.front());
+        const auto *roman = std::get_if<RomanNumeralIR>(
+            &result.front().artificial_analyses.front());
         ASSERT_NE(roman, nullptr) << numeral;
         EXPECT_EQ(roman->value, expected_value) << numeral;
         EXPECT_TRUE(roman->well_formed) << numeral;
@@ -1013,20 +1046,19 @@ TEST(EngineTest, CorrectsHiscoToThirdConjugationPresentActiveInfinitive) {
     ASSERT_EQ(result.status, QueryStatus::analyzed);
 
     const auto &database = test::engine().database();
-    EXPECT_TRUE(std::ranges::any_of(
-        result.analyses, [&](const AnalysisIR &analysis) {
-            const auto *verb = std::get_if<VerbMorphology>(&analysis.morphology);
-            if (verb == nullptr || verb->conjugation != 3U ||
-                verb->tense != Tense::present || verb->voice != Voice::active ||
-                verb->mood != Mood::infinitive) {
-                return false;
-            }
-            const auto &lexeme = database.lexeme(analysis.lexeme);
-            return citation_lemma(database, lexeme) == "hisco" &&
-                   dictionary_form(database, lexeme).find("hiscere") !=
-                       std::string::npos;
-        }))
-        << "hiscere must retain the corrected hisco, hiscere analysis";
+    EXPECT_TRUE(std::ranges::any_of(result.analyses, [&](const AnalysisIR
+                                                             &analysis) {
+        const auto *verb = std::get_if<VerbMorphology>(&analysis.morphology);
+        if (verb == nullptr || verb->conjugation != 3U ||
+            verb->tense != Tense::present || verb->voice != Voice::active ||
+            verb->mood != Mood::infinitive) {
+            return false;
+        }
+        const auto &lexeme = database.lexeme(analysis.lexeme);
+        return citation_lemma(database, lexeme) == "hisco" &&
+               dictionary_form(database, lexeme).find("hiscere") !=
+                   std::string::npos;
+    })) << "hiscere must retain the corrected hisco, hiscere analysis";
 }
 
 TEST(EngineTest, PreservesSancteHomographsAndVidesneEnclitic) {

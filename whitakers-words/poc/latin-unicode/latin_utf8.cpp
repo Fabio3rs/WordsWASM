@@ -326,6 +326,13 @@ LatinSurfaceNormalizer::requirements(const std::string_view input) const {
                 }
             }
             pending = mapping->glyph;
+            if (mapping->trailing_glyph) {
+                const auto accounted = account_glyph(result, *pending);
+                if (!accounted) {
+                    return std::unexpected(accounted.error());
+                }
+                pending = *mapping->trailing_glyph;
+            }
         } else {
             if (!pending || !detail::is_vowel(pending->base) ||
                 pending->quantity != LatinQuantity::unknown) {
@@ -425,6 +432,10 @@ LatinSurfaceNormalizer::normalize_into(
                 emit(*pending);
             }
             pending = mapping->glyph;
+            if (mapping->trailing_glyph) {
+                emit(*pending);
+                pending = *mapping->trailing_glyph;
+            }
         } else {
             pending->quantity = mapping->glyph.quantity;
         }
@@ -494,6 +505,13 @@ LatinSurfaceNormalizer::normalize(const std::string_view input) const {
                 }
             }
             pending = mapping->glyph;
+            if (mapping->trailing_glyph) {
+                auto appended = append_glyph(result, *pending);
+                if (!appended) {
+                    return std::unexpected(appended.error());
+                }
+                pending = *mapping->trailing_glyph;
+            }
         } else {
             if (!pending || !detail::is_vowel(pending->base) ||
                 pending->quantity != LatinQuantity::unknown) {

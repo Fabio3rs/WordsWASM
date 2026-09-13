@@ -75,6 +75,10 @@ enum class LatinCodepointKind : std::uint8_t {
 struct LatinCodepointMapping final {
     LatinCodepointKind kind{LatinCodepointKind::base_letter};
     LatinGlyph glyph{};
+    // Ligatures expand to two logical ASCII letters. Keeping the trailing
+    // glyph explicit preserves the one-codepoint lookup API while allowing
+    // callers to size all output buffers exactly.
+    std::optional<LatinGlyph> trailing_glyph;
     auto operator<=>(const LatinCodepointMapping &) const = default;
 };
 
@@ -322,6 +326,7 @@ map_latin_codepoint(const char32_t value) noexcept {
         return LatinCodepointMapping{
             .kind = LatinCodepointKind::base_letter,
             .glyph = LatinGlyph{.base = detail::lowercase_ascii(ascii)},
+            .trailing_glyph = std::nullopt,
         };
     }
     if (value == detail::combining_macron || value == detail::combining_breve) {
@@ -333,6 +338,15 @@ map_latin_codepoint(const char32_t value) noexcept {
                                     ? LatinQuantity::long_vowel
                                     : LatinQuantity::short_vowel,
                 },
+            .trailing_glyph = std::nullopt,
+        };
+    }
+    if (value == U'Æ' || value == U'æ' || value == U'Œ' || value == U'œ') {
+        return LatinCodepointMapping{
+            .kind = LatinCodepointKind::base_letter,
+            .glyph =
+                LatinGlyph{.base = value == U'Æ' || value == U'æ' ? 'a' : 'o'},
+            .trailing_glyph = LatinGlyph{.base = 'e'},
         };
     }
 
@@ -356,6 +370,7 @@ map_latin_codepoint(const char32_t value) noexcept {
     return LatinCodepointMapping{
         .kind = LatinCodepointKind::base_letter,
         .glyph = LatinGlyph{.base = entry.base, .quantity = entry.quantity},
+        .trailing_glyph = std::nullopt,
     };
 }
 
@@ -390,6 +405,10 @@ encode_latin_glyph_nfc(const LatinGlyph glyph) noexcept {
 }
 
 static_assert(map_latin_codepoint(U'A')->glyph.base == 'a');
+static_assert(map_latin_codepoint(U'Æ')->glyph.base == 'a');
+static_assert(map_latin_codepoint(U'Æ')->trailing_glyph->base == 'e');
+static_assert(map_latin_codepoint(U'œ')->glyph.base == 'o');
+static_assert(map_latin_codepoint(U'œ')->trailing_glyph->base == 'e');
 static_assert(map_latin_codepoint(0x0232)->glyph ==
               LatinGlyph{'y', LatinQuantity::long_vowel});
 static_assert(!map_latin_codepoint(0x212A).has_value());

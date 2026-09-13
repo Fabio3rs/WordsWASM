@@ -79,6 +79,12 @@ constexpr std::array unicode_whitespace_ranges{
 is_supported_quantity_mark(const utf8proc_int32_t codepoint) noexcept {
     return codepoint == macron || codepoint == breve;
 }
+
+[[nodiscard]] constexpr bool
+is_supported_ligature(const utf8proc_int32_t codepoint) noexcept {
+    return codepoint == U'Æ' || codepoint == U'æ' || codepoint == U'Œ' ||
+           codepoint == U'œ';
+}
 #endif
 
 [[nodiscard]] constexpr bool is_unicode_whitespace(
@@ -138,7 +144,8 @@ boundary_flag(const detail::unicode_backend::codepoint_t codepoint) noexcept {
 is_supported_original_codepoint(const utf8proc_int32_t codepoint) noexcept {
     if ((codepoint >= 'A' && codepoint <= 'Z') ||
         (codepoint >= 'a' && codepoint <= 'z') ||
-        is_supported_quantity_mark(codepoint)) {
+        is_supported_quantity_mark(codepoint) ||
+        is_supported_ligature(codepoint)) {
         return true;
     }
 
@@ -467,6 +474,12 @@ LatinLexer::lex(const std::string_view utf8) const {
 
         if (codepoint >= 'a' && codepoint <= 'z') {
             glyphs.push_back(Glyph{.base = static_cast<char>(codepoint)});
+            continue;
+        }
+        if (is_supported_ligature(codepoint)) {
+            glyphs.push_back(Glyph{
+                .base = codepoint == U'æ' || codepoint == U'Æ' ? 'a' : 'o'});
+            glyphs.push_back(Glyph{.base = 'e'});
             continue;
         }
         if (is_supported_quantity_mark(codepoint)) {

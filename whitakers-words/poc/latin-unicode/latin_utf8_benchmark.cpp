@@ -217,6 +217,12 @@ int main(const int argc, const char *const argv[]) {
                         checksum +=
                             static_cast<unsigned char>(mapping->glyph.base);
                         checksum += std::to_underlying(mapping->glyph.quantity);
+                        if (mapping->trailing_glyph) {
+                            checksum += static_cast<unsigned char>(
+                                mapping->trailing_glyph->base);
+                            checksum += std::to_underlying(
+                                mapping->trailing_glyph->quantity);
+                        }
                     }
                 }
                 return checksum;

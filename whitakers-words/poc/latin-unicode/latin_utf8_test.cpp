@@ -57,7 +57,7 @@ constexpr std::array<ReferenceRow, 22> reference_rows{{
 }};
 
 constexpr auto accepted_input_alphabet = [] {
-    std::array<char32_t, 76> result{};
+    std::array<char32_t, 80> result{};
     std::size_t index{};
     for (char32_t value = U'A'; value <= U'Z'; ++value) {
         result[index++] = value;
@@ -69,6 +69,9 @@ constexpr auto accepted_input_alphabet = [] {
     result[index++] = detail::combining_breve;
     for (const auto &entry : detail::special_latin_mappings) {
         result[index++] = entry.input;
+    }
+    for (const auto ligature : {U'Æ', U'æ', U'Œ', U'œ'}) {
+        result[index++] = ligature;
     }
     if (index != result.size()) {
         throw "finite Latin alphabet size is inconsistent";
@@ -327,6 +330,11 @@ TEST(LatinUnicodeDifferentialTest, CoversRequestedWordsAndOrthographicFolding) {
         std::string_view{"Y\xCC\x84"},
         std::string_view{"y\xCC\x86"},
         std::string_view{"Y\xCC\x86"},
+        std::string_view{"æ"},
+        std::string_view{"Æ"},
+        std::string_view{"œ"},
+        std::string_view{"Œ"},
+        std::string_view{"ÆsopŒæœ"},
     };
     for (const auto input : inputs) {
         expect_differential(input);
@@ -392,7 +400,6 @@ TEST(LatinUnicodeDifferentialTest, RejectsCharactersOutsideFiniteDomain) {
     constexpr std::array rejected{
         std::string_view{"á"},        std::string_view{"à"},
         std::string_view{"â"},        std::string_view{"ä"},
-        std::string_view{"æ"},        std::string_view{"œ"},
         std::string_view{"ß"},        std::string_view{"K"},
         std::string_view{"ſ"},        std::string_view{"Ａ"},
         std::string_view{"α"},        std::string_view{"Ж"},
@@ -502,8 +509,8 @@ TEST(LatinUnicodeDifferentialTest, MutatesValidLatinInputsDeterministically) {
 }
 
 TEST(LatinUnicodePropertyTest, NormalizationIsIdempotentSemantically) {
-    std::vector<std::string> inputs{"puella", "juvenis", "JUVENIS",
-                                    "y\xCC\x86"};
+    std::vector<std::string> inputs{"puella", "juvenis", "JUVENIS", "y\xCC\x86",
+                                    "ÆsopŒæœ"};
     for (const auto &row : reference_rows) {
         inputs.emplace_back(row.utf8);
         inputs.emplace_back(row.decomposed_utf8);
@@ -530,6 +537,9 @@ TEST(LatinUnicodePropertyTest, AcceptedScalarsRoundTripUtf8Codec) {
     }
     for (const auto &entry : detail::special_latin_mappings) {
         accepted.push_back(entry.input);
+    }
+    for (const auto ligature : {U'Æ', U'æ', U'Œ', U'œ'}) {
+        accepted.push_back(ligature);
     }
     for (const auto value : accepted) {
         const auto bytes = encoded(value);
@@ -662,6 +672,39 @@ TEST(LatinUnicodePropertyTest, CallerStorageUsesExactRequirements) {
                                   LatinSurfaceErrorCode::invalid_utf8);
     expect_invalid_without_writes(
         "a\xCC\x84\xCC\x86", LatinSurfaceErrorCode::invalid_vowel_quantity);
+}
+
+TEST(LatinUnicodePropertyTest, LigaturesExpandIntoExactCallerStorage) {
+    constexpr std::string_view input = "ÆŒ";
+    const LatinSurfaceNormalizer normalizer;
+    const auto required = normalizer.requirements(input);
+    ASSERT_TRUE(required.has_value());
+    EXPECT_EQ(required->logical_letters, 4U);
+    EXPECT_EQ(required->normalized_nfc_bytes, 4U);
+
+    std::array<char, 4> normalized{};
+    std::array<char, 4> orthography{};
+    std::array<char, 4> lookup{};
+    std::array<LatinQuantity, 4> quantities{};
+    std::array<std::uint32_t, 5> offsets{};
+    const auto result =
+        normalizer.normalize_into(input, LatinSurfaceBuffers{
+                                             .normalized_nfc = normalized,
+                                             .orthography_ascii = orthography,
+                                             .lookup_ascii = lookup,
+                                             .quantities = quantities,
+                                             .nfc_byte_offsets = offsets,
+                                         });
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->normalized_nfc, "aeoe");
+    EXPECT_EQ(result->orthography_ascii, "aeoe");
+    EXPECT_EQ(result->lookup_ascii, "aeoe");
+    EXPECT_TRUE(std::ranges::all_of(result->quantities, [](const auto value) {
+        return value == LatinQuantity::unknown;
+    }));
+    EXPECT_TRUE(
+        std::ranges::equal(result->nfc_byte_offsets,
+                           std::array<std::uint32_t, 5>{0U, 1U, 2U, 3U, 4U}));
 }
 
 TEST(LatinUnicodePropertyTest, SliceIsTotalForCorruptedPublicOffsets) {

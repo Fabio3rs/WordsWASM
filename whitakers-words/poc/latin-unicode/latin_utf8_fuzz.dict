@@ -1,4 +1,4 @@
-# Valid quantity tokens and spellings.
+# Valid Latin tokens and spellings.
 macron="\xCC\x84"
 breve="\xCC\x86"
 a_macron="a\xCC\x84"
@@ -10,6 +10,10 @@ precomposed_a_breve="\xC4\x83"
 precomposed_y_macron="\xC8\xB3"
 juvenis="juvenis"
 iuuenis="iuuenis"
+ae_ligature="\xC3\xA6"
+uppercase_ae_ligature="\xC3\x86"
+oe_ligature="\xC5\x93"
+uppercase_oe_ligature="\xC5\x92"
 
 # Malformed UTF-8 and unsupported-but-valid Unicode.
 unexpected_continuation="\x80"

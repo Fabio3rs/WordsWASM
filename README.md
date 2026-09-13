@@ -7,7 +7,7 @@ oracle for compatibility testing.
 
 The project currently provides:
 
-- UTF-8 input with macron and breve support;
+- UTF-8 input with macron/breve support and `æ`/`œ` expansion;
 - typed morphological analysis and resolved search results;
 - compact, validated WWDB datasets;
 - separate full and search-only database profiles;

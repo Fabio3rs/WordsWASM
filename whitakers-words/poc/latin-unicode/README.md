@@ -53,7 +53,7 @@ build/whitakers-words/poc/latin-unicode/unicode_backend_poc_tests
 ```
 
 O teste executa, entre outras matrizes, todos os escalares Unicode válidos, as
-444.828 sequências de até três escalares do alfabeto aceito, todas as strings
+518.480 sequências de até três escalares do alfabeto aceito, todas as strings
 de um a três bytes e 8.388.608 casos estruturais de quatro bytes com starters
 `F0`–`F7`. Ambas as APIs são comparadas campo a campo ao oracle.
 
@@ -76,7 +76,8 @@ tem a mesma resolução: FULL nativo e COMPACT no Emscripten em `AUTO`, com os
 dois modos explícitos disponíveis em qualquer plataforma. `TextTokenCursor`
 usa `iterate` e `words_category`; o caminho não-ASCII de `LatinLexer` usa o
 normalizador finito somente em COMPACT. O fast path ASCII não foi alterado.
-FULL preserva a implementação utf8proc anterior.
+FULL usa utf8proc e expande explicitamente `æ`/`Æ` para `ae` e `œ`/`Œ` para
+`oe`; COMPACT reproduz a mesma expansão no normalizador finito.
 
 `words_category(codepoint)` já devolve a projeção de quatro `BoundaryFlag`. O
 backend full contém a sequência atual de testes sobre `utf8proc_category`; o

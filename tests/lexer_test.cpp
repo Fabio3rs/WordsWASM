@@ -119,6 +119,22 @@ TEST(LatinLexerTest, AcceptsSupportedUppercasePrecomposedQuantities) {
     EXPECT_EQ(result->quantities[5], VowelQuantity::long_vowel);
 }
 
+TEST(LatinLexerTest, ExpandsLowercaseAndUppercaseAeAndOeLigatures) {
+    const LatinLexer lexer;
+    const auto result = lexer.lex("ÆsopŒæœ");
+    ASSERT_TRUE(result) << result.error().message;
+    EXPECT_EQ(result->original_utf8, "ÆsopŒæœ");
+    EXPECT_EQ(result->normalized_nfc, "aesopoeaeoe");
+    EXPECT_EQ(result->orthography_ascii, "aesopoeaeoe");
+    EXPECT_EQ(result->lookup_ascii, "aesopoeaeoe");
+    EXPECT_EQ(result->quantities, std::vector(11U, VowelQuantity::unknown));
+    EXPECT_EQ(result->nfc_byte_offsets,
+              (std::vector<std::uint32_t>{0U, 1U, 2U, 3U, 4U, 5U, 6U, 7U, 8U,
+                                          9U, 10U, 11U}));
+    EXPECT_EQ(result->slice({0U, 2U}), "ae");
+    EXPECT_EQ(result->slice({5U, 2U}), "oe");
+}
+
 TEST(LatinLexerTest, RejectsInvalidUtf8) {
     const LatinLexer lexer;
     const std::string invalid{"\xC3\x28", 2};
