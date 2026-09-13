@@ -16,6 +16,149 @@ The project currently provides:
   of presentation filters;
 - differential tests against the bundled Ada engine.
 
+## Download
+
+**[Try WordsWASM in your browser](https://fabio3rs.github.io/WordsWASM/)** ·
+**[Download a release](https://github.com/Fabio3rs/WordsWASM/releases)**
+
+GitHub Releases provide ready-to-run command-line binaries, the WWDB
+databases, and a deployable JavaScript/WebAssembly bundle. In the filenames
+below, `<tag>` is the release tag, for example `v0.9.1`.
+
+| Download | Release asset | Use it for |
+| --- | --- | --- |
+| Linux x86-64 CLI | `words-cli-<tag>-linux-x86_64.tar.gz` | A fully static Linux command-line executable. |
+| Windows x86-64 CLI | `words-cli-<tag>-windows-x86_64.zip` | A Windows command-line executable with no MinGW runtime DLL requirement. |
+| macOS Intel CLI | `words-cli-<tag>-macos-x86_64.tar.gz` | Intel Macs. |
+| macOS Apple silicon CLI | `words-cli-<tag>-macos-arm64.tar.gz` | M-series Macs. |
+| Full database | `words-full-<tag>.wwdb` | Complete analysis and search, including dictionary meanings. |
+| Search database | `words-search-<tag>.wwdb` | Smaller search results without dictionary meanings. |
+| WebAssembly bundle | `words-web-<tag>.tar.gz` | Browser, Web Worker, or Node integration. |
+
+The native CLI archives do **not** contain a database. Download either
+`words-full-<tag>.wwdb` or `words-search-<tag>.wwdb` separately from the same
+release. For normal CLI use, choose the uncompressed `.wwdb`; the `.br` and
+`.gz` variants are precompressed HTTP representations intended for web
+servers.
+
+The release also includes `words-cli-<tag>.sha256` and
+`words-assets-<tag>.sha256` for integrity verification. On Linux, verify
+downloaded files from their directory with:
+
+```sh
+sha256sum --check words-cli-v0.9.1.sha256 --ignore-missing
+sha256sum --check words-assets-v0.9.1.sha256 --ignore-missing
+```
+
+Replace `v0.9.1` in these and the following examples with the tag you
+downloaded.
+
+## Using the command-line interface
+
+### Linux and macOS
+
+Extract the archive for your platform, enter the directory it creates, and
+point the executable at the separately downloaded full database:
+
+```sh
+tar -xzf words-cli-v0.9.1-linux-x86_64.tar.gz
+cd words-cli-v0.9.1-linux-x86_64
+./words_cli \
+  --database ../words-full-v0.9.1.wwdb \
+  --format analysis-v2 \
+  amamus
+```
+
+For macOS, substitute either the `macos-arm64` or `macos-x86_64` archive and
+directory name.
+
+### Windows PowerShell
+
+```powershell
+Expand-Archive words-cli-v0.9.1-windows-x86_64.zip
+Set-Location words-cli-v0.9.1-windows-x86_64
+.\words_cli.exe `
+  --database ..\words-full-v0.9.1.wwdb `
+  --format analysis-v2 `
+  amamus
+```
+
+The CLI writes one JSON document per analyzed unit to standard output. Its
+recommended output formats are:
+
+| Format | Compatible database | Output |
+| --- | --- | --- |
+| `analysis-v2` | `words-full` | Complete morphological analyses, lexical metadata, and meanings. |
+| `search-v2` | `words-full` or `words-search` | Compact resolved hits without meanings. |
+
+The unversioned `analysis` and `search` formats remain available for v1
+compatibility. Quote a phrase or line containing spaces; compounds recognized
+by the grammar are returned as one unit, while independent words produce
+separate JSON lines:
+
+```sh
+./words_cli \
+  --database ../words-full-v0.9.1.wwdb \
+  --format analysis-v2 \
+  "amo puellam"
+```
+
+For many queries, keep one database snapshot loaded and stream one query per
+input line with `--batch-json-lines`:
+
+```sh
+printf 'amo\npuella\nmālum\n' | ./words_cli \
+  --database ../words-full-v0.9.1.wwdb \
+  --format analysis-v2 \
+  --batch-json-lines
+```
+
+`--dataset-id` is optional for local use. Applications that persist or combine
+IDs should pass the `datasetId` recorded in
+`words-web-manifest-<tag>.json`, because lexeme and rule IDs are local to that
+dataset. Run `words_cli` without the required arguments to print all supported
+orthography, derivation, and output options.
+
+## Using the WebAssembly bundle
+
+`words-web-<tag>.tar.gz` expands to a `words-web/` directory containing the
+high-level `words-engine.mjs` API, the generated module and `.wasm`, TypeScript
+declarations, both databases, and their manifests. Place that directory with
+your web assets, then load the database named by its manifest:
+
+```javascript
+import {createWordsAnalysisEngine} from "./words-web/words-engine.mjs";
+
+const assetBase = new URL("./words-web/", import.meta.url);
+const manifest = await fetch(new URL("manifest.json", assetBase))
+  .then((response) => response.json());
+
+const engine = await createWordsAnalysisEngine({
+  databaseUrl: new URL(manifest.databases.full.file, assetBase),
+  datasetId: manifest.datasetId,
+});
+
+const result = engine.analyze("mālum");
+const line = engine.analyzeLine("amo puellam");
+console.log(result, line);
+
+engine.dispose();
+```
+
+Serve the files over HTTP rather than opening them through `file://`. A quick
+local server, run from the directory containing your application and the
+extracted `words-web/`, is:
+
+```sh
+python3 -m http.server 8000
+```
+
+Use `manifest.databases.search.file` with `engine.search()` or
+`engine.searchLine()` when definitions are not needed. `analyze()` and
+`analyzeLine()` require the full database. For the complete API, deployment
+headers, and ownership rules, see the
+[browser integration guide](whitakers-words/docs/webassembly-browser.md).
+
 ## Relationship to vanilla Whitaker's WORDS
 
 WordsWASM is a behavioural port and data descendant of Whitaker's WORDS, not
