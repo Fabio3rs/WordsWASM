@@ -8,6 +8,10 @@ import {
 } from "../wasmsrc/words-engine.mjs";
 
 declare const searchHit: SearchHit;
+searchHit.form.display satisfies string;
+searchHit.form.quantity.annotated satisfies string | null;
+searchHit.form.quantity.positions[0]?.origin satisfies
+  "stem" | "ending" | undefined;
 if (searchHit.kind === "artificial") {
   searchHit.artificial.value satisfies number;
   // @ts-expect-error Artificial hits do not pretend to be dictionary entries.

@@ -111,9 +111,11 @@ parse_options(const int argc, char *const argv[]) {
             "batch-json-lines reads queries from stdin and accepts no word");
     }
     if (options.format != "analysis" && options.format != "search" &&
-        options.format != "analysis-v2" && options.format != "search-v2") {
+        options.format != "analysis-v2" && options.format != "search-v2" &&
+        options.format != "analysis-v3" && options.format != "search-v3") {
         return std::unexpected(
-            "format must be analysis, search, analysis-v2, or search-v2");
+            "format must be analysis, search, analysis-v2, search-v2, "
+            "analysis-v3, or search-v3");
     }
     return options;
 }
@@ -148,7 +150,8 @@ read_file(const std::filesystem::path &path) {
 
 void usage() {
     std::cerr << "usage: words_cli --database FILE [--dataset-id sha256:...] "
-                 "--format analysis|search|analysis-v2|search-v2 "
+                 "--format analysis|search|analysis-v2|search-v2|"
+                 "analysis-v3|search-v3 "
                  "[--two-words=legacy] "
                  "[--orthography=disabled|classical|medieval] "
                  "[--no-fixes] [--no-prefixes] [--no-suffixes] [--no-tickons] "
@@ -163,8 +166,12 @@ void write_result(const words::Engine &engine, const words::QueryResult &result,
         std::cout << words::analysis_json(engine, result) << '\n';
     } else if (format == "analysis-v2") {
         std::cout << words::analysis_json_v2(engine, result) << '\n';
+    } else if (format == "analysis-v3") {
+        std::cout << words::analysis_json_v3(engine, result) << '\n';
     } else if (format == "search-v2") {
         std::cout << words::search_json_v2(engine, result) << '\n';
+    } else if (format == "search-v3") {
+        std::cout << words::search_json_v3(engine, result) << '\n';
     } else {
         std::cout << words::search_json(engine, result) << '\n';
     }
@@ -207,7 +214,8 @@ int main(const int argc, char *argv[]) try {
                   << engine.error().message << '\n';
         return 3;
     }
-    if ((options->format == "analysis" || options->format == "analysis-v2") &&
+    if ((options->format == "analysis" || options->format == "analysis-v2" ||
+         options->format == "analysis-v3") &&
         !(*engine)->supports_full_analysis()) {
         std::cerr << "words_cli: unsupported-output: analysis format requires "
                      "a full WWDB with meanings\n";

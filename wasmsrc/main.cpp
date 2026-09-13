@@ -199,12 +199,29 @@ struct BrowserRuleFlags final {
     bool operator==(const BrowserRuleFlags &) const = default;
 };
 
+struct BrowserQuantityPosition final {
+    std::uint32_t index{};
+    std::string quantity;
+    std::string origin;
+    bool operator==(const BrowserQuantityPosition &) const = default;
+};
+
+struct BrowserQuantity final {
+    bool has_annotated{};
+    std::string annotated;
+    std::string coverage{"none"};
+    std::vector<BrowserQuantityPosition> positions;
+    bool operator==(const BrowserQuantity &) const = default;
+};
+
 struct BrowserForm final {
     std::string stem;
     bool has_stem_key{};
     std::uint32_t stem_key{};
     std::string ending;
     std::string recognized;
+    std::string display;
+    BrowserQuantity quantity;
     bool operator==(const BrowserForm &) const = default;
 };
 
@@ -297,7 +314,7 @@ struct BrowserIndependentToken final {
 
 struct BrowserSearchResult final {
     std::string schema{"whitakers-words.browser-search"};
-    std::uint32_t schema_version{4U};
+    std::uint32_t schema_version{5U};
     std::string dataset_id;
     BrowserQuery query;
     std::string status;
@@ -629,18 +646,37 @@ browser_assessment(const words::MorphologicalAssessmentIR &assessment) {
     return output;
 }
 
-[[nodiscard]] BrowserForm browser_form(const words::SurfaceForm &surface,
-                                       const words::AnalysisIR &analysis) {
+[[nodiscard]] std::string_view
+vowel_quantity_name(const words::VowelQuantity quantity) noexcept {
+    return quantity == words::VowelQuantity::long_vowel ? "long" : "short";
+}
+
+[[nodiscard]] BrowserForm browser_form(words::ResolvedForm resolved) {
     BrowserForm form;
-    form.has_stem_key = analysis.stem_key != 0U;
-    form.stem_key = analysis.stem_key;
-    form.stem = analysis.derivation.rewritten_form
-                    ? analysis.derivation.rewritten_form->stem
-                    : std::string{surface.slice(analysis.stem)};
-    form.ending = analysis.derivation.rewritten_form
-                      ? analysis.derivation.rewritten_form->ending
-                      : std::string{surface.slice(analysis.ending)};
-    form.recognized = form.stem + form.ending;
+    form.has_stem_key = resolved.stem_key != 0U;
+    form.stem_key = resolved.stem_key;
+    form.stem = std::move(resolved.stem);
+    form.ending = std::move(resolved.ending);
+    form.recognized = std::move(resolved.recognized);
+    form.display = std::move(resolved.display);
+    form.quantity.has_annotated = resolved.quantity.annotated.has_value();
+    if (resolved.quantity.annotated) {
+        form.quantity.annotated = std::move(*resolved.quantity.annotated);
+    }
+    form.quantity.coverage =
+        words::quantity_coverage_name(resolved.quantity.coverage);
+    form.quantity.positions.reserve(resolved.quantity.positions.size());
+    std::ranges::transform(
+        resolved.quantity.positions,
+        std::back_inserter(form.quantity.positions),
+        [](const words::ResolvedQuantityPosition &position) {
+            return BrowserQuantityPosition{
+                .index = position.index,
+                .quantity = std::string{vowel_quantity_name(position.quantity)},
+                .origin =
+                    std::string{words::quantity_origin_name(position.origin)},
+            };
+        });
     return form;
 }
 
@@ -670,7 +706,7 @@ browser_assessment(const words::MorphologicalAssessmentIR &assessment) {
     hit.morphology =
         browser_morphology(analysis.morphology, lexeme.part_of_speech);
     hit.part_of_speech = hit.morphology.kind;
-    hit.form = browser_form(surface, analysis);
+    hit.form = browser_form(words::resolved_form(database, surface, analysis));
     hit.quantity_match = quantity_match_name(analysis.quantity_match);
     hit.lexical = browser_lexical_flags(lexeme);
     hit.derivation = browser_derivation(database, analysis.derivation,
@@ -708,10 +744,12 @@ browser_hit(const words::Database &database, const words::SurfaceForm &surface,
         browser_morphology(analysis.morphology, words::PartOfSpeech::verb);
     hit.part_of_speech = "verb";
     hit.lexical = browser_lexical_flags(lexeme);
-    hit.form.stem =
-        analysis.kind == words::CompoundKind::iri ? "SUPINE + " : "PPL+";
-    hit.form.stem.append(analysis.auxiliary);
-    hit.form.recognized = recognized;
+    auto display_stem = analysis.kind == words::CompoundKind::iri
+                            ? std::string{"SUPINE + "}
+                            : std::string{"PPL+"};
+    display_stem.append(analysis.auxiliary);
+    hit.form = browser_form(words::unquantified_form(
+        std::move(display_stem), 0U, {}, std::string{recognized}));
     hit.derivation = browser_derivation(database, analysis.source_derivation,
                                         lexeme.dictionary, include_meaning,
                                         "compound", "source");
@@ -788,8 +826,10 @@ browser_search_result(const words::Engine &engine,
                 hit.morphology =
                     browser_morphology(words::Morphology{morphology},
                                        words::PartOfSpeech::numeral);
-                hit.form.stem = result.surface.slice(analysis.stem);
-                hit.form.recognized = hit.form.stem;
+                auto artificial_form =
+                    std::string{result.surface.slice(analysis.stem)};
+                hit.form = browser_form(words::unquantified_form(
+                    artificial_form, 0U, {}, artificial_form));
                 hit.derivation =
                     browser_derivation(engine.database(), analysis.derivation,
                                        words::DictionaryKind::general,
@@ -1199,12 +1239,27 @@ EMSCRIPTEN_BINDINGS(words_analysis_engine) {
         .field("age", &BrowserRuleFlags::age)
         .field("frequency", &BrowserRuleFlags::frequency);
 
+    emscripten::value_object<BrowserQuantityPosition>("SearchQuantityPosition")
+        .field("index", &BrowserQuantityPosition::index)
+        .field("quantity", &BrowserQuantityPosition::quantity)
+        .field("origin", &BrowserQuantityPosition::origin);
+    emscripten::register_vector<BrowserQuantityPosition>(
+        "VectorSearchQuantityPosition");
+
+    emscripten::value_object<BrowserQuantity>("SearchQuantity")
+        .field("hasAnnotated", &BrowserQuantity::has_annotated)
+        .field("annotated", &BrowserQuantity::annotated)
+        .field("coverage", &BrowserQuantity::coverage)
+        .field("positions", &BrowserQuantity::positions);
+
     emscripten::value_object<BrowserForm>("SearchForm")
         .field("stem", &BrowserForm::stem)
         .field("hasStemKey", &BrowserForm::has_stem_key)
         .field("stemKey", &BrowserForm::stem_key)
         .field("ending", &BrowserForm::ending)
-        .field("recognized", &BrowserForm::recognized);
+        .field("recognized", &BrowserForm::recognized)
+        .field("display", &BrowserForm::display)
+        .field("quantity", &BrowserForm::quantity);
 
     emscripten::value_object<BrowserDerivationStep>("SearchDerivationStep")
         .field("kind", &BrowserDerivationStep::kind)

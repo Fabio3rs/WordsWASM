@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate real high-level WASM documents against the browser v4 schemas."""
+"""Validate real high-level WASM documents against the browser v5 schemas."""
 
 from __future__ import annotations
 
@@ -20,8 +20,8 @@ def main() -> None:
     args = parser.parse_args()
 
     root = args.root.resolve()
-    search_path = (root / "schemas/browser-search-v4.schema.json").resolve()
-    analysis_path = (root / "schemas/browser-analysis-v4.schema.json").resolve()
+    search_path = (root / "schemas/browser-search-v5.schema.json").resolve()
+    analysis_path = (root / "schemas/browser-analysis-v5.schema.json").resolve()
     search_schema = json.loads(search_path.read_text(encoding="utf-8"))
     analysis_schema = json.loads(analysis_path.read_text(encoding="utf-8"))
     jsonschema.Draft202012Validator.check_schema(search_schema)
@@ -44,6 +44,8 @@ def main() -> None:
         search_path,
         analysis_path,
         (root / "schemas/browser-search-v3.schema.json").resolve(),
+        (root / "schemas/browser-search-v4.schema.json").resolve(),
+        (root / "schemas/browser-form-v5.schema.json").resolve(),
     )
     store = {
         path.as_uri(): json.loads(path.read_text(encoding="utf-8"))

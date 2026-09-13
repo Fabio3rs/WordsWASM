@@ -67,7 +67,7 @@ tar -xzf words-cli-v0.9.2-linux-x86_64.tar.gz
 cd words-cli-v0.9.2-linux-x86_64
 ./words_cli \
   --database ../words-full-v0.9.2.wwdb \
-  --format analysis-v2 \
+  --format analysis-v3 \
   amamus
 ```
 
@@ -82,7 +82,7 @@ Expand-Archive words-cli-v0.9.2-windows-x86_64.zip
 Set-Location words-cli-v0.9.2-windows-x86_64
 .\words_cli.exe `
   --database ..\words-full-v0.9.2.wwdb `
-  --format analysis-v2 `
+  --format analysis-v3 `
   amamus
 ```
 
@@ -91,18 +91,18 @@ recommended output formats are:
 
 | Format | Compatible database | Output |
 | --- | --- | --- |
-| `analysis-v2` | `words-full` | Complete morphological analyses, lexical metadata, and meanings. |
-| `search-v2` | `words-full` or `words-search` | Compact resolved hits without meanings. |
+| `analysis-v3` | `words-full` | Complete analyses and quantity-resolved forms, lexical metadata, and meanings. |
+| `search-v3` | `words-full` or `words-search` | Compact hits with quantity-resolved forms and no meanings. |
 
-The unversioned `analysis` and `search` formats remain available for v1
-compatibility. Quote a phrase or line containing spaces; compounds recognized
+The v2 formats remain available unchanged, and the unversioned `analysis` and
+`search` formats remain available for v1 compatibility. Quote a phrase or line containing spaces; compounds recognized
 by the grammar are returned as one unit, while independent words produce
 separate JSON lines:
 
 ```sh
 ./words_cli \
   --database ../words-full-v0.9.2.wwdb \
-  --format analysis-v2 \
+  --format analysis-v3 \
   "amo puellam"
 ```
 
@@ -112,7 +112,7 @@ input line with `--batch-json-lines`:
 ```sh
 printf 'amo\npuella\nmālum\n' | ./words_cli \
   --database ../words-full-v0.9.2.wwdb \
-  --format analysis-v2 \
+  --format analysis-v3 \
   --batch-json-lines
 ```
 
@@ -143,6 +143,7 @@ const engine = await createWordsAnalysisEngine({
 
 const result = engine.analyze("mālum");
 const line = engine.analyzeLine("amo puellam");
+console.log(result.hits[0].form.display, result.hits[0].form.quantity);
 console.log(result, line);
 
 engine.dispose();
@@ -161,6 +162,9 @@ Use `manifest.databases.search.file` with `engine.search()` or
 `analyzeLine()` require the full database. For the complete API, deployment
 headers, and ownership rules, see the
 [browser integration guide](whitakers-words/docs/webassembly-browser.md).
+Browser schema v5 returns presentation-ready `form.display` and structured
+quantity evidence through typed Embind structures; it does not serialize JSON
+inside WASM. See [quantity-resolved returned forms](docs/quantity-resolved-forms.md).
 
 ## Relationship to vanilla Whitaker's WORDS
 

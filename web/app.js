@@ -69,6 +69,7 @@ const translations = Object.freeze({
       cardinal: "cardinal", ordinal: "ordinal", distributive: "distributive",
       adverbial: "adverbial",
     },
+    quantityCoverage: {none: "none", partial: "partial", complete: "complete"},
     verbKind: {
       "to-be": "verb to be", "compound-of-to-be": "compound of sum",
       "governs-genitive": "governs the genitive",
@@ -143,6 +144,9 @@ const translations = Object.freeze({
       governs: (value) => `governs ${value}`,
       readingData: "Reading data",
       recognizedForm: "Recognized form",
+      displayForm: "Quantity-resolved form",
+      quantityCoverageLabel: "Quantity coverage",
+      databaseQuantity: "Database annotation",
       stem: "Stem", stemId: "Stem ID", ending: "Ending", ruleId: "Rule ID",
       ruleAge: "Rule age", ruleFrequency: "Rule frequency",
       vowelQuantity: "Vowel quantity", derivation: "Derivation",
@@ -155,6 +159,7 @@ const translations = Object.freeze({
       evidenceNotesLead: "Evidence and review notes",
       enclitic: (text) => `enclitic -${text}`,
       recognizedFormLead: "Recognized form: ",
+      displayFormLead: "Quantity-resolved form: ",
       dictionaryFormLead: "Dictionary form: ",
       compound: (construction, auxiliary) =>
         `Compound construction: ${construction} · auxiliary ${auxiliary}`,
@@ -227,6 +232,7 @@ const translations = Object.freeze({
       cardinal: "cardinal", ordinal: "ordinal", distributive: "distributivo",
       adverbial: "adverbial",
     },
+    quantityCoverage: {none: "nenhuma", partial: "parcial", complete: "completa"},
     verbKind: {
       "to-be": "verbo ser", "compound-of-to-be": "composto de sum",
       "governs-genitive": "rege genitivo",
@@ -301,6 +307,9 @@ const translations = Object.freeze({
       governs: (value) => `rege ${value}`,
       readingData: "Dados da leitura",
       recognizedForm: "Forma reconhecida",
+      displayForm: "Forma com quantidades resolvidas",
+      quantityCoverageLabel: "Cobertura das quantidades",
+      databaseQuantity: "Anotação do banco",
       stem: "Radical", stemId: "ID do radical", ending: "Terminação",
       ruleId: "ID da regra", ruleAge: "Época da regra",
       ruleFrequency: "Frequência da regra",
@@ -314,6 +323,7 @@ const translations = Object.freeze({
       evidenceNotesLead: "Notas de evidência e revisão",
       enclitic: (text) => `enclítico -${text}`,
       recognizedFormLead: "Forma reconhecida: ",
+      displayFormLead: "Forma com quantidades resolvidas: ",
       dictionaryFormLead: "Forma do dicionário: ",
       compound: (construction, auxiliary) =>
         `Construção composta: ${construction} · auxiliar ${auxiliary}`,
@@ -387,6 +397,7 @@ const translations = Object.freeze({
       cardinal: "cardinale", ordinal: "ordinale", distributive: "distributivum",
       adverbial: "adverbiale",
     },
+    quantityCoverage: {none: "nulla", partial: "partialis", complete: "plena"},
     verbKind: {
       "to-be": "verbum sum", "compound-of-to-be": "compositum verbi sum",
       "governs-genitive": "genitivum regit",
@@ -461,6 +472,9 @@ const translations = Object.freeze({
       governs: (value) => `${value} regit`,
       readingData: "Notitiae interpretationis",
       recognizedForm: "Forma agnita", stem: "Stirps", stemId: "Stirpis ID",
+      displayForm: "Forma quantitatibus definita",
+      quantityCoverageLabel: "Quantitatum comprehensio",
+      databaseQuantity: "Annotatio ex datorum basi",
       ending: "Terminatio", ruleId: "Regulae ID", ruleAge: "Regulae aetas",
       ruleFrequency: "Regulae frequentia", vowelQuantity: "Quantitas vocalium",
       derivation: "Derivatio", lexemeData: "Notitiae lexematis",
@@ -473,6 +487,7 @@ const translations = Object.freeze({
       evidenceNotesLead: "Notae testimonii et recognitionis",
       enclitic: (text) => `encliticum -${text}`,
       recognizedFormLead: "Forma agnita: ",
+      displayFormLead: "Forma quantitatibus definita: ",
       dictionaryFormLead: "Forma dictionarii: ",
       compound: (construction, auxiliary) =>
         `Constructio composita: ${construction} · auxiliare ${auxiliary}`,
@@ -805,6 +820,10 @@ function renderDetails(hit, container) {
   details.append(element("summary", "", message("readingData")));
   addDefinitionList(details, [
     [message("recognizedForm"), hit.form.recognized],
+    [message("displayForm"), hit.form.display],
+    [message("databaseQuantity"), hit.form.quantity.annotated],
+    [message("quantityCoverageLabel"),
+      translated("quantityCoverage", hit.form.quantity.coverage)],
     [message("stem"), hit.form.stem], [message("stemId"), hit.form.stemKey],
     [message("ending"), hit.form.ending], [message("ruleId"), hit.rule?.id],
     [message("ruleAge"), hit.rule?.age],
@@ -871,14 +890,15 @@ function renderDerivationHighlights(hit, container) {
 
 function renderForm(hit, container) {
   const form = element("p", "form-reading");
-  form.append(message("recognizedFormLead"),
-    element("strong", "", hit.form.recognized));
+  form.append(message("displayFormLead"),
+    element("strong", "", hit.form.display));
   if (hit.form.ending) form.append(` · ${hit.form.stem} + ${hit.form.ending}`);
   container.append(form);
 }
 
 function sameForm(left, right) {
-  return left.form.recognized === right.form.recognized &&
+  return left.form.display === right.form.display &&
+    left.form.recognized === right.form.recognized &&
     left.form.stem === right.form.stem && left.form.ending === right.form.ending;
 }
 

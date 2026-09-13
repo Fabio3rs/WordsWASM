@@ -58,13 +58,13 @@ let expectedSearchLine;
 try {
   const macron = engine.analyze("mālum");
   assert.equal(macron.schema, "whitakers-words.browser-analysis");
-  assert.equal(macron.schemaVersion, 4);
+  assert.equal(macron.schemaVersion, 5);
   assert.equal(macron.query.normalized, "mālum");
   assert.ok(macron.hits.some((hit) => typeof hit.meaning === "string"));
 
   const diminutive = engine.search("anaticulus");
   assert.equal(diminutive.schema, "whitakers-words.browser-search");
-  assert.equal(diminutive.schemaVersion, 4);
+  assert.equal(diminutive.schemaVersion, 5);
   assert.equal(diminutive.status, "analyzed");
   assert.ok(diminutive.hits.every((hit) => hit.meaning === undefined));
   assert.ok(diminutive.hits.some((hit) =>
@@ -74,6 +74,37 @@ try {
     )
   ));
   expectedSearch = diminutive;
+
+  const exercitus = engine.search("exercitus");
+  assert.equal(exercitus.hits.length, 7);
+  assert.ok(exercitus.hits.every((hit) =>
+    hit.form.recognized === "exercitus" &&
+    hit.form.quantity.coverage === "partial" &&
+    hit.form.quantity.annotated === hit.form.display
+  ));
+  assert.equal(exercitus.hits.filter(
+    (hit) => hit.form.display === "exercĭtŭs",
+  ).length, 3);
+  assert.equal(exercitus.hits.filter(
+    (hit) => hit.form.display === "exercĭtūs",
+  ).length, 4);
+  assert.equal(engine.search("exercitŭs").hits.length, 3);
+  assert.equal(engine.search("exercitūs").hits.length, 4);
+  const numeral = engine.search("IV").hits.find(
+    (hit) => hit.kind === "artificial",
+  );
+  assert.ok(numeral);
+  assert.deepEqual(numeral.form.quantity, {
+    annotated: null,
+    coverage: "none",
+    positions: [],
+  });
+  const quantityCompound = engine.analyze("amata est").hits.find(
+    (hit) => hit.kind === "compound",
+  );
+  assert.ok(quantityCompound);
+  assert.equal(quantityCompound.form.display, quantityCompound.form.recognized);
+  assert.equal(quantityCompound.form.quantity.coverage, "none");
 
   const firstPlural = engine.search("amamus");
   assert.ok(firstPlural.hits.some((hit) =>

@@ -88,13 +88,15 @@ const compactOnly = searchEngine.search("cuique");
 
 `analyze` e `search` devolvem, respectivamente, os contratos
 `whitakers-words.browser-analysis` e `whitakers-words.browser-search`, versão
-3. `analyzeLine` e `searchLine` devolvem arrays desses mesmos documentos, na
+5. `analyzeLine` e `searchLine` devolvem arrays desses mesmos documentos, na
 ordem das unidades encontradas pelo `TextTokenCursor`; um composto reconhecido
 ocupa uma única posição. Não existe envelope ou schema paralelo para a linha:
-cada elemento continua validável pelo contrato browser v3 correspondente.
+cada elemento continua validável pelo contrato browser v5 correspondente.
 Hits são uma união discriminada por `kind`: `lexical`, `compound` ou
 `artificial`. Cada leitura contém a forma resolvida (`stem`, `ending`,
-`recognized`) e passos semânticos ordenados de addon e reescrita. Um passo
+`recognized`, `display`, `quantity`) e passos semânticos ordenados de addon e
+reescrita. `display` já vem com macrons e breves para apresentação; `quantity`
+separa a anotação confirmada do banco, a cobertura e as posições lógicas. Um passo
 indica seu `target` (`form`, `source` ou `auxiliary`) e resolve IDs para tipo e
 texto; addons também expõem `enclitic`. Por exemplo, `studiisque` expõe
 `studiis`, o `AddonId`, o tackon `que` e `enclitic: true`. Lexemas `PACK`

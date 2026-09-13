@@ -7,9 +7,78 @@
 #include <compare>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace words {
+
+enum class QuantityCoverage : std::uint8_t {
+    none,
+    partial,
+    complete,
+};
+
+enum class QuantityOrigin : std::uint8_t {
+    stem,
+    ending,
+};
+
+struct ResolvedQuantityPosition final {
+    // Zero-based logical Latin-letter index. Combining quantity marks do not
+    // occupy an index of their own.
+    std::uint32_t index{};
+    VowelQuantity quantity{VowelQuantity::unknown};
+    QuantityOrigin origin{QuantityOrigin::stem};
+    auto operator<=>(const ResolvedQuantityPosition &) const = default;
+};
+
+struct ResolvedQuantity final {
+    // Contains database evidence only. User-supplied marks are represented in
+    // ResolvedForm::display, and never masquerade as lexical evidence here.
+    std::optional<std::string> annotated;
+    QuantityCoverage coverage{QuantityCoverage::none};
+    std::vector<ResolvedQuantityPosition> positions;
+    auto operator<=>(const ResolvedQuantity &) const = default;
+};
+
+struct ResolvedForm final {
+    std::string stem;
+    std::uint8_t stem_key{};
+    std::string ending;
+    std::string recognized;
+    // Presentation-ready NFC spelling. Database evidence wins where known;
+    // explicit input quantities survive at positions absent from the DB.
+    std::string display;
+    ResolvedQuantity quantity;
+    auto operator<=>(const ResolvedForm &) const = default;
+};
+
+[[nodiscard]] ResolvedForm resolved_form(const Database &database,
+                                         const SurfaceForm &surface,
+                                         const AnalysisIR &analysis);
+
+[[nodiscard]] ResolvedForm unquantified_form(std::string stem,
+                                             std::uint8_t stem_key,
+                                             std::string ending,
+                                             std::string recognized);
+
+[[nodiscard]] constexpr std::string_view
+quantity_coverage_name(const QuantityCoverage value) noexcept {
+    if (value == QuantityCoverage::partial) {
+        return "partial";
+    }
+    if (value == QuantityCoverage::complete) {
+        return "complete";
+    }
+    return "none";
+}
+
+[[nodiscard]] constexpr std::string_view
+quantity_origin_name(const QuantityOrigin value) noexcept {
+    return value == QuantityOrigin::ending ? "ending" : "stem";
+}
 
 // Stable semantic ordering for presentation backends. The key deliberately
 // contains no serialized JSON, so formatting or schema changes cannot reorder

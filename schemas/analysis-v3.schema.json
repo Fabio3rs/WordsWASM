@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Whitaker's WORDS quantity-resolved full analysis v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schemaVersion", "query", "options", "status", "analyses", "diagnostics"],
+  "properties": {
+    "schema": {"const": "whitakers-words.analysis"},
+    "schemaVersion": {"const": 3},
+    "query": {"type": "object"},
+    "options": {"type": "object"},
+    "status": {"enum": ["analyzed", "unknown", "error"]},
+    "analyses": {"type": "array", "items": {"$ref": "#/$defs/analysis"}},
+    "diagnostics": {"type": "array", "items": {"type": "object"}},
+    "suggestions": {"type": "array", "items": {"type": "object"}},
+    "tokens": {"type": "array", "items": {"$ref": "#/$defs/token"}}
+  },
+  "$defs": {
+    "fullForm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stem", "stemKey", "ending", "recognized", "display", "quantity", "rule"],
+      "properties": {
+        "stem": {"type": "string"},
+        "stemKey": {"type": ["integer", "null"], "minimum": 1},
+        "ending": {"type": "string"},
+        "recognized": {"type": "string"},
+        "display": {"type": "string"},
+        "quantity": {"$ref": "browser-form-v5.schema.json#/$defs/quantity"},
+        "rule": {"type": "object"}
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "required": ["partOfSpeech", "lexeme", "form", "morphology", "derivation", "assessment"],
+      "properties": {
+        "partOfSpeech": {"type": "string"},
+        "lexeme": {"type": "object"},
+        "form": {"$ref": "#/$defs/fullForm"},
+        "morphology": {"type": "object"},
+        "derivation": {"type": "object"},
+        "assessment": {"type": "object"},
+        "quantityMatch": {"enum": ["unspecified", "exact", "unknown"]}
+      },
+      "additionalProperties": false
+    },
+    "token": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query", "status", "analyses", "diagnostics"],
+      "properties": {
+        "query": {"type": "object"},
+        "status": {"enum": ["analyzed", "unknown", "error"]},
+        "analyses": {"type": "array", "items": {"$ref": "#/$defs/analysis"}},
+        "diagnostics": {"type": "array", "items": {"type": "object"}}
+      }
+    }
+  }
+}

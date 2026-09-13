@@ -198,11 +198,24 @@ function copyLexical(raw) {
 }
 
 function copyForm(raw) {
+  const quantity = raw.quantity === undefined
+    ? {annotated: null, coverage: "none", positions: []}
+    : {
+      annotated: raw.quantity.hasAnnotated ? raw.quantity.annotated : null,
+      coverage: raw.quantity.coverage,
+      positions: copyOwnedVector(raw.quantity.positions, (position) => ({
+        index: position.index,
+        quantity: position.quantity,
+        origin: position.origin,
+      })),
+    };
   return {
     stem: raw.stem,
     stemKey: raw.hasStemKey ? raw.stemKey : null,
     ending: raw.ending,
     recognized: raw.recognized,
+    display: raw.display ?? raw.recognized,
+    quantity,
   };
 }
 

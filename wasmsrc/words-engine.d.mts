@@ -163,6 +163,16 @@ export interface ResolvedForm {
   stemKey: number | null;
   ending: string;
   recognized: string;
+  display: string;
+  quantity: {
+    annotated: string | null;
+    coverage: "none" | "partial" | "complete";
+    positions: Array<{
+      index: number;
+      quantity: "short" | "long";
+      origin: "stem" | "ending";
+    }>;
+  };
 }
 
 export interface AddonStepBase {
@@ -299,7 +309,7 @@ export interface SearchSuggestion<H extends SearchLexicalHit | AnalysisLexicalHi
 }
 
 interface DocumentBase {
-  schemaVersion: 4;
+  schemaVersion: 5;
   datasetId: string;
   query: QueryIdentity;
   status: QueryStatus;

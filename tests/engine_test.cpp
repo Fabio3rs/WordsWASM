@@ -2383,4 +2383,102 @@ TEST(EngineTest, AppliesPackonWithOptionalTickon) {
     }
 }
 
+TEST(EngineTest, EnrichesResolvedFormsWithoutChangingQuantityRecognition) {
+    const auto unmarked = test::engine().analyze("exercitus");
+    const auto short_ending = test::engine().analyze("exercitŭs");
+    const auto long_ending = test::engine().analyze("exercitūs");
+    ASSERT_EQ(unmarked.analyses.size(), 7U);
+    ASSERT_EQ(short_ending.analyses.size(), 3U);
+    ASSERT_EQ(long_ending.analyses.size(), 4U);
+
+    const auto document =
+        Json::parse(analysis_json_v3(test::engine(), unmarked));
+    ASSERT_EQ(document.at("schemaVersion"), 3);
+    ASSERT_EQ(document.at("analyses").size(), 7U);
+    EXPECT_EQ(std::ranges::count_if(
+                  document.at("analyses"),
+                  [](const Json &analysis) {
+                      return analysis.at("form").at("display") == "exercitŭs" ||
+                             analysis.at("form").at("display") == "exercĭtŭs";
+                  }),
+              3U);
+    EXPECT_EQ(std::ranges::count_if(document.at("analyses"),
+                                    [](const Json &analysis) {
+                                        return analysis.at("form").at(
+                                                   "display") == "exercĭtūs";
+                                    }),
+              4U);
+
+    const auto &verbal = document.at("analyses").front();
+    EXPECT_EQ(verbal.at("form").at("recognized"), "exercitus");
+    EXPECT_EQ(verbal.at("form").at("display"), "exercĭtŭs");
+    EXPECT_EQ(verbal.at("form").at("quantity").at("coverage"), "partial");
+    ASSERT_EQ(verbal.at("form").at("quantity").at("positions").size(), 2U);
+    EXPECT_EQ(verbal.at("form").at("quantity").at("positions")[0],
+              Json({{"index", 5}, {"quantity", "short"}, {"origin", "stem"}}));
+    EXPECT_EQ(
+        verbal.at("form").at("quantity").at("positions")[1],
+        Json({{"index", 7}, {"quantity", "short"}, {"origin", "ending"}}));
+    EXPECT_EQ(verbal.at("quantityMatch"), "unspecified");
+
+    // An explicit mark at a DB-unknown position remains visible, while DB
+    // evidence still resolves the ending. Recognition itself remains unknown.
+    const auto manual = test::engine().analyze("exērcitus");
+    ASSERT_EQ(manual.analyses.size(), 7U);
+    const auto manual_json =
+        Json::parse(analysis_json_v3(test::engine(), manual));
+    EXPECT_TRUE(std::ranges::all_of(
+        manual_json.at("analyses"), [](const Json &analysis) {
+            return analysis.at("quantityMatch") == "unknown" &&
+                   analysis.at("form")
+                       .at("display")
+                       .get<std::string>()
+                       .starts_with("exērc");
+        }));
+}
+
+TEST(EngineTest, KeepsLegacyProjectionStableAndAddsSearchV3QuantityObjects) {
+    const auto result = test::engine().analyze("exercitus");
+    const auto legacy = Json::parse(analysis_json_v2(test::engine(), result));
+    ASSERT_FALSE(legacy.at("analyses").empty());
+    EXPECT_FALSE(legacy.at("analyses").front().at("form").contains("display"));
+    EXPECT_FALSE(legacy.at("analyses").front().at("form").contains("quantity"));
+
+    const auto search = Json::parse(search_json_v3(test::engine(), result));
+    ASSERT_EQ(search.at("schemaVersion"), 3);
+    ASSERT_EQ(search.at("hits").size(), 7U);
+    for (const auto &hit : search.at("hits")) {
+        EXPECT_TRUE(hit.contains("quantityMatch"));
+        EXPECT_TRUE(hit.at("form").contains("display"));
+        EXPECT_TRUE(hit.at("form").contains("quantity"));
+    }
+
+    const auto expect_same_hit_order = [](const QueryResult &query) {
+        const auto v2 = Json::parse(search_json_v2(test::engine(), query));
+        const auto v3 = Json::parse(search_json_v3(test::engine(), query));
+        ASSERT_EQ(v2.at("hits").size(), v3.at("hits").size());
+        for (std::size_t index{}; index < v2.at("hits").size(); ++index) {
+            EXPECT_EQ(v2.at("hits")[index].at("lexemeId"),
+                      v3.at("hits")[index].at("lexemeId"));
+            EXPECT_EQ(v2.at("hits")[index].at("ruleId"),
+                      v3.at("hits")[index].at("ruleId"));
+        }
+    };
+    expect_same_hit_order(result);
+    expect_same_hit_order(test::engine().analyze_text("amaturus est"));
+
+    const auto numeral = test::engine().analyze("IV");
+    const auto numeral_json =
+        Json::parse(search_json_v3(test::engine(), numeral));
+    const auto artificial =
+        std::ranges::find_if(numeral_json.at("hits"), [](const Json &hit) {
+            return hit.contains("artificial");
+        });
+    ASSERT_NE(artificial, numeral_json.at("hits").end());
+    EXPECT_EQ(artificial->at("form").at("display"), "iv");
+    EXPECT_EQ(artificial->at("form").at("quantity").at("annotated"), nullptr);
+    EXPECT_EQ(artificial->at("form").at("quantity").at("coverage"), "none");
+    EXPECT_TRUE(artificial->at("form").at("quantity").at("positions").empty());
+}
+
 } // namespace words

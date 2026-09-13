@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Whitaker's WORDS quantity-resolved compact search v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schemaVersion", "datasetId", "query", "options", "status", "hits", "diagnostics"],
+  "properties": {
+    "schema": {"const": "whitakers-words.search"},
+    "schemaVersion": {"const": 3},
+    "datasetId": {"type": "string"},
+    "query": {"type": "object"},
+    "options": {"type": "object"},
+    "status": {"enum": ["analyzed", "unknown", "error"]},
+    "hits": {"type": "array", "items": {"$ref": "#/$defs/hit"}},
+    "diagnostics": {"type": "array", "items": {"type": "object"}},
+    "suggestions": {"type": "array", "items": {"type": "object"}},
+    "tokens": {"type": "array", "items": {"$ref": "#/$defs/token"}}
+  },
+  "$defs": {
+    "form": {"$ref": "browser-form-v5.schema.json"},
+    "hit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lexemeId", "ruleId", "addonIds", "scoreFlags", "form", "assessment"],
+      "properties": {
+        "lexemeId": {"type": ["integer", "null"], "minimum": 0},
+        "ruleId": {"type": ["integer", "null"], "minimum": 0},
+        "addonIds": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+        "rewriteIds": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+        "scoreFlags": {"type": "integer", "minimum": 0},
+        "quantityMatch": {"enum": ["unspecified", "exact", "unknown"]},
+        "form": {"$ref": "#/$defs/form"},
+        "assessment": {"type": "object"},
+        "compound": {"type": "object"},
+        "artificial": {"type": "object"}
+      }
+    },
+    "token": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query", "status", "hits", "diagnostics"],
+      "properties": {
+        "query": {"type": "object"},
+        "status": {"enum": ["analyzed", "unknown", "error"]},
+        "hits": {"type": "array", "items": {"$ref": "#/$defs/hit"}},
+        "diagnostics": {"type": "array", "items": {"type": "object"}}
+      }
+    }
+  }
+}
