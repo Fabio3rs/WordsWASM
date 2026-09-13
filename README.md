@@ -23,7 +23,7 @@ The project currently provides:
 
 GitHub Releases provide ready-to-run command-line binaries, the WWDB
 databases, and a deployable JavaScript/WebAssembly bundle. In the filenames
-below, `<tag>` is the release tag, for example `v0.9.1`.
+below, `<tag>` is the release tag, for example `v0.9.2`.
 
 | Download | Release asset | Use it for |
 | --- | --- | --- |
@@ -48,11 +48,11 @@ The release also includes `words-cli-<tag>.sha256` and
 downloaded files from their directory with:
 
 ```sh
-sha256sum --check words-cli-v0.9.1.sha256 --ignore-missing
-sha256sum --check words-assets-v0.9.1.sha256 --ignore-missing
+sha256sum --check words-cli-v0.9.2.sha256 --ignore-missing
+sha256sum --check words-assets-v0.9.2.sha256 --ignore-missing
 ```
 
-Replace `v0.9.1` in these and the following examples with the tag you
+Replace `v0.9.2` in these and the following examples with the tag you
 downloaded.
 
 ## Using the command-line interface
@@ -63,10 +63,10 @@ Extract the archive for your platform, enter the directory it creates, and
 point the executable at the separately downloaded full database:
 
 ```sh
-tar -xzf words-cli-v0.9.1-linux-x86_64.tar.gz
-cd words-cli-v0.9.1-linux-x86_64
+tar -xzf words-cli-v0.9.2-linux-x86_64.tar.gz
+cd words-cli-v0.9.2-linux-x86_64
 ./words_cli \
-  --database ../words-full-v0.9.1.wwdb \
+  --database ../words-full-v0.9.2.wwdb \
   --format analysis-v2 \
   amamus
 ```
@@ -78,10 +78,10 @@ and directory name. For macOS, substitute either the `macos-arm64` or
 ### Windows PowerShell
 
 ```powershell
-Expand-Archive words-cli-v0.9.1-windows-x86_64.zip
-Set-Location words-cli-v0.9.1-windows-x86_64
+Expand-Archive words-cli-v0.9.2-windows-x86_64.zip
+Set-Location words-cli-v0.9.2-windows-x86_64
 .\words_cli.exe `
-  --database ..\words-full-v0.9.1.wwdb `
+  --database ..\words-full-v0.9.2.wwdb `
   --format analysis-v2 `
   amamus
 ```
@@ -101,7 +101,7 @@ separate JSON lines:
 
 ```sh
 ./words_cli \
-  --database ../words-full-v0.9.1.wwdb \
+  --database ../words-full-v0.9.2.wwdb \
   --format analysis-v2 \
   "amo puellam"
 ```
@@ -111,7 +111,7 @@ input line with `--batch-json-lines`:
 
 ```sh
 printf 'amo\npuella\nmālum\n' | ./words_cli \
-  --database ../words-full-v0.9.1.wwdb \
+  --database ../words-full-v0.9.2.wwdb \
   --format analysis-v2 \
   --batch-json-lines
 ```
