@@ -28,6 +28,8 @@ below, `<tag>` is the release tag, for example `v0.9.1`.
 | Download | Release asset | Use it for |
 | --- | --- | --- |
 | Linux x86-64 CLI | `words-cli-<tag>-linux-x86_64.tar.gz` | A fully static Linux command-line executable. |
+| Linux ARM64 CLI | `words-cli-<tag>-linux-arm64.tar.gz` | A fully static Linux CLI for 64-bit ARM (AArch64). |
+| Linux ARMHF CLI | `words-cli-<tag>-linux-armhf.tar.gz` | A fully static Linux CLI for 32-bit ARM with the hard-float ABI. |
 | Windows x86-64 CLI | `words-cli-<tag>-windows-x86_64.zip` | A Windows command-line executable with no MinGW runtime DLL requirement. |
 | macOS Intel CLI | `words-cli-<tag>-macos-x86_64.tar.gz` | Intel Macs. |
 | macOS Apple silicon CLI | `words-cli-<tag>-macos-arm64.tar.gz` | M-series Macs. |
@@ -69,8 +71,9 @@ cd words-cli-v0.9.1-linux-x86_64
   amamus
 ```
 
-For macOS, substitute either the `macos-arm64` or `macos-x86_64` archive and
-directory name.
+For Linux on ARM, substitute either the `linux-arm64` or `linux-armhf` archive
+and directory name. For macOS, substitute either the `macos-arm64` or
+`macos-x86_64` archive and directory name.
 
 ### Windows PowerShell
 

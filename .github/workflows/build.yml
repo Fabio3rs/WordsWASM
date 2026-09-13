@@ -89,6 +89,44 @@ jobs:
             arch: x86_64
             runner: ubuntu-24.04
             executable: build/native-release/words_cli
+            c_compiler: gcc-14
+            cxx_compiler: g++-14
+            strip: strip
+            readelf: readelf
+            apt_packages: gcc-14 g++-14
+            cross_processor: ""
+            emulator: ""
+            elf_class: ELF64
+            elf_machine: Advanced Micro Devices X86-64
+          - platform: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            executable: build/native-release/words_cli
+            c_compiler: gcc-14
+            cxx_compiler: g++-14
+            strip: strip
+            readelf: readelf
+            apt_packages: gcc-14 g++-14
+            cross_processor: ""
+            emulator: ""
+            elf_class: ELF64
+            elf_machine: AArch64
+          - platform: linux
+            arch: armhf
+            runner: ubuntu-24.04
+            executable: build/native-release/words_cli
+            c_compiler: arm-linux-gnueabihf-gcc-14
+            cxx_compiler: arm-linux-gnueabihf-g++-14
+            strip: arm-linux-gnueabihf-strip
+            readelf: arm-linux-gnueabihf-readelf
+            apt_packages: >-
+              gcc-14-arm-linux-gnueabihf
+              g++-14-arm-linux-gnueabihf
+              qemu-user
+            cross_processor: arm
+            emulator: qemu-arm
+            elf_class: ELF32
+            elf_machine: ARM
           - platform: windows
             arch: x86_64
             runner: windows-2025
@@ -118,7 +156,8 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++-14 ninja-build binutils file
+          sudo apt-get install -y \
+            cmake ninja-build binutils file ${{ matrix.apt_packages }}
 
       - name: Setup MinGW-w64 UCRT64
         if: matrix.platform == 'windows'
@@ -143,16 +182,24 @@ jobs:
       - name: Configure and build Linux CLI
         if: matrix.platform == 'linux'
         run: |
+          cross_args=()
+          if [ -n "${{ matrix.cross_processor }}" ]; then
+            cross_args+=(
+              -DCMAKE_SYSTEM_NAME=Linux
+              -DCMAKE_SYSTEM_PROCESSOR="${{ matrix.cross_processor }}"
+            )
+          fi
           cmake -S . -B build/native-release -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER=gcc-14 \
-            -DCMAKE_CXX_COMPILER=g++-14 \
+            -DCMAKE_C_COMPILER="${{ matrix.c_compiler }}" \
+            -DCMAKE_CXX_COMPILER="${{ matrix.cxx_compiler }}" \
             -DBUILD_SHARED_LIBS=OFF \
             -DENABLE_STATIC_CLI=ON \
             -DENABLE_TESTS=OFF \
-            -DENABLE_SANITIZERS=OFF
+            -DENABLE_SANITIZERS=OFF \
+            "${cross_args[@]}"
           cmake --build build/native-release --target words_cli --parallel
-          strip build/native-release/words_cli
+          "${{ matrix.strip }}" build/native-release/words_cli
 
       - name: Configure and build Windows CLI
         if: matrix.platform == 'windows'
@@ -191,13 +238,29 @@ jobs:
       - name: Smoke-test Linux CLI and static linkage
         if: matrix.platform == 'linux'
         run: |
-          build/native-release/words_cli \
+          emulator=()
+          if [ -n "${{ matrix.emulator }}" ]; then
+            emulator+=("${{ matrix.emulator }}")
+          fi
+          "${emulator[@]}" build/native-release/words_cli \
             --database whitakers-words/poc/compact-db/output/words-poc-dense.wwdb \
             --dataset-id sha256:0000000000000000000000000000000000000000000000000000000000000000 \
             --format analysis-v2 amo \
             | python3 -c "import json,sys; assert json.load(sys.stdin)['schemaVersion'] == 2"
-          file build/native-release/words_cli | grep -F "statically linked"
-          if readelf -d build/native-release/words_cli 2>&1 | grep -F NEEDED; then
+          file build/native-release/words_cli \
+            | tee build/native-release/file.txt
+          grep -F "statically linked" build/native-release/file.txt
+          "${{ matrix.readelf }}" -h build/native-release/words_cli \
+            | tee build/native-release/elf-header.txt
+          grep -F "Class:" build/native-release/elf-header.txt \
+            | grep -F "${{ matrix.elf_class }}"
+          grep -F "Machine:" build/native-release/elf-header.txt \
+            | grep -F "${{ matrix.elf_machine }}"
+          if [ "${{ matrix.arch }}" = armhf ]; then
+            grep -F "hard-float ABI" build/native-release/elf-header.txt
+          fi
+          if "${{ matrix.readelf }}" -d build/native-release/words_cli \
+              2>&1 | grep -F NEEDED; then
             echo "Linux release binary has dynamic dependencies" >&2
             exit 1
           fi
@@ -576,6 +639,8 @@ jobs:
           }
 
           package_unix linux x86_64
+          package_unix linux arm64
+          package_unix linux armhf
           package_unix macos x86_64
           package_unix macos arm64
 
