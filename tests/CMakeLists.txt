@@ -158,3 +158,8 @@ if(NOT EMSCRIPTEN)
         add_dependencies(words_tests wwdb_poc_pack words_cli)
     endif()
 endif()
+
+# Deliberately not registered with CTest/CI: latinae_quantity_audit_test.py is
+# a local editorial audit.  Its optional witnesses live under untracked .study.
+# Bibliographic witnesses used by that audit are cited by author/title,
+# searchable section/expression, ISBN when applicable, and stable public URL.

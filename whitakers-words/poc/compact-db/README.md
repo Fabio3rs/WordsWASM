@@ -78,6 +78,23 @@ de homógrafos e os dois radicais `exercĭt-` (nome e particípio). Entradas ASC
 continuam ignorando essas restrições. A auditoria da fila está em
 [`docs/revisao-fila-quantidades.md`](../../docs/revisao-fila-quantidades.md).
 
+[`extract_latinae_tabulae.py`](extract_latinae_tabulae.py) converte todas as
+folhas de `LatinaeTabulae.ods` em JSON determinístico, preservando célula,
+mesclagem, texto e somente as marcas de quantidade literalmente presentes.
+[`audit_latinae_quantities.py`](audit_latinae_quantities.py) coteja essa
+extração com `INFLECTS.SEC` e `QUANTITIES.LAT`. O auditor é uma ferramenta
+editorial local e não está registrado no CTest/CI. O corpus `.study` também é
+opcional: só é aberto quando se fornece `--study-root .study`.
+
+As citações do cotejo usam autor, título, edição, ISBN quando existente, URL
+pública e um §/expressão pesquisável; números de linha do HTML OCR não são
+tratados como citação. Os testemunhos atuais são *Latin for Beginners*, de
+Benjamin L. D'Ooge ([Project Gutenberg eBook 18251, sem
+ISBN](https://www.gutenberg.org/ebooks/18251)), e *Gramática latina: curso
+único e completo*, de Napoleão Mendes de Almeida ([29. ed.; ISBN-10
+85-02-00307-0; ISBN-13
+978-85-02-00307-1](https://latim.paginas.ufsc.br/files/2012/06/Gram%C3%A1tica-Latina-Napole%C3%A3o-Mendes-de-Almeida.pdf)).
+
 O manifesto separa autoridade da fonte e confiança da observação. Lewis &
 Short e Gaffiot são classificados como fontes lexicográficas estabelecidas e
 de alta confiabilidade; Faria v3 como OCR revisado por LLM; migrações antigas
@@ -266,6 +283,20 @@ python3 poc/compact-db/import_ada_rewrites.py . \
 python3 poc/compact-db/import_quantities.py QUANTITY_EVIDENCE.jsonl \
   --output QUANTITIES.LAT \
   --report /tmp/quantity-import-report.json
+
+python3 poc/compact-db/extract_latinae_tabulae.py ../LatinaeTabulae.ods \
+  --output /tmp/latinae-tabulae.json
+
+# Auditoria central, sem dependência de .study:
+python3 poc/compact-db/audit_latinae_quantities.py \
+  --root ../ \
+  --output /tmp/latinae-quantity-audit.json
+
+# Cotejo editorial local opcional; nunca registrado no CI:
+python3 poc/compact-db/audit_latinae_quantities.py \
+  --root ../ \
+  --study-root ../.study \
+  --output /tmp/latinae-quantity-audit-com-gramaticas.json
 
 python3 poc/compact-db/suggest_quantity_evidence.py \
   DICTFILE.GEN /caminho/somente-leitura/superdb.sqlite \
