@@ -1850,10 +1850,10 @@ TEST(EngineTest, QuantityPartitionsMalumLexemesExactly) {
 
 TEST(EngineTest, UnknownQuantityKeepsLegacyAnalysesAndNfcSurface) {
     const auto ascii = test::engine().analyze("servus");
-    const auto marked = test::engine().analyze("servu\xCC\x84s");
+    const auto marked = test::engine().analyze("se\xCC\x84rvus");
     ASSERT_EQ(ascii.status, QueryStatus::analyzed);
     ASSERT_EQ(marked.status, QueryStatus::analyzed);
-    EXPECT_EQ(marked.surface.normalized_nfc, "servūs");
+    EXPECT_EQ(marked.surface.normalized_nfc, "sērvus");
     EXPECT_EQ(marked.analyses.size(), ascii.analyses.size());
     for (const auto &analysis : marked.analyses) {
         EXPECT_EQ(analysis.quantity_match, QuantityMatch::unknown);
@@ -1897,6 +1897,58 @@ TEST(EngineTest, InflectionQuantityDistinguishesFirstDeclensionA) {
         std::ranges::all_of(short_nouns, [](const AnalysisIR *analysis) {
             return analysis->quantity_match == QuantityMatch::exact;
         }));
+}
+
+TEST(EngineTest, InflectionQuantityPartitionsExercitusFourthDeclension) {
+    constexpr std::array<std::uint32_t, 7U> unmarked_rules{
+        1445U, 1509U, 1510U, 1511U, 1513U, 1514U, 1515U,
+    };
+    constexpr std::array<std::uint32_t, 3U> short_rules{
+        1445U,
+        1514U,
+        1515U,
+    };
+    constexpr std::array<std::uint32_t, 4U> long_rules{
+        1509U,
+        1510U,
+        1511U,
+        1513U,
+    };
+
+    const auto expect_rules =
+        [](const std::string_view surface, const std::string_view stem,
+           const std::string_view ending, const QuantityMatch quantity_match,
+           const std::span<const std::uint32_t> expected) {
+            const auto result = test::engine().analyze(surface);
+            ASSERT_EQ(result.status, QueryStatus::analyzed) << surface;
+            ASSERT_EQ(result.analyses.size(), expected.size()) << surface;
+
+            std::vector<std::uint32_t> actual;
+            actual.reserve(result.analyses.size());
+            for (const auto &analysis : result.analyses) {
+                ASSERT_TRUE(analysis.rule.has_value()) << surface;
+                EXPECT_EQ(analysis.quantity_match, quantity_match) << surface;
+                EXPECT_EQ(result.surface.slice(analysis.stem), stem) << surface;
+                EXPECT_EQ(result.surface.slice(analysis.ending), ending)
+                    << surface;
+                actual.push_back(analysis.rule->value());
+            }
+            std::ranges::sort(actual);
+            EXPECT_TRUE(std::ranges::equal(actual, expected)) << surface;
+        };
+
+    expect_rules("exercitus", "exercit", "us", QuantityMatch::unspecified,
+                 unmarked_rules);
+    expect_rules("exercĭtus", "exercĭt", "us", QuantityMatch::exact,
+                 unmarked_rules);
+    expect_rules("exercitŭs", "exercit", "ŭs", QuantityMatch::exact,
+                 short_rules);
+    expect_rules("exercĭtŭs", "exercĭt", "ŭs", QuantityMatch::exact,
+                 short_rules);
+    expect_rules("exercitūs", "exercit", "ūs", QuantityMatch::exact,
+                 long_rules);
+    expect_rules("exercĭtūs", "exercĭt", "ūs", QuantityMatch::exact,
+                 long_rules);
 }
 
 TEST(EngineTest, LexicalQuantityPartitionsMalumHomographs) {

@@ -585,6 +585,9 @@ TEST(DatabaseTest, FullAndSearchAgreeOnEveryGrammaticalRecord) {
 TEST(DatabaseTest, LoadsInflectionAndSparseStemQuantities) {
     constexpr auto first_declension_ablative_rule = RuleId{146U};
     constexpr auto first_declension_nominative_rule = RuleId{148U};
+    constexpr auto fourth_declension_genitive_rule = RuleId{1513U};
+    constexpr auto fourth_declension_nominative_rule = RuleId{1515U};
+    constexpr auto participial_nominative_rule = RuleId{1445U};
     constexpr std::uint32_t first_long_mal_entry = 26'263U;
     constexpr std::uint32_t last_long_mal_entry = 26'266U;
     constexpr std::uint32_t short_evil_entry = 26'267U;
@@ -601,6 +604,18 @@ TEST(DatabaseTest, LoadsInflectionAndSparseStemQuantities) {
         (*database)->inflection_quantity(first_declension_nominative_rule);
     EXPECT_EQ(nominative.known, 1U);
     EXPECT_EQ(nominative.long_vowel, 0U);
+    const auto fourth_genitive =
+        (*database)->inflection_quantity(fourth_declension_genitive_rule);
+    EXPECT_EQ(fourth_genitive.known, 1U);
+    EXPECT_EQ(fourth_genitive.long_vowel, 1U);
+    const auto fourth_nominative =
+        (*database)->inflection_quantity(fourth_declension_nominative_rule);
+    EXPECT_EQ(fourth_nominative.known, 1U);
+    EXPECT_EQ(fourth_nominative.long_vowel, 0U);
+    const auto participial_nominative =
+        (*database)->inflection_quantity(participial_nominative_rule);
+    EXPECT_EQ(participial_nominative.known, 1U);
+    EXPECT_EQ(participial_nominative.long_vowel, 0U);
 
     for (const auto &reference : (*database)->lookup_stem("mal")) {
         const auto entry =
@@ -637,6 +652,8 @@ TEST(DatabaseTest, LoadsInflectionAndSparseStemQuantities) {
     expect_stem_quantity("nomen", 27'969U, 0b00010U, 0b00010U);
     expect_stem_quantity("adhuc", 1'012U, 0b01001U, 0b01000U);
     expect_stem_quantity("defend", 16'105U, 0b00010U, 0b00010U);
+    expect_stem_quantity("exercit", 19'770U, 0b0100000U, 0U);
+    expect_stem_quantity("exercit", 19'772U, 0b0100000U, 0U);
     expect_stem_quantity("leu", 25'590U, 0b00010U, 0U);
     expect_stem_quantity("leu", 25'591U, 0b00010U, 0b00010U);
     expect_stem_quantity("popul", 30'955U, 0b01010U, 0U);

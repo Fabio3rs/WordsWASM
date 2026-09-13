@@ -71,9 +71,10 @@ arquivo denso, por sua vez, é uma projeção determinística de
 `inflection_quantities` possui um `u16` por regra, com duas máscaras de sete
 bits, e permite acesso O(1). `stem_quantities` é esparsa: cada registro de nove
 bytes identifica lexema/slot e guarda duas máscaras de 18 bits. O corte atual
-cura três regras de `-a` da primeira declinação e 76 alvos lexicais: seis da
-família `malum`, 38 conferidos no primeiro lote LS/Gaffiot e 32 alvos do lote
-de homógrafos diferenciados por quantidade. Entradas ASCII
+cura 130 regras nominais das cinco declinações, mais a regra participial de
+`-ŭs`, e 78 alvos lexicais: seis da
+família `malum`, 38 conferidos no primeiro lote LS/Gaffiot, 32 alvos do lote
+de homógrafos e os dois radicais `exercĭt-` (nome e particípio). Entradas ASCII
 continuam ignorando essas restrições. A auditoria da fila está em
 [`docs/revisao-fila-quantidades.md`](../../docs/revisao-fila-quantidades.md).
 

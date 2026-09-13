@@ -2,12 +2,268 @@
 -- Only confirmed evidence is promoted. Masks use zero-based ASCII positions.
 -- STEM entry IDs/slots are one-based; INFLECTION IDs below are zero-based.
 
+-- 4 declension acc plural ending -ŭă; evidence: grammar-declension-rule-72-ua
+INFLECTION 72 3 0
+-- 4 declension voc plural ending -ŭă; evidence: grammar-declension-rule-73-ua
+INFLECTION 73 3 0
+-- 4 declension nom plural ending -ŭă; evidence: grammar-declension-rule-74-ua
+INFLECTION 74 3 0
+-- 3 declension acc plural ending -ă; evidence: grammar-declension-rule-125-a
+INFLECTION 125 1 0
+-- 3 declension voc plural ending -ă; evidence: grammar-declension-rule-126-a
+INFLECTION 126 1 0
+-- 3 declension nom plural ending -ă; evidence: grammar-declension-rule-127-a
+INFLECTION 127 1 0
+-- 3 declension acc plural ending -ă; evidence: grammar-declension-rule-130-a
+INFLECTION 130 1 0
+-- 3 declension voc plural ending -ă; evidence: grammar-declension-rule-131-a
+INFLECTION 131 1 0
+-- 3 declension nom plural ending -ă; evidence: grammar-declension-rule-132-a
+INFLECTION 132 1 0
+-- 3 declension acc plural ending -ă; evidence: grammar-declension-rule-135-a
+INFLECTION 135 1 0
+-- 3 declension voc plural ending -ă; evidence: grammar-declension-rule-136-a
+INFLECTION 136 1 0
+-- 3 declension nom plural ending -ă; evidence: grammar-declension-rule-137-a
+INFLECTION 137 1 0
+-- 2 declension acc plural ending -ă; evidence: grammar-declension-rule-138-a
+INFLECTION 138 1 0
+-- 2 declension voc plural ending -ă; evidence: grammar-declension-rule-139-a
+INFLECTION 139 1 0
+-- 2 declension nom plural ending -ă; evidence: grammar-declension-rule-140-a
+INFLECTION 140 1 0
+-- 1 declension abl singular ending -ā; evidence: grammar-declension-rule-141-a
+INFLECTION 141 1 1
+-- 1 declension voc singular ending -ă; evidence: grammar-declension-rule-142-a
+INFLECTION 142 1 0
+-- 1 declension nom singular ending -ă; evidence: grammar-declension-rule-143-a
+INFLECTION 143 1 0
+-- 1 declension abl singular ending -ā; evidence: grammar-declension-rule-144-a
+INFLECTION 144 1 1
+-- 1 declension voc singular ending -ă; evidence: grammar-declension-rule-145-a
+INFLECTION 145 1 0
 -- first-declension singular ablative -ā; evidence: grammar-first-declension-ablative-a
 INFLECTION 146 1 1
 -- first-declension singular vocative -ă; evidence: grammar-first-declension-vocative-a
 INFLECTION 147 1 0
 -- first-declension singular nominative -ă; evidence: grammar-first-declension-nominative-a
 INFLECTION 148 1 0
+-- 5 declension abl singular ending -ē; evidence: grammar-declension-rule-374-e
+INFLECTION 374 1 1
+-- 3 declension abl singular ending -ĕ; evidence: grammar-declension-rule-378-e
+INFLECTION 378 1 0
+-- 3 declension abl singular ending -ĕ; evidence: grammar-declension-rule-379-e
+INFLECTION 379 1 0
+-- 3 declension abl singular ending -ĕ; evidence: grammar-declension-rule-380-e
+INFLECTION 380 1 0
+-- 2 declension voc singular ending -ĕ; evidence: grammar-declension-rule-385-e
+INFLECTION 385 1 0
+-- 2 declension voc singular ending -ĕ; evidence: grammar-declension-rule-386-e
+INFLECTION 386 1 0
+-- 2 declension voc singular ending -ĕ; evidence: grammar-declension-rule-389-e
+INFLECTION 389 1 0
+-- 5 declension dat singular ending -eī; evidence: grammar-declension-rule-486-ei
+INFLECTION 486 2 2
+-- 5 declension gen singular ending -eī; evidence: grammar-declension-rule-487-ei
+INFLECTION 487 2 2
+-- 4 declension dat singular ending -uī; evidence: grammar-declension-rule-488-ui
+INFLECTION 488 2 2
+-- 3 declension abl singular ending -ī; evidence: grammar-declension-rule-544-i
+INFLECTION 544 1 1
+-- 3 declension abl singular ending -ī; evidence: grammar-declension-rule-546-i
+INFLECTION 546 1 1
+-- 3 declension abl singular ending -ī; evidence: grammar-declension-rule-547-i
+INFLECTION 547 1 1
+-- 3 declension dat singular ending -ī; evidence: grammar-declension-rule-548-i
+INFLECTION 548 1 1
+-- 2 declension gen singular ending -ī; evidence: grammar-declension-rule-550-i
+INFLECTION 550 1 1
+-- 2 declension gen singular ending -ī; evidence: grammar-declension-rule-551-i
+INFLECTION 551 1 1
+-- 2 declension gen singular ending -ī; evidence: grammar-declension-rule-552-i
+INFLECTION 552 1 1
+-- 2 declension gen singular ending -ī; evidence: grammar-declension-rule-553-i
+INFLECTION 553 1 1
+-- 2 declension gen singular ending -ī; evidence: grammar-declension-rule-554-i
+INFLECTION 554 1 1
+-- 2 declension gen singular ending -ī; evidence: grammar-declension-rule-555-i
+INFLECTION 555 1 1
+-- 2 declension gen singular ending -ī; evidence: grammar-declension-rule-556-i
+INFLECTION 556 1 1
+-- 2 declension gen singular ending -ī; evidence: grammar-declension-rule-557-i
+INFLECTION 557 1 1
+-- 2 declension voc plural ending -ī; evidence: grammar-declension-rule-558-i
+INFLECTION 558 1 1
+-- 2 declension nom plural ending -ī; evidence: grammar-declension-rule-559-i
+INFLECTION 559 1 1
+-- 2 declension gen singular ending -ī; evidence: grammar-declension-rule-561-i
+INFLECTION 561 1 1
+-- 5 declension gen plural ending -ērŭm; evidence: grammar-declension-rule-681-erum
+INFLECTION 681 5 1
+-- 2 declension gen plural ending -ōrŭm; evidence: grammar-declension-rule-682-orum
+INFLECTION 682 5 1
+-- 1 declension gen plural ending -ārŭm; evidence: grammar-declension-rule-683-arum
+INFLECTION 683 5 1
+-- 4 declension gen plural ending -ŭŭm; evidence: grammar-declension-rule-698-uum
+INFLECTION 698 3 0
+-- 5 declension acc singular ending -ĕm; evidence: grammar-declension-rule-768-em
+INFLECTION 768 1 0
+-- 4 declension acc singular ending -ŭm; evidence: grammar-declension-rule-769-um
+INFLECTION 769 1 0
+-- 4 declension acc singular ending -ŭm; evidence: grammar-declension-rule-772-um
+INFLECTION 772 1 0
+-- 3 declension gen plural ending -ŭm; evidence: grammar-declension-rule-773-um
+INFLECTION 773 1 0
+-- 3 declension acc singular ending -ĕm; evidence: grammar-declension-rule-774-em
+INFLECTION 774 1 0
+-- 3 declension gen plural ending -ŭm; evidence: grammar-declension-rule-775-um
+INFLECTION 775 1 0
+-- 3 declension acc singular ending -ĕm; evidence: grammar-declension-rule-776-em
+INFLECTION 776 1 0
+-- 3 declension acc singular ending -ĕm; evidence: grammar-declension-rule-778-em
+INFLECTION 778 1 0
+-- 3 declension gen plural ending -ŭm; evidence: grammar-declension-rule-779-um
+INFLECTION 779 1 0
+-- 3 declension gen plural ending -ŭm; evidence: grammar-declension-rule-780-um
+INFLECTION 780 1 0
+-- 3 declension acc singular ending -ĕm; evidence: grammar-declension-rule-782-em
+INFLECTION 782 1 0
+-- 3 declension gen plural ending -ŭm; evidence: grammar-declension-rule-783-um
+INFLECTION 783 1 0
+-- 3 declension gen plural ending -ŭm; evidence: grammar-declension-rule-784-um
+INFLECTION 784 1 0
+-- 3 declension acc singular ending -ĕm; evidence: grammar-declension-rule-785-em
+INFLECTION 785 1 0
+-- 2 declension acc singular ending -ŭm; evidence: grammar-declension-rule-786-um
+INFLECTION 786 1 0
+-- 2 declension acc singular ending -ŭm; evidence: grammar-declension-rule-787-um
+INFLECTION 787 1 0
+-- 2 declension voc singular ending -ŭm; evidence: grammar-declension-rule-788-um
+INFLECTION 788 1 0
+-- 2 declension nom singular ending -ŭm; evidence: grammar-declension-rule-789-um
+INFLECTION 789 1 0
+-- 2 declension acc singular ending -ŭm; evidence: grammar-declension-rule-790-um
+INFLECTION 790 1 0
+-- 2 declension voc singular ending -ŭm; evidence: grammar-declension-rule-791-um
+INFLECTION 791 1 0
+-- 2 declension nom singular ending -ŭm; evidence: grammar-declension-rule-793-um
+INFLECTION 793 1 0
+-- 2 declension acc singular ending -ŭm; evidence: grammar-declension-rule-796-um
+INFLECTION 796 1 0
+-- 1 declension acc singular ending -ăm; evidence: grammar-declension-rule-797-am
+INFLECTION 797 1 0
+-- 1 declension acc singular ending -ăm; evidence: grammar-declension-rule-798-am
+INFLECTION 798 1 0
+-- 1 declension acc singular ending -ăm; evidence: grammar-declension-rule-800-am
+INFLECTION 800 1 0
+-- 2 declension abl singular ending -ō; evidence: grammar-declension-rule-938-o
+INFLECTION 938 1 1
+-- 2 declension dat singular ending -ō; evidence: grammar-declension-rule-939-o
+INFLECTION 939 1 1
+-- 5 declension abl plural ending -ēbŭs; evidence: grammar-declension-rule-1321-ebus
+INFLECTION 1321 5 1
+-- 5 declension dat plural ending -ēbŭs; evidence: grammar-declension-rule-1322-ebus
+INFLECTION 1322 5 1
+-- 4 declension abl plural ending -ŭbŭs; evidence: grammar-declension-rule-1323-ubus
+INFLECTION 1323 5 0
+-- 4 declension abl plural ending -ĭbŭs; evidence: grammar-declension-rule-1324-ibus
+INFLECTION 1324 5 0
+-- 4 declension dat plural ending -ŭbŭs; evidence: grammar-declension-rule-1325-ubus
+INFLECTION 1325 5 0
+-- 4 declension dat plural ending -ĭbŭs; evidence: grammar-declension-rule-1326-ibus
+INFLECTION 1326 5 0
+-- 3 declension abl plural ending -ĭbŭs; evidence: grammar-declension-rule-1327-ibus
+INFLECTION 1327 5 0
+-- 3 declension dat plural ending -ĭbŭs; evidence: grammar-declension-rule-1328-ibus
+INFLECTION 1328 5 0
+-- participial nominative masculine singular ending -ŭs; evidence: grammar-declension-rule-1445-participle-us
+INFLECTION 1445 1 0
+-- 5 declension acc plural ending -ēs; evidence: grammar-declension-rule-1502-es
+INFLECTION 1502 1 1
+-- 5 declension voc plural ending -ēs; evidence: grammar-declension-rule-1503-es
+INFLECTION 1503 1 1
+-- 5 declension nom plural ending -ēs; evidence: grammar-declension-rule-1504-es
+INFLECTION 1504 1 1
+-- 5 declension voc singular ending -ēs; evidence: grammar-declension-rule-1505-es
+INFLECTION 1505 1 1
+-- 5 declension nom singular ending -ēs; evidence: grammar-declension-rule-1506-es
+INFLECTION 1506 1 1
+-- 4 declension nom singular ending -ŭs; evidence: grammar-declension-rule-1507-us
+INFLECTION 1507 1 0
+-- 4 declension gen singular ending -ūs; evidence: grammar-declension-rule-1508-us
+INFLECTION 1508 1 1
+-- 4 declension acc plural ending -ūs; evidence: grammar-declension-rule-1509-us
+INFLECTION 1509 1 1
+-- 4 declension voc plural ending -ūs; evidence: grammar-declension-rule-1510-us
+INFLECTION 1510 1 1
+-- 4 declension nom plural ending -ūs; evidence: grammar-declension-rule-1511-us
+INFLECTION 1511 1 1
+-- 4 declension gen singular ending -ūs; evidence: grammar-declension-rule-1513-us
+INFLECTION 1513 1 1
+-- 4 declension voc singular ending -ŭs; evidence: grammar-declension-rule-1514-us
+INFLECTION 1514 1 0
+-- 4 declension nom singular ending -ŭs; evidence: grammar-declension-rule-1515-us
+INFLECTION 1515 1 0
+-- 3 declension acc plural ending -īs; evidence: grammar-declension-rule-1517-is
+INFLECTION 1517 1 1
+-- 3 declension acc plural ending -īs; evidence: grammar-declension-rule-1520-is
+INFLECTION 1520 1 1
+-- 3 declension gen singular ending -ĭs; evidence: grammar-declension-rule-1526-is
+INFLECTION 1526 1 0
+-- 3 declension acc plural ending -ēs; evidence: grammar-declension-rule-1527-es
+INFLECTION 1527 1 1
+-- 3 declension acc plural ending -īs; evidence: grammar-declension-rule-1528-is
+INFLECTION 1528 1 1
+-- 3 declension nom plural ending -īs; evidence: grammar-declension-rule-1529-is
+INFLECTION 1529 1 1
+-- 3 declension acc plural ending -ēs; evidence: grammar-declension-rule-1530-es
+INFLECTION 1530 1 1
+-- 3 declension acc plural ending -īs; evidence: grammar-declension-rule-1531-is
+INFLECTION 1531 1 1
+-- 3 declension voc plural ending -ēs; evidence: grammar-declension-rule-1532-es
+INFLECTION 1532 1 1
+-- 3 declension nom plural ending -īs; evidence: grammar-declension-rule-1533-is
+INFLECTION 1533 1 1
+-- 3 declension nom plural ending -ēs; evidence: grammar-declension-rule-1534-es
+INFLECTION 1534 1 1
+-- 3 declension gen singular ending -ĭs; evidence: grammar-declension-rule-1535-is
+INFLECTION 1535 1 0
+-- 2 declension nom singular ending -ŭs; evidence: grammar-declension-rule-1536-us
+INFLECTION 1536 1 0
+-- 2 declension nom singular ending -ŭs; evidence: grammar-declension-rule-1539-us
+INFLECTION 1539 1 0
+-- 2 declension nom singular ending -ŭs; evidence: grammar-declension-rule-1540-us
+INFLECTION 1540 1 0
+-- 2 declension acc plural ending -ōs; evidence: grammar-declension-rule-1541-os
+INFLECTION 1541 1 1
+-- 2 declension abl plural ending -īs; evidence: grammar-declension-rule-1542-is
+INFLECTION 1542 1 1
+-- 2 declension dat plural ending -īs; evidence: grammar-declension-rule-1543-is
+INFLECTION 1543 1 1
+-- 2 declension nom singular ending -ŭs; evidence: grammar-declension-rule-1547-us
+INFLECTION 1547 1 0
+-- 1 declension acc plural ending -ās; evidence: grammar-declension-rule-1552-as
+INFLECTION 1552 1 1
+-- 1 declension abl plural ending -īs; evidence: grammar-declension-rule-1553-is
+INFLECTION 1553 1 1
+-- 1 declension dat plural ending -īs; evidence: grammar-declension-rule-1554-is
+INFLECTION 1554 1 1
+-- 4 declension dat singular ending -ū; evidence: grammar-declension-rule-1685-u
+INFLECTION 1685 1 1
+-- 4 declension voc singular ending -ū; evidence: grammar-declension-rule-1687-u
+INFLECTION 1687 1 1
+-- 4 declension acc singular ending -ū; evidence: grammar-declension-rule-1688-u
+INFLECTION 1688 1 1
+-- 4 declension dat singular ending -ū; evidence: grammar-declension-rule-1689-u
+INFLECTION 1689 1 1
+-- 4 declension voc singular ending -ū; evidence: grammar-declension-rule-1690-u
+INFLECTION 1690 1 1
+-- 4 declension nom singular ending -ū; evidence: grammar-declension-rule-1691-u
+INFLECTION 1691 1 1
+-- 4 declension abl singular ending -ū; evidence: grammar-declension-rule-1692-u
+INFLECTION 1692 1 1
+-- 4 declension dat singular ending -ū; evidence: grammar-declension-rule-1693-u
+INFLECTION 1693 1 1
 
 -- absquĕ; evidence: review-gaffiot-377-absque-e267-s1
 STEM 267 1 32 0
@@ -73,6 +329,10 @@ STEM 19341 1 8 8
 STEM 19446 1 5 0
 -- etsī; evidence: review-gaffiot-24405-etsi-e19470-s1
 STEM 19470 1 8 8
+-- exercĭt- participial stem; evidence: review-ls-n16823-exercitus-e19770-s4
+STEM 19770 4 32 0
+-- exercĭt- noun stem; evidence: review-gaffiot-25230-exerciti-e19772-s1, review-ls-n16824-exercitus-e19772-s1
+STEM 19772 1 32 0
 -- fūror, steal; evidence: critical-ls-n19123-furor-steal-e21231-s1
 STEM 21231 1 2 2
 -- fŭror, fury; evidence: critical-ls-n19124-furor-fury-e21247-s1
