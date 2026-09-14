@@ -79,9 +79,9 @@ and directory name. For macOS, substitute either the `macos-arm64` or
 
 ```powershell
 Expand-Archive words-cli-v1.0.0-rc1-windows-x86_64.zip
-Set-Location words-cli-v1.0.0-rc1-windows-x86_64
+Set-Location words-cli-v1.0.0-rc1-windows-x86_64\words-cli-v1.0.0-rc1-windows-x86_64
 .\words_cli.exe `
-  --database ..\words-full-v1.0.0-rc1.wwdb `
+  --database ..\..\words-full-v1.0.0-rc1.wwdb `
   --format analysis-v3 `
   amamus
 ```
