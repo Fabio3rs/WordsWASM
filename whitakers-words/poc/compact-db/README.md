@@ -162,6 +162,25 @@ radicais gerados contra `INFLECTS.SEC` e as formas do banco Latim–Alemão. A
 opção `--draft-output` grava apenas estruturas corroboradas; sentidos e demais
 campos editoriais continuam pendentes e impedem importação automática.
 
+[`extract_tll_word_frequencies.py`](extract_tll_word_frequencies.py) e
+[`rank_tll_unknown_words.py`](rank_tll_unknown_words.py) acrescentam frequência
+real do corpus a essa auditoria. A ausência efetiva combina o `status: unknown`
+do CLI com a falta de uma análise completa por `--two-words=legacy`; os
+dicionários externos apenas agrupam e explicam candidatos. O recorte, as filas
+e os artefatos estão documentados em
+[`docs/cobertura-corpus-tll.md`](../../docs/cobertura-corpus-tll.md).
+Esses resultados são peças exploratórias para ajudar a construir futuramente
+um possível roadmap de expansão lexical; não são o roadmap final, decisões de
+inclusão aprovadas nem material pronto para importação ou publicação.
+
+[`enrich_tll_unknowns_with_cltk.py`](enrich_tll_unknowns_with_cltk.py) é a
+segunda etapa, estritamente editorial. Ela liga formas efetivamente
+desconhecidas aos lemas observados em um run CLTK/Stanza explícito e procura
+esses lemas no LS, Gaffiot, Latim–Alemão e Faria retificado v2. Frequência do
+corpus, frequência no piloto, ambiguidades, POS e proveniência permanecem
+separados. A saída é somente um insumo inicial para a elaboração de um possível
+roadmap, nunca um roadmap concluído ou um manifesto de importação.
+
 [`build_u16_appendix_poc.py`](build_u16_appendix_poc.py) continua essa
 auditoria em dois experimentos não editoriais: máxima cardinalidade com um
 radical por verbete e reconstrução morfológica relaxada por maioria. Ambos

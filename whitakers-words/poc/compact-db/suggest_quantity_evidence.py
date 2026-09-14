@@ -347,9 +347,15 @@ def extract_first_word(
 
 
 def sqlite_uri(path: Path) -> str:
-    # WHY: immutable mode prevents journal creation next to read-only reference
-    # dictionaries and documents that the generator must never edit them.
-    return f"file:{path.resolve().as_posix()}?immutable=1"
+    # WHY: mode=ro makes the no-write contract explicit; immutable additionally
+    # prevents journal/WAL probing next to frozen reference databases.
+    return f"file:{path.resolve().as_posix()}?mode=ro&immutable=1"
+
+
+def readonly_sqlite_connection(path: Path) -> sqlite3.Connection:
+    connection = sqlite3.connect(sqlite_uri(path), uri=True)
+    connection.execute("PRAGMA query_only=ON")
+    return connection
 
 
 def read_collatinus_models(path: Path) -> dict[str, CollatinusModel]:
@@ -659,7 +665,7 @@ def latin_german_gender(latin: str) -> str | None:
 
 
 def read_latin_german_entries(database: Path) -> Iterator[DictionaryEntry]:
-    connection = sqlite3.connect(sqlite_uri(database), uri=True)
+    connection = readonly_sqlite_connection(database)
     try:
         columns = {row[1] for row in connection.execute("pragma table_info(VOC)")}
         required = {"id", "vok_id", "latin", "desc", "grammar", "typnr"}
@@ -705,7 +711,7 @@ def read_dictionary_entries(
     unsupported = sorted(set(names) - SQLITE_SOURCE_NAMES)
     if unsupported:
         raise SuggestionError(f"unsupported source(s): {', '.join(unsupported)}")
-    connection = sqlite3.connect(sqlite_uri(database), uri=True)
+    connection = readonly_sqlite_connection(database)
     try:
         columns = {row[1] for row in connection.execute("pragma table_info(entry)")}
         required = {

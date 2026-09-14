@@ -1,0 +1,205 @@
+{
+  "cltk_run": {
+    "cltk_pipeline": "stanza-ittb-cltk-word",
+    "cltk_run_id": 1,
+    "cltk_version": "1.5.0",
+    "config": {
+      "paths": [
+        "caesar/gall1.shtml",
+        "vergil/aen1.shtml",
+        "justinian/digest1.shtml",
+        "bible/genesis.shtml",
+        "aquinas/ente.shtml",
+        "fronto.html"
+      ],
+      "resource_manifest_sha256": "3cb1266162498c7fa212bf54924f1a5c23b39429a7874c5565772487ff4aac08",
+      "selection_run_id": 12,
+      "treebank": "ittb"
+    },
+    "config_sha256": "1b006fbb81bd8f85570f4c33a00adef294e5b8262ab510488cb37a1aa127acf6",
+    "counts": {
+      "distinct_raw_lemmas": 11989,
+      "documents": 745,
+      "tokens": 142761,
+      "tokens_with_invalid_offsets": 0
+    },
+    "finished_at": "2026-08-25T17:29:40.844Z",
+    "id": 13,
+    "inputs": [
+      {
+        "input_run_id": 12,
+        "role": "nlp_preparation",
+        "sequence_no": 0
+      }
+    ],
+    "is_active": 0,
+    "language": "lat",
+    "model_manifest": {
+      "cltk_version": "1.5.0",
+      "files": [
+        {
+          "byte_size": 457371,
+          "path": "resources.json",
+          "sha256": "4e41c1df152146fa26ed0c006a08feea7a60bb3414bb6d57dbda24ad2e3cb99c"
+        },
+        {
+          "byte_size": 623669,
+          "path": "la/tokenize/ittb.pt",
+          "sha256": "d298dfe659687b55582174c823c1d7d4268b88e91a27eedf0db2235769692fbf"
+        },
+        {
+          "byte_size": 458070,
+          "path": "la/mwt/ittb.pt",
+          "sha256": "213b47767557e69da76d7152ca82d70fa7d055a6c79ccc37e9ecdf300b94e59a"
+        },
+        {
+          "byte_size": 23900184,
+          "path": "la/pos/ittb_nocharlm.pt",
+          "sha256": "a8ca27985b2267c2e54860c2eb78835704625058d6227c07bd0d200ec67fe89c"
+        },
+        {
+          "byte_size": 2143154,
+          "path": "la/lemma/ittb_nocharlm.pt",
+          "sha256": "4540596fc28684923bf009ae8f2e957db609344afe96a3a9beb676e08709476d"
+        },
+        {
+          "byte_size": 112115667,
+          "path": "la/depparse/ittb_nocharlm.pt",
+          "sha256": "dc0f0d3a2b00872c54e973ab7b8d38e0212f095cb7b2fe1e8a9c663284d09d9b"
+        },
+        {
+          "byte_size": 106974152,
+          "path": "la/pretrain/conll17.pt",
+          "sha256": "48a807cee8e697232f9104aeddfa2a68b557863c9b8d0d72d9370a22d136b22a"
+        }
+      ],
+      "processors": [
+        "tokenize",
+        "mwt",
+        "pos",
+        "lemma",
+        "depparse"
+      ],
+      "stanza_version": "1.14.0",
+      "treebank": "ittb"
+    },
+    "pipeline_name": "tll-corpus",
+    "pipeline_version": "0.1.0",
+    "run_type": "cltk_pilot",
+    "started_at": "2026-08-25T17:26:26.466Z",
+    "status": "completed"
+  },
+  "counts": {
+    "candidate_groups_by_dictionary_source": {
+      "faria-v2-retificado": 173,
+      "gaffiot": 75,
+      "latin-german": 65,
+      "ls_dict": 185
+    },
+    "candidate_groups_by_dictionary_support": {
+      "corroborated_independent": 163,
+      "none": 948,
+      "review_only": 10,
+      "single_source": 87
+    },
+    "candidate_groups_by_queue": {
+      "abbreviation_or_editorial": 81,
+      "common_lexeme": 54,
+      "model_or_pos_review": 34,
+      "no_dictionary_match": 893,
+      "proper_name": 146
+    },
+    "excluded_pilot_tokens": {
+      "lemma_not_latin_ascii": 17,
+      "surface_not_effective_unknown": 93253,
+      "surface_not_one_word": 46840
+    },
+    "roadmap_candidate_groups": 1208,
+    "surface_lemma_pos_pairs": 1270,
+    "unknown_forms_observed_in_pilot": 1133,
+    "usable_normalized_lemmas": 1144
+  },
+  "inputs": [
+    {
+      "name": "unknown_forms",
+      "path": "/mnt/projects/Projects/WordsWASM/whitakers-words/data/tll-corpus-coverage/tll-unknown-forms.tsv.gz",
+      "sha256": "sha256:a4d04ec4ff0bd426424ea2623f15e4ab14e38c44ab5831187aa6aeb2a61501cf",
+      "size_bytes": 691095
+    },
+    {
+      "name": "stage_one_report",
+      "path": "/mnt/projects/Projects/WordsWASM/whitakers-words/data/tll-corpus-coverage/tll-coverage-report.json",
+      "sha256": "sha256:72c3ef803820e5912e5c3d11966ae50e4dc21d595b7a873f59db8955028c77be",
+      "size_bytes": 202713
+    },
+    {
+      "name": "structural_candidates",
+      "path": "/mnt/projects/Projects/WordsWASM/whitakers-words/data/tll-corpus-coverage/tll-lexeme-priorities.jsonl.gz",
+      "sha256": "sha256:99375c69631d6d65c4fe5f249ca0d606a992b732151ff694d5c4f921bfcf50f9",
+      "size_bytes": 1286678
+    },
+    {
+      "name": "tll_database",
+      "path": "/mnt/projects/Projects/thelatinlibrary/var/thelatinlibrary.sqlite3",
+      "sha256": "sha256:7e0938e04c423c2adfefc1cdefa8784e23f9a63359c59ff057e05247608c70c4",
+      "size_bytes": 5091528704
+    },
+    {
+      "name": "superdb",
+      "path": "/mnt/projects/Projects/Dicionarios/dicionarios/superdb.sqlite",
+      "sha256": "sha256:13f89cef0fc308ce07dafdc19617250659daeff0c1931a6f2ffd22af9010f8d6",
+      "size_bytes": 687562752
+    },
+    {
+      "name": "latin_german",
+      "path": "/mnt/projects/Projects/Dicionarios/dicionarios/token_latim_german.sqlite",
+      "sha256": "sha256:8cb3a053ff473bf82194d59432bf0f03ccf88b2a000312e38044c0cd9236619d",
+      "size_bytes": 280985600
+    },
+    {
+      "name": "retificado_v2",
+      "path": "/mnt/projects/Projects/Dicionarios/dicionarios/retificado_v2.db",
+      "sha256": "sha256:3f86921462d2be4264f10dd086289ae5c217a04eba3ec185048406fe4dcf154f",
+      "size_bytes": 43765760
+    }
+  ],
+  "outputs": {
+    "candidates": {
+      "path": "whitakers-words/data/tll-corpus-coverage/tll-cltk-lexeme-priorities.jsonl.gz",
+      "sha256": "sha256:6d058aaaa388659c291d34fbf2fb91985fbbbda262b24bd282801a7f4a9ec66b"
+    },
+    "evidence": {
+      "path": "whitakers-words/data/tll-corpus-coverage/tll-cltk-lemma-evidence.tsv.gz",
+      "sha256": "sha256:9fda699e211dd764847c8548aabf93681565141ca4368c65bcb3dbecf31fcfe0"
+    },
+    "roadmap": {
+      "path": "whitakers-words/data/tll-corpus-coverage/tll-cltk-roadmap.tsv",
+      "sha256": "sha256:2acdd6bb8824092855aa63a3b9154cac9d49c5028d8ba17a4c194a00673c660b"
+    }
+  },
+  "policy": {
+    "automatic_promotion_allowed": false,
+    "corpus_occurrences": "upper bound from surface forms; not certain lemma attribution",
+    "lemma_normalization": "exact ASCII lemma after ligature expansion and diacritic removal",
+    "pos": "editorial signal only; conflicts are preserved",
+    "purpose": "reviewable possible roadmap; not an import manifest",
+    "retificado_v2": "queried directly; SuperDB retificado_v2 snapshot excluded",
+    "scope": "stage-one effective unknown forms observed in the selected CLTK run",
+    "sqlite": "mode=ro&immutable=1; PRAGMA query_only=ON",
+    "surface_normalization": "single TLL word token; NFC after Unicode casefold"
+  },
+  "schema": "whitakers-words.tll-cltk-roadmap-report.v1",
+  "stage_one": {
+    "effective_unknown_forms": 65841,
+    "schema": "whitakers-words.tll-corpus-coverage-report.v1",
+    "selection_run": {
+      "config_json": "{\"chunker_version\":\"1.0.0\",\"input_run_ids\":[8,10],\"max_chunk_chars\":8000,\"selector\":\"tll_corpus.nlp_prepare\",\"selector_version\":\"1.0.0\",\"source_view\":\"canonical_text_unit\"}",
+      "config_sha256": "a1e3c9287e14f276c162131548aa8abddafa26d285747771f0f9c5c60ae2d18c",
+      "finished_at": "2026-08-25T17:26:05.475Z",
+      "id": 12,
+      "pipeline_name": "tll-corpus",
+      "pipeline_version": "0.1.0",
+      "started_at": "2026-08-25T17:24:25.992Z"
+    }
+  }
+}

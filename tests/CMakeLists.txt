@@ -81,6 +81,18 @@ if(NOT EMSCRIPTEN)
                 "${CMAKE_CURRENT_SOURCE_DIR}/lexical_expansion_test.py"
         )
         add_test(
+            NAME words_tll_corpus_statistics
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tll_corpus_statistics_test.py"
+        )
+        set_tests_properties(words_tll_corpus_statistics PROPERTIES LABELS unit)
+        add_test(
+            NAME words_tll_cltk_roadmap
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tll_cltk_roadmap_test.py"
+        )
+        set_tests_properties(words_tll_cltk_roadmap PROPERTIES LABELS unit)
+        add_test(
             NAME words_u16_appendix_poc
             COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/u16_appendix_poc_test.py"

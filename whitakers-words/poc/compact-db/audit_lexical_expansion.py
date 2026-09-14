@@ -130,7 +130,7 @@ def source_id(entry: quantity.DictionaryEntry) -> str:
 
 
 def read_faria_v3_entries(database: Path) -> Iterable[quantity.DictionaryEntry]:
-    connection = sqlite3.connect(quantity.sqlite_uri(database), uri=True)
+    connection = quantity.readonly_sqlite_connection(database)
     try:
         columns = {row[1] for row in connection.execute("pragma table_info(entry)")}
         required = {
@@ -400,7 +400,7 @@ def read_latin_german_forms(
     database: Path, source_entry_ids: set[str]
 ) -> dict[str, frozenset[str]]:
     forms: dict[str, set[str]] = defaultdict(set)
-    connection = sqlite3.connect(quantity.sqlite_uri(database), uri=True)
+    connection = quantity.readonly_sqlite_connection(database)
     try:
         identifiers = sorted(source_entry_ids)
         for begin in range(0, len(identifiers), 800):

@@ -153,7 +153,7 @@ def contextual_gender(
 
 
 def sqlite_connection(path: Path) -> sqlite3.Connection:
-    connection = sqlite3.connect(quantity.sqlite_uri(path), uri=True)
+    connection = quantity.readonly_sqlite_connection(path)
     connection.row_factory = sqlite3.Row
     return connection
 
