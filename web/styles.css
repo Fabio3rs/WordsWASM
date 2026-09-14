@@ -307,6 +307,10 @@ h1 {
   text-align: center;
 }
 
+.result-summary__suggested {
+  color: var(--warning);
+}
+
 .query-card {
   margin-top: 1rem;
   border: 1px solid var(--line);
@@ -566,11 +570,46 @@ h1 {
   border-top: 1px solid var(--line);
   color: var(--warning);
   font-size: 0.86rem;
+}
+
+.diagnostics {
   list-style-position: inside;
 }
 
 .diagnostics--error {
   color: var(--error);
+}
+
+.suggestion + .suggestion {
+  margin-top: 1rem;
+}
+
+.suggestion__title {
+  margin: 0;
+}
+
+.suggestion-segment {
+  margin-top: 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  overflow: hidden;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.suggestion-segment__summary {
+  padding: 0.65rem 0.8rem;
+  background: #faf6ee;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.suggestion-segment__analyses {
+  border-top: 1px solid var(--line);
+}
+
+.suggestion-segment__analyses > .lexeme-group:first-child {
+  border-top: 0;
 }
 
 details {

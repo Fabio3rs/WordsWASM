@@ -168,6 +168,12 @@ const translations = Object.freeze({
       readingCount: (count) =>
         `${count} morphological ${count === 1 ? "reading" : "readings"}`,
       possibleSplit: (words) => `Possible split: ${words}`,
+      suggestedSummary: (entries, hits) =>
+        `${entries} suggested ${entries === 1 ? "entry" : "entries"} · ` +
+        `${hits} suggested ${hits === 1 ? "interpretation" : "interpretations"}`,
+      suggestedSegment: (text, entries, hits) =>
+        `${text} · ${entries} ${entries === 1 ? "entry" : "entries"} · ` +
+        `${hits} ${hits === 1 ? "interpretation" : "interpretations"}`,
       normalized: (text) => `Normalized: ${text}`,
       rawObject: "Object returned by the API",
       resultSummary: (units, entries, hits, elapsed) =>
@@ -332,6 +338,12 @@ const translations = Object.freeze({
       readingCount: (count) =>
         `${count} ${count === 1 ? "leitura morfológica" : "leituras morfológicas"}`,
       possibleSplit: (words) => `Possível divisão: ${words}`,
+      suggestedSummary: (entries, hits) =>
+        `${entries} ${entries === 1 ? "entrada sugerida" : "entradas sugeridas"} · ` +
+        `${hits} ${hits === 1 ? "interpretação sugerida" : "interpretações sugeridas"}`,
+      suggestedSegment: (text, entries, hits) =>
+        `${text} · ${entries} ${entries === 1 ? "entrada" : "entradas"} · ` +
+        `${hits} ${hits === 1 ? "interpretação" : "interpretações"}`,
       normalized: (text) => `Normalizado: ${text}`,
       rawObject: "Objeto retornado pela API",
       resultSummary: (units, entries, hits, elapsed) =>
@@ -496,6 +508,12 @@ const translations = Object.freeze({
       readingCount: (count) =>
         `${count} ${count === 1 ? "interpretatio morphologica" : "interpretationes morphologicae"}`,
       possibleSplit: (words) => `Divisio possibilis: ${words}`,
+      suggestedSummary: (entries, hits) =>
+        `${entries} ${entries === 1 ? "lemma propositum" : "lemmata proposita"} · ` +
+        `${hits} ${hits === 1 ? "interpretatio proposita" : "interpretationes propositae"}`,
+      suggestedSegment: (text, entries, hits) =>
+        `${text} · ${entries} ${entries === 1 ? "lemma" : "lemmata"} · ` +
+        `${hits} ${hits === 1 ? "interpretatio" : "interpretationes"}`,
       normalized: (text) => `Ad formam canonicam redactum: ${text}`,
       rawObject: "Res ab API reddita",
       resultSummary: (units, entries, hits, elapsed) =>
@@ -816,14 +834,16 @@ function addDefinitionList(details, entries) {
 }
 
 function renderDetails(hit, container) {
+  const quantity = hit.form.quantity ?? {};
   const details = element("details");
   details.append(element("summary", "", message("readingData")));
   addDefinitionList(details, [
     [message("recognizedForm"), hit.form.recognized],
     [message("displayForm"), hit.form.display],
-    [message("databaseQuantity"), hit.form.quantity.annotated],
+    [message("databaseQuantity"), quantity.annotated],
     [message("quantityCoverageLabel"),
-      translated("quantityCoverage", hit.form.quantity.coverage)],
+      quantity.coverage === undefined
+        ? null : translated("quantityCoverage", quantity.coverage)],
     [message("stem"), hit.form.stem], [message("stemId"), hit.form.stemKey],
     [message("ending"), hit.form.ending], [message("ruleId"), hit.rule?.id],
     [message("ruleAge"), hit.rule?.age],
@@ -1037,12 +1057,41 @@ function renderDiagnostics(document, card) {
 
 function renderSuggestions(document, card) {
   if (document.suggestions.length === 0) return;
-  const list = element("ul", "suggestions");
+  const container = element("section", "suggestions");
   for (const suggestion of document.suggestions) {
     const words = suggestion.segments.map(({text}) => text).join(" + ");
-    list.append(element("li", "", message("possibleSplit", words)));
+    const panel = element("div", "suggestion");
+    panel.append(element("p", "suggestion__title",
+      message("possibleSplit", words)));
+
+    for (const segment of suggestion.segments) {
+      const groups = groupHits(segment.hits);
+      const details = element("details", "suggestion-segment");
+      details.append(element("summary", "suggestion-segment__summary",
+        message("suggestedSegment", segment.text, groups.length,
+          segment.hits.length)));
+      const analyses = element("div", "suggestion-segment__analyses");
+      for (const hits of groups) analyses.append(renderHitGroup(hits));
+      details.append(analyses);
+      panel.append(details);
+    }
+    container.append(panel);
   }
-  card.append(list);
+  card.append(container);
+}
+
+function countSuggestedAnalyses(documents) {
+  let entries = 0;
+  let hits = 0;
+  for (const document of documents) {
+    for (const suggestion of document.suggestions) {
+      for (const segment of suggestion.segments) {
+        entries += groupHits(segment.hits).length;
+        hits += segment.hits.length;
+      }
+    }
+  }
+  return {entries, hits};
 }
 
 function renderDocument(document) {
@@ -1078,9 +1127,15 @@ function renderResults(documents, elapsed) {
   const hits = documents.reduce((total, document) => total + document.hits.length, 0);
   const groups = documents.reduce(
     (total, document) => total + groupHits(document.hits).length, 0);
-  ui.results.append(element("p", "result-summary",
+  const summary = element("p", "result-summary",
     message("resultSummary", documents.length, groups, hits,
-      formatElapsed(elapsed))));
+      formatElapsed(elapsed)));
+  const suggested = countSuggestedAnalyses(documents);
+  if (suggested.hits > 0) {
+    summary.append(" · ", element("span", "result-summary__suggested",
+      message("suggestedSummary", suggested.entries, suggested.hits)));
+  }
+  ui.results.append(summary);
 
   if (documents.length === 0) {
     ui.results.append(element("p", "empty-state", message("noUnits")));
