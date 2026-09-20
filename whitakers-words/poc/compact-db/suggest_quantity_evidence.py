@@ -42,6 +42,10 @@ SOURCE_FAMILIES = {
     "latin_german": ("latin-german", True),
     "faria_v3": ("faria", True),
 }
+# The current Faria input is an OCR review artifact. It is useful context in
+# the roadmap, but cannot be the second vote that puts a row in the proposal
+# batch. Collatinus is excluded separately because it is derivative.
+PROPOSAL_AUTHORITY_SOURCES = frozenset({"ls_dict", "gaffiot", "latin_german"})
 COLLATINUS_POS = {
     "a": "ADJ",
     "d": "ADV",
@@ -755,6 +759,80 @@ def read_dictionary_entries(
         connection.close()
 
 
+def faria_gender(morphology: str) -> str | None:
+    match = re.search(r"\\b([mfn])\\.?\\b", morphology.lower())
+    return match.group(1) if match is not None else None
+
+
+def faria_part_of_speech(value: object, morphology: str) -> str | None:
+    raw = " ".join(str(item) for item in (value or "", morphology)).lower()
+    if "subs" in raw or "substant" in raw:
+        return "NOUN"
+    if "adj" in raw:
+        return "ADJ"
+    if "adv" in raw:
+        return "ADV"
+    if "pron" in raw:
+        return "PRON"
+    if "num" in raw:
+        return "NUM"
+    if "prep" in raw:
+        return "PREP"
+    if "conj" in raw:
+        return "CONJ"
+    if "interj" in raw:
+        return "INTERJ"
+    if "verb" in raw or "verbo" in raw:
+        return "VERB"
+    normalized = str(value).upper() if value else None
+    return normalized if normalized in PART_NAMES.values() else None
+
+
+def read_faria_jsonl(path: Path) -> Iterator[DictionaryEntry]:
+    """Read the public/review JSONL projections of the Faria v3 OCR.
+
+    The release has changed wrapper names over time, so this reader accepts a
+    bare entry or the documented ``{\"entry\": {...}}`` review packet. Invalid
+    or multiword headwords are safely ignored by ``extract_first_word`` later.
+    """
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise SuggestionError(f"{path}:{line_number}: invalid JSON") from error
+        if not isinstance(record, dict):
+            continue
+        # Raw page OCR has many entries per JSONL record; the later review and
+        # public projections wrap one entry in ``entry``.
+        page_id = record.get("document_id") or record.get("provenance", {}).get("document_id", "faria")
+        page_entries = record.get("extraction", {}).get("entries")
+        values = page_entries if isinstance(page_entries, list) else [record.get("entry", record)]
+        for ordinal, value in enumerate(values, 1):
+            if not isinstance(value, dict):
+                continue
+            entry_id = value.get("entry_id") or value.get("id") or value.get("local_id")
+            if isinstance(entry_id, str) and value.get("local_id") == entry_id:
+                entry_id = f"{page_id}:{entry_id}"
+            if not isinstance(entry_id, str):
+                entry_id = f"{page_id}:{line_number}:{ordinal}"
+            headword = value.get("headword") or value.get("headword_raw")
+            if not isinstance(headword, str) and isinstance(value.get("headwords"), list):
+                headword = next((item for item in value["headwords"] if isinstance(item, str)), None)
+            if not isinstance(headword, str) or not headword:
+                continue
+            morphology = str(value.get("morphology_raw") or "")
+            definition = str(value.get("definition_raw") or value.get("source_text") or "")
+            yield DictionaryEntry(
+                "faria_v3", entry_id, headword,
+                faria_part_of_speech(value.get("lexical_pos_norm") or value.get("part_of_speech"), morphology),
+                faria_gender(morphology),
+                " — ".join(piece for piece in (headword, morphology, definition) if piece),
+                *SOURCE_FAMILIES["faria_v3"], morphology_hint=morphology,
+            )
+
+
 def parts_compatible(external: str | None, whitaker: str) -> bool:
     return external in {None, "OTHER"} or external == whitaker
 
@@ -787,16 +865,17 @@ def suggest(
     entries: Iterable[DictionaryEntry],
     *,
     maximum_ending: int = 6,
+    include_unknown: bool = False,
 ) -> tuple[Candidate, ...]:
     candidates: list[Candidate] = []
     for entry in entries:
-        word = extract_first_word(entry.lemma)
+        word = extract_first_word(entry.lemma, require_quantity=not include_unknown)
         if word is None:
             continue
         local: list[Candidate] = []
         minimum = max(3, len(word.source) - maximum_ending)
         for length in range(minimum, min(STEM_SIZE, len(word.source)) + 1):
-            if not word.prefix_has_quantity(length):
+            if not include_unknown and not word.prefix_has_quantity(length):
                 continue
             for stem in stems.get(word.source[:length], ()):
                 # WHY: a dictionary headword describes the citation stem. Other
@@ -841,6 +920,222 @@ def suggest(
                 item.whitaker.slot,
             ),
         )
+    )
+
+
+def existing_review_records(path: Path | None) -> dict[tuple[int, int], list[dict[str, Any]]]:
+    """Return the human ledger records relevant to each lexical target.
+
+    This intentionally preserves ``probable`` and ``needs_review`` rows: the
+    roadmap must show editorial work already recorded, rather than treating
+    everything other than ``confirmed`` as absent.
+    """
+    result: dict[tuple[int, int], list[dict[str, Any]]] = {}
+    if path is None:
+        return result
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise SuggestionError(f"{path}:{line_number}: invalid JSON") from error
+        target = record.get("target", {})
+        if record.get("record") != "evidence" or target.get("kind") != "stem":
+            continue
+        entry, slot = target.get("dictionary_entry"), target.get("slot")
+        if not isinstance(entry, int) or not isinstance(slot, int):
+            continue
+        result.setdefault((entry, slot), []).append(
+            {
+                "id": record.get("id"),
+                "source": record.get("source"),
+                "locator": record.get("locator"),
+                "base": record.get("base"),
+                "marked": record.get("marked"),
+                "confidence": record.get("confidence"),
+                "label": record.get("label"),
+                "note": record.get("note", ""),
+            }
+        )
+    return result
+
+
+def quantity_label(mark: str | None) -> str:
+    return "long" if mark == MACRON else "short" if mark == BREVE else "unknown"
+
+
+def render_roadmap(
+    candidates: tuple[Candidate, ...], existing_evidence: Path | None = None
+) -> str:
+    """Render a complete, human-readable lexical quantity review roadmap.
+
+    Unlike the compact review queue, this includes structurally matched entries
+    with no quantity mark in the stored Whitaker stem.  It is diagnostic only;
+    it never becomes import input and cannot promote evidence.
+    """
+    reviewed = existing_review_records(existing_evidence)
+    by_target: dict[tuple[int, int], list[Candidate]] = {}
+    for candidate in candidates:
+        by_target.setdefault(candidate.target_key(), []).append(candidate)
+
+    targets: list[dict[str, Any]] = []
+    counts: dict[str, int] = {}
+    for key, group in sorted(by_target.items()):
+        stem = group[0].whitaker
+        positions: list[dict[str, Any]] = []
+        target_status = "reviewed" if key in reviewed else "unreviewed"
+        for position, letter in enumerate(stem.stem):
+            observations = []
+            independent: dict[str, set[str]] = {}
+            for candidate in group:
+                mark = candidate.word.marks[position]
+                value = quantity_label(mark)
+                observation = {
+                    "source": SOURCE_EVIDENCE_IDS[candidate.dictionary.source_name],
+                    "family": candidate.dictionary.source_family,
+                    "independent": candidate.dictionary.independent_quantity_authority,
+                    "entry_id": candidate.dictionary.source_entry_id,
+                    "lemma": candidate.dictionary.lemma,
+                    "quantity": value,
+                    "mapping": "unique" if candidate.alternatives == 1 else "ambiguous",
+                }
+                observations.append(observation)
+                if candidate.alternatives == 1 and candidate.dictionary.independent_quantity_authority and mark is not None:
+                    independent.setdefault(candidate.dictionary.source_family, set()).add(value)
+            values = {value for values in independent.values() for value in values}
+            # A strong conflict needs opposite explicit marks from distinct,
+            # independent source families and only unambiguous structural maps.
+            if values == {"long", "short"} and len(independent) >= 2:
+                status = "strong_conflict"
+            elif any(item["mapping"] == "ambiguous" for item in observations):
+                status = "ambiguous_mapping"
+            elif values:
+                status = "marked_uncontested"
+            else:
+                status = "unknown"
+            counts[status] = counts.get(status, 0) + 1
+            positions.append(
+                {
+                    "position": position,
+                    "letter": letter,
+                    "status": status,
+                    "observations": observations,
+                }
+            )
+        mappings = [candidate.report_record() for candidate in group]
+        targets.append(
+            {
+                "target": {"dictionary_entry": key[0], "slot": key[1]},
+                "stem": stem.stem,
+                "whitaker": {
+                    "part_of_speech": stem.part_of_speech,
+                    "gender": stem.gender,
+                    "proper": stem.proper,
+                    "meaning": stem.meaning,
+                    "declension": stem.declension,
+                    "variant": stem.variant,
+                },
+                "review_status": target_status,
+                "reviewed_evidence": reviewed.get(key, []),
+                "positions": positions,
+                "dictionary_matches": mappings,
+                "editorial_note": (
+                    "Strong conflicts are hypotheses for philological review, not automatic corrections. "
+                    "POS, gender, proper-name status, citation ending, source headword and semantic overlap are included above."
+                ),
+            }
+        )
+    document = {
+        "schema": "whitakers-words.quantity-roadmap.v1",
+        "purpose": "human_review_only",
+        "policy": {
+            "unknown": "no explicit macron or breve in the matched Whitaker stem",
+            "strong_conflict": "opposite explicit marks from two or more independent source families with unique structural mappings",
+            "review": "no entry is promoted by this dump",
+        },
+        "counts": {
+            "targets": len(targets),
+            "dictionary_matches": len(candidates),
+            "reviewed_targets": sum(key in reviewed for key in by_target),
+            "unreviewed_targets": sum(key not in reviewed for key in by_target),
+            "positions": counts,
+        },
+        "targets": targets,
+    }
+    return json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
+
+def corroboration_votes(
+    candidates: Iterable[Candidate],
+) -> dict[tuple[int, int, int], dict[str, set[str]]]:
+    """Collect unambiguous established-source votes per target letter."""
+    votes: dict[tuple[int, int, int], dict[str, set[str]]] = {}
+    for candidate in candidates:
+        if (
+            candidate.alternatives != 1
+            or candidate.dictionary.source_name not in PROPOSAL_AUTHORITY_SOURCES
+        ):
+            continue
+        for position, mark in candidate.quantity_marks():
+            votes.setdefault((*candidate.target_key(), position), {}).setdefault(
+                mark, set()
+            ).add(candidate.dictionary.source_family)
+    return votes
+
+
+def corroborated_candidates(candidates: Iterable[Candidate]) -> tuple[Candidate, ...]:
+    """Select review proposals backed by two independent established sources."""
+    materialized = tuple(candidates)
+    votes = corroboration_votes(materialized)
+
+    selected = []
+    for candidate in materialized:
+        if (
+            candidate.alternatives != 1
+            or candidate.dictionary.source_name not in PROPOSAL_AUTHORITY_SOURCES
+            or not candidate.quantity_marks()
+        ):
+            continue
+        if all(
+            len(votes[(*candidate.target_key(), position)].get(mark, set())) >= 2
+            and not (set(votes[(*candidate.target_key(), position)]) - {mark})
+            for position, mark in candidate.quantity_marks()
+        ):
+            selected.append(candidate)
+    return tuple(selected)
+
+
+def render_proposals(candidates: Iterable[Candidate]) -> str:
+    """Render non-importable, traceable proposals for human approval."""
+    materialized = tuple(candidates)
+    votes = corroboration_votes(materialized)
+    rows = []
+    selected = corroborated_candidates(materialized)
+    for candidate in selected:
+        support: dict[str, list[str]] = {}
+        for position, mark in candidate.quantity_marks():
+            support[str(position)] = sorted(
+                votes[(*candidate.target_key(), position)].get(mark, set())
+            )
+        rows.append(
+            {
+                "record": "quantity_proposal",
+                "schema": "whitakers-words.quantity-proposal.v1",
+                "proposal_status": "corroborated_for_review",
+                "automatic_promotion_allowed": False,
+                "candidate": candidate.report_record(),
+                "corroborating_families_by_position": support,
+                "review_note": (
+                    "Unique structural mapping and agreeing explicit quantity from at least two "
+                    "independent established source families. Verify sense and native locator before "
+                    "copying as confirmed evidence."
+                ),
+            }
+        )
+    return "".join(
+        json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+        for row in rows
     )
 
 
@@ -1337,12 +1632,25 @@ def parse_arguments() -> argparse.Namespace:
         help="read-only token_latim_german.sqlite morphological lexicon",
     )
     parser.add_argument(
+        "--faria-jsonl",
+        type=Path,
+        help="Faria v3 OCR JSONL (review or public-entry projection; review-only source)",
+    )
+    parser.add_argument(
         "--existing-evidence",
         type=Path,
         help="omit already-recorded source/target pairs",
     )
-    parser.add_argument("--output", type=Path, required=True, help="review-only JSONL candidates")
+    parser.add_argument("--output", type=Path, help="review-only JSONL candidates")
     parser.add_argument("--report", type=Path, help="optional detailed JSON report")
+    parser.add_argument(
+        "--roadmap", type=Path,
+        help="complete human-readable JSON quantity roadmap; includes unknown matches",
+    )
+    parser.add_argument(
+        "--proposals", type=Path,
+        help="JSONL of corroborated, human-review-only quantity proposals",
+    )
     parser.add_argument("--maximum-ending", type=int, default=6)
     return parser.parse_args()
 
@@ -1353,11 +1661,11 @@ def main() -> int:
         raise SuggestionError("--maximum-ending must be in 0..18")
     if arguments.collatinus_extended and arguments.collatinus_data is None:
         raise SuggestionError("--collatinus-extended requires --collatinus-data")
+    if arguments.output is None and arguments.roadmap is None and arguments.proposals is None:
+        raise SuggestionError("supply --output, --roadmap, and/or --proposals")
     sources = arguments.sources or sorted(SQLITE_SOURCE_NAMES)
     stems = read_whitaker_stems(arguments.dictionary)
-    entries: Iterable[DictionaryEntry] = read_dictionary_entries(
-        arguments.superdb, sources
-    )
+    entries: Iterable[DictionaryEntry] = read_dictionary_entries(arguments.superdb, sources)
     if arguments.collatinus_data is not None:
         entries = itertools.chain(
             entries,
@@ -1368,13 +1676,35 @@ def main() -> int:
         )
     if arguments.latin_german is not None:
         entries = itertools.chain(entries, read_latin_german_entries(arguments.latin_german))
+    if arguments.faria_jsonl is not None:
+        entries = itertools.chain(entries, read_faria_jsonl(arguments.faria_jsonl))
+    entries = tuple(entries)
     candidates = suggest(stems, entries, maximum_ending=arguments.maximum_ending)
     votes = existing_consensus_votes(arguments.existing_evidence)
     candidates = remove_existing(candidates, existing_keys(arguments.existing_evidence))
-    arguments.output.write_text(render_jsonl(candidates), encoding="utf-8")
+    if arguments.output is not None:
+        arguments.output.write_text(render_jsonl(candidates), encoding="utf-8")
     if arguments.report is not None:
         arguments.report.write_text(render_report(candidates, votes), encoding="utf-8")
-    print(f"wrote {len(candidates)} review-only candidates to {arguments.output}")
+    if arguments.roadmap is not None:
+        roadmap_candidates = suggest(
+            stems, entries, maximum_ending=arguments.maximum_ending, include_unknown=True
+        )
+        arguments.roadmap.write_text(
+            render_roadmap(roadmap_candidates, arguments.existing_evidence), encoding="utf-8"
+        )
+        print(f"wrote {len(roadmap_candidates)} structural matches to {arguments.roadmap}")
+    if arguments.proposals is not None:
+        reviewed_targets = frozenset(existing_review_records(arguments.existing_evidence))
+        proposals = tuple(
+            candidate for candidate in candidates
+            if candidate.target_key() not in reviewed_targets
+        )
+        rendered = render_proposals(proposals)
+        arguments.proposals.write_text(rendered, encoding="utf-8")
+        print(f"wrote {rendered.count(chr(10))} corroborated review proposals to {arguments.proposals}")
+    if arguments.output is not None:
+        print(f"wrote {len(candidates)} review-only candidates to {arguments.output}")
     return 0
 
 

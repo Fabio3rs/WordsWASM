@@ -326,6 +326,29 @@ python3 poc/compact-db/suggest_quantity_evidence.py \
   --output /tmp/quantity-candidates.jsonl \
   --report /tmp/quantity-candidates-report.json
 
+# Dump editorial completo: inclui correspondências sem diacrítico como
+# `unknown`, conflitos explícitos entre famílias independentes e o estado do
+# manifesto já revisado. O Faria é opcional e permanece uma fonte OCR de revisão.
+python3 poc/compact-db/suggest_quantity_evidence.py \
+  DICTFILE.GEN /caminho/somente-leitura/superdb.sqlite \
+  --source ls_dict --source gaffiot \
+  --collatinus-data /caminho/collatinus/bin/data \
+  --latin-german /caminho/token_latim_german.sqlite \
+  --faria-jsonl /caminho/faria-ocr/pages.jsonl \
+  --existing-evidence QUANTITY_EVIDENCE.jsonl \
+  --roadmap /tmp/quantity-roadmap.json
+
+# Lote menor para conferência: somente marcas concordantes entre duas famílias
+# independentes estabelecidas; é uma proposta, não uma entrada importável.
+python3 poc/compact-db/suggest_quantity_evidence.py \
+  DICTFILE.GEN /caminho/somente-leitura/superdb.sqlite \
+  --source ls_dict --source gaffiot \
+  --collatinus-data /caminho/collatinus/bin/data \
+  --latin-german /caminho/token_latim_german.sqlite \
+  --faria-jsonl /caminho/faria-ocr/pages.jsonl \
+  --existing-evidence QUANTITY_EVIDENCE.jsonl \
+  --proposals QUANTITY_PROPOSALS.jsonl
+
 python3 poc/compact-db/audit_lexical_expansion.py \
   DICTFILE.GEN /caminho/somente-leitura/superdb.sqlite \
   --source ls_dict --source gaffiot \

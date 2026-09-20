@@ -313,6 +313,49 @@ class QuantitySuggestionTest(unittest.TestCase):
         self.assertEqual(report["counts"]["consensus_2_of_3"], 1)
         self.assertEqual(report["counts"]["excluded_ambiguous_candidate_positions"], 1)
 
+    def test_roadmap_keeps_unknowns_and_marks_cross_family_conflicts(self) -> None:
+        stem = SUGGESTER.WhitakerStem(9, 1, "mal", False, "NOUN", "n", "apple")
+
+        def candidate(source: str, family: str, lemma: str) -> SUGGESTER.Candidate:
+            word = SUGGESTER.extract_first_word(lemma, require_quantity=False)
+            assert word is not None
+            return SUGGESTER.Candidate(
+                SUGGESTER.DictionaryEntry(source, source, lemma, "NOUN", "n", lemma,
+                                          family, True),
+                stem, word, (), 1,
+            )
+
+        roadmap = json.loads(SUGGESTER.render_roadmap((
+            candidate("ls_dict", "lewis", "mālum"),
+            candidate("gaffiot", "gaffiot", "mălum"),
+            candidate("faria_v3", "faria", "malum"),
+        )))
+        target = roadmap["targets"][0]
+        self.assertEqual(target["review_status"], "unreviewed")
+        self.assertEqual(target["positions"][1]["status"], "strong_conflict")
+        self.assertEqual(target["positions"][2]["status"], "unknown")
+        self.assertEqual(roadmap["counts"]["positions"]["strong_conflict"], 1)
+
+    def test_proposals_require_two_established_families_and_no_opposition(self) -> None:
+        stem = SUGGESTER.WhitakerStem(9, 1, "mal", False, "NOUN", "n", "apple")
+
+        def candidate(source: str, family: str, lemma: str) -> SUGGESTER.Candidate:
+            word = SUGGESTER.extract_first_word(lemma)
+            assert word is not None
+            return SUGGESTER.Candidate(
+                SUGGESTER.DictionaryEntry(source, source, lemma, "NOUN", "n", lemma,
+                                          family, source != "collatinus"),
+                stem, word, (), 1,
+            )
+
+        agreeing = (candidate("ls_dict", "lewis", "mālum"),
+                    candidate("latin_german", "latin-german", "mālum"))
+        self.assertEqual(len(SUGGESTER.corroborated_candidates(agreeing)), 2)
+        rows = [json.loads(line) for line in SUGGESTER.render_proposals(agreeing).splitlines()]
+        self.assertTrue(all(not row["automatic_promotion_allowed"] for row in rows))
+        conflicting = agreeing + (candidate("gaffiot", "gaffiot", "mălum"),)
+        self.assertEqual(SUGGESTER.corroborated_candidates(conflicting), ())
+
     def test_existing_confirmed_evidence_participates_after_queue_suppression(self) -> None:
         word = SUGGESTER.extract_first_word("mālum")
         assert word is not None
