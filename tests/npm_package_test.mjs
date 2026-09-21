@@ -138,7 +138,7 @@ if (process.platform === "linux" && process.arch === "x64") {
   assert.match(help.stdout, /WordsWASM command-line interface/);
   assert.match(help.stdout, /--input FILE/);
   assert.match(help.stdout, /--batch-json-lines/);
-  assert.match(help.stdout, /Exit status/);
+  assert.match(help.stdout, /native command exits 2 for invalid input/);
 
   const version = spawnSync(process.execPath, [wrapperScript, "--version"], {encoding: "utf8"});
   assert.equal(version.status, 0, version.stderr);
