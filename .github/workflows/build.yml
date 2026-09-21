@@ -699,6 +699,9 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Install package consumer checks
+        run: npm install --global typescript@5.7.3 vite@6.1.0
+
       - name: Download WebAssembly distribution
         uses: actions/download-artifact@v4
         with:

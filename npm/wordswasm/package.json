@@ -1,7 +1,7 @@
 {
   "name": "wordswasm",
   "version": "0.0.0-development",
-  "description": "Latin morphological analysis engine for WebAssembly",
+  "description": "Latin morphological analysis for browsers, Workers, bundlers, and Node.js",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -9,13 +9,32 @@
     "url": "git+https://github.com/Fabio3rs/WordsWASM.git"
   },
   "bugs": "https://github.com/Fabio3rs/WordsWASM/issues",
-  "homepage": "https://github.com/Fabio3rs/WordsWASM#readme",
+  "homepage": "https://fabio3rs.github.io/WordsWASM/",
+  "keywords": [
+    "latin",
+    "morphology",
+    "dictionary",
+    "whitaker",
+    "words",
+    "webassembly",
+    "wasm",
+    "linguistics"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs"
     },
-    "./assets/*": "./dist/*"
+    "./assets/manifest.json": "./dist/manifest.json",
+    "./assets/dataset-manifest.json": "./dist/dataset-manifest.json",
+    "./assets/words-full.wwdb": "./dist/words-full.wwdb",
+    "./assets/words-search.wwdb": "./dist/words-search.wwdb",
+    "./assets/words_wasm.mjs": "./dist/words_wasm.mjs",
+    "./assets/words_wasm.wasm": "./dist/words_wasm.wasm"
   },
   "files": [
     "dist",

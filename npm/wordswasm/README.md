@@ -27,20 +27,48 @@ When stable 1.0 is available, `npm install wordswasm` selects `latest`.
 To make a deployment reproducible, replace `@next` with an exact version.
 `next` remains the most recent prerelease after a stable publication.
 
-## Use in a browser, worker, or bundler
+## Quick start: browser, Worker, bundler, or Node.js
 
 ```js
-import {assets, createWordsAnalysisEngine} from "wordswasm";
+import {createBundledWordsAnalysisEngine} from "wordswasm";
 
-const engine = await createWordsAnalysisEngine({
-  databaseUrl: assets.fullDatabase,
-});
+const engine = await createBundledWordsAnalysisEngine();
 
 console.log(engine.analyze("mālum"));
 engine.dispose();
 ```
 
-`assets` contains URLs resolved from this installed package:
+`createBundledWordsAnalysisEngine()` loads the full database and its matching
+manifest. In Node.js it reads package files; in browsers, Workers, and bundler
+output it fetches package URLs. It therefore avoids the `file:`-URL difference
+between Node's `fetch` and browser `fetch`.
+
+Pass `database: "search"` for the smaller no-meanings database, then use
+`search()` or `searchLine()`:
+
+```js
+const engine = await createBundledWordsAnalysisEngine({database: "search"});
+console.log(engine.search("amo"));
+engine.dispose();
+```
+
+## Advanced loading and assets
+
+Use `createWordsAnalysisEngine()` when a host stores the database elsewhere,
+already has its bytes, or needs to control the Emscripten module factory. Pass
+**exactly one** of `databaseUrl` and `databaseBytes`.
+
+```js
+import {createWordsAnalysisEngine} from "wordswasm";
+
+const engine = await createWordsAnalysisEngine({
+  databaseUrl: new URL("/data/words-full.wwdb", location.origin),
+  datasetId: "sha256:...", // Copy this from the matching manifest.
+});
+```
+
+`assets` contains URLs resolved from this installed package. It is useful when
+you need to serve, cache, or preload data yourself:
 
 | Export | Purpose |
 | --- | --- |
@@ -54,14 +82,36 @@ Use the full database with `analyze()` and `analyzeLine()`. Use the search
 database with `search()` and `searchLine()`. Pass the `datasetId` from the
 manifest when your application stores or joins IDs across requests.
 
+The six exact asset subpaths below are public; no other `dist` path is part of
+the package API. They can be used by tools that accept package asset imports:
+
+```text
+wordswasm/assets/manifest.json
+wordswasm/assets/dataset-manifest.json
+wordswasm/assets/words-full.wwdb
+wordswasm/assets/words-search.wwdb
+wordswasm/assets/words_wasm.mjs
+wordswasm/assets/words_wasm.wasm
+```
+
 The stable browser contract is schema 5. It is independent of the npm version,
 WWDB format, and `datasetId`; see [Versioning] before mixing downloaded data
 with a package from another release.
 
-## Use in Node.js
+## ESM, bundlers, and Workers
 
-Node's `fetch` does not load `file:` URLs. Read the packaged database and pass
-the bytes instead:
+This is an ESM-only package. Use `import`, not `require`. The quick-start API
+works in modern bundlers because it resolves every URL from the installed
+package with `import.meta.url`; do not copy the files to another directory
+unless you use the advanced API and provide their new URL or bytes.
+
+Workers use the same ESM import and quick-start API. Ensure the Worker is
+served as a module and that its server permits fetching the emitted `.wasm`,
+`.wwdb`, and `.json` assets. The package does not use DOM APIs.
+
+For Node.js, version 20 or newer is supported. The quick start reads packaged
+files directly. If an application has already read the database, avoid a
+second read with the advanced API:
 
 ```js
 import {readFile} from "node:fs/promises";

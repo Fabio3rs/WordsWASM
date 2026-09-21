@@ -69,17 +69,17 @@ npm install wordswasm@next
 ```
 
 ```js
-import {assets, createWordsAnalysisEngine} from "wordswasm";
+import {createBundledWordsAnalysisEngine} from "wordswasm";
 
-const engine = await createWordsAnalysisEngine({
-  databaseUrl: assets.fullDatabase,
-});
+const engine = await createBundledWordsAnalysisEngine();
 console.log(engine.analyze("mālum"));
 engine.dispose();
 ```
 
-For Node.js, read `assets.fullDatabase` with `node:fs/promises` and pass it as
-`databaseBytes`; browser applications can use the URL directly.
+The convenience API reads package assets in Node.js and fetches them in
+browsers, Workers, and bundler output. For a database hosted elsewhere or
+already in memory, use the lower-level `createWordsAnalysisEngine()` with one
+of `databaseUrl` or `databaseBytes`.
 
 The optional native CLI installs independently and selects one matching
 platform package automatically:
