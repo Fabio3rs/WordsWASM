@@ -1,0 +1,8 @@
+# libstdc++ <format> intentionally converts -1 to size_t as its "unlimited
+# arguments" sentinel. GCC PR119429 fixed the warning in GCC 15, but GCC 14
+# still triggers Clang's implicit-integer-sign-change sanitizer here.
+#
+# Keep this limited to the one well-defined conversion in the system header;
+# all other implicit-conversion instrumentation remains enabled.
+[implicit-integer-sign-change]
+src:*/include/c++/*/format

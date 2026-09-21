@@ -46,6 +46,8 @@ set(WORDS_UNICODE_BACKEND "AUTO" CACHE STRING
 )
 set_property(CACHE WORDS_UNICODE_BACKEND PROPERTY STRINGS AUTO FULL COMPACT)
 
+message("Sanitizers: ${ENABLE_SANITIZERS}")
+
 string(TOUPPER "${WORDS_UNICODE_BACKEND}" WORDS_UNICODE_BACKEND_NORMALIZED)
 if(WORDS_UNICODE_BACKEND_NORMALIZED STREQUAL "AUTO")
     if(EMSCRIPTEN)
@@ -176,8 +178,14 @@ if(ENABLE_SANITIZERS)
         set(WORDS_CLANG_SANITIZERS
             -fsanitize=address,undefined,implicit-conversion,unsigned-integer-overflow,float-divide-by-zero
         )
+        set(WORDS_SANITIZER_IGNORELIST
+            "${CMAKE_CURRENT_SOURCE_DIR}/cmake/sanitizer-ignorelist.txt"
+        )
         target_compile_options(words_project_sanitizers INTERFACE
-            -fno-omit-frame-pointer ${WORDS_CLANG_SANITIZERS} -g
+            -fno-omit-frame-pointer
+            ${WORDS_CLANG_SANITIZERS}
+            "-fsanitize-ignorelist=${WORDS_SANITIZER_IGNORELIST}"
+            -g
         )
         target_link_options(words_project_sanitizers INTERFACE
             -fno-omit-frame-pointer ${WORDS_CLANG_SANITIZERS}
