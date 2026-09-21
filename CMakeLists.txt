@@ -381,6 +381,9 @@ else()
         words_json
         nlohmann_json::nlohmann_json
     )
+    if(MINGW AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_libraries(words_cli PRIVATE stdc++exp)
+    endif()
     target_compile_definitions(words_cli PRIVATE
         WORDS_CLI_VERSION="${WORDS_CLI_VERSION}"
     )
