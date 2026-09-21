@@ -377,7 +377,10 @@ else()
         "Version reported by the native words_cli executable"
     )
     add_executable(words_cli src/main.cpp)
-    target_link_libraries(words_cli PRIVATE words_json)
+    target_link_libraries(words_cli PRIVATE
+        words_json
+        nlohmann_json::nlohmann_json
+    )
     target_compile_definitions(words_cli PRIVATE
         WORDS_CLI_VERSION="${WORDS_CLI_VERSION}"
     )
