@@ -2,6 +2,8 @@
 .cache/
 .env
 bin
+!npm/wordswasm-cli/bin/
+!npm/wordswasm-cli/bin/wordswasm.cjs
 
 # Build trees and release staging are fully reproducible.
 /build/
