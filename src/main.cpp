@@ -1,7 +1,5 @@
-#include "words/engine.hpp"
-#include "words/json.hpp"
 #include "json_document.hpp"
-
+#include "words/engine.hpp"
 
 #include <cstddef>
 #include <exception>
@@ -11,6 +9,7 @@
 #include <iostream>
 #include <limits>
 #include <new>
+#include <print>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -48,9 +47,11 @@ parse_options(const int argc, char *const argv[]) {
         };
 
         if (argument.starts_with("--database=")) {
-            options.database = argument.substr(std::string_view{"--database="}.size());
+            options.database =
+                argument.substr(std::string_view{"--database="}.size());
         } else if (argument.starts_with("--db=")) {
-            options.database = argument.substr(std::string_view{"--db="}.size());
+            options.database =
+                argument.substr(std::string_view{"--db="}.size());
         } else if (argument == "--database" || argument == "--db") {
             auto value = require_value(argument);
             if (!value) {
@@ -58,7 +59,8 @@ parse_options(const int argc, char *const argv[]) {
             }
             options.database = *value;
         } else if (argument.starts_with("--dataset-id=")) {
-            options.dataset_id = argument.substr(std::string_view{"--dataset-id="}.size());
+            options.dataset_id =
+                argument.substr(std::string_view{"--dataset-id="}.size());
         } else if (argument == "--dataset-id") {
             auto value = require_value(argument);
             if (!value) {
@@ -66,7 +68,8 @@ parse_options(const int argc, char *const argv[]) {
             }
             options.dataset_id = *value;
         } else if (argument.starts_with("--format=")) {
-            options.format = argument.substr(std::string_view{"--format="}.size());
+            options.format =
+                argument.substr(std::string_view{"--format="}.size());
         } else if (argument.starts_with("-f=")) {
             options.format = argument.substr(std::string_view{"-f="}.size());
         } else if (argument == "--format" || argument == "-f") {
@@ -173,7 +176,7 @@ read_file(const std::filesystem::path &path) {
 }
 
 void usage() {
-    std::cout << R"(WordsWASM native CLI
+    std::print(stdout, R"(WordsWASM native CLI
 
 Usage:
   words_cli --database FILE --format FORMAT [OPTIONS] LATIN_TEXT ...
@@ -198,7 +201,7 @@ Formats:
 
 Exit status: 0 success; 2 invalid command; 3 database or engine failure;
 4 unexpected failure. JSON is written to stdout and diagnostics to stderr.
-)";
+)");
 }
 
 void write_result(const words::Engine &engine, const words::QueryResult &result,
@@ -217,20 +220,22 @@ void write_result(const words::Engine &engine, const words::QueryResult &result,
     } else {
         document = words::search_json_document(engine, result);
     }
-    std::cout << document.dump(pretty ? 2 : -1) << '\n';
+    std::print(stdout, "{}\n", document.dump(pretty ? 2 : -1));
 }
 
 void write_text_result(const words::Engine &engine,
                        const std::string_view query,
                        const std::string_view format,
-                       const words::AnalysisOptions options, const bool pretty) {
+                       const words::AnalysisOptions options,
+                       const bool pretty) {
     write_result(engine, engine.analyze_text(query, options), format, pretty);
 }
 
 void write_line_results(const words::Engine &engine,
                         const std::string_view query,
                         const std::string_view format,
-                        const words::AnalysisOptions options, const bool pretty) {
+                        const words::AnalysisOptions options,
+                        const bool pretty) {
     for (const auto &result : engine.analyze_line(query, options)) {
         write_result(engine, result, format, pretty);
     }
@@ -246,33 +251,32 @@ int main(const int argc, char *argv[]) try {
             return 0;
         }
         if (argument == "--version") {
-            std::cout << "words_cli " << WORDS_CLI_VERSION << '\n';
+            std::print(stdout, "words_cli {}\n", WORDS_CLI_VERSION);
             return 0;
         }
     }
     auto options = parse_options(argc, argv);
     if (!options) {
-        std::cerr << "words_cli: " << options.error()
-                  << ". Run 'wordswasm --help' for usage.\n";
+        std::print(stderr, "words_cli: {}\n", options.error());
         return 2;
     }
     auto bytes = read_file(options->database);
     if (!bytes) {
-        std::cerr << "words_cli: " << bytes.error() << '\n';
+        std::print(stderr, "words_cli: {}\n", bytes.error());
         return 3;
     }
     auto engine = words::Engine::create(
         std::move(*bytes), words::EngineConfig{options->dataset_id});
     if (!engine) {
-        std::cerr << "words_cli: " << engine.error().code << ": "
-                  << engine.error().message << '\n';
+        std::print(stderr, "words_cli: {}: {}\n", engine.error().code,
+                   engine.error().message);
         return 3;
     }
     if ((options->format == "analysis" || options->format == "analysis-v2" ||
          options->format == "analysis-v3") &&
         !(*engine)->supports_full_analysis()) {
-        std::cerr << "words_cli: unsupported-output: analysis format requires "
-                     "a full WWDB with meanings\n";
+        std::print(stderr, "words_cli: unsupported-output: analysis format "
+                           "requires a full WWDB with meanings\n");
         return 3;
     }
 
@@ -296,9 +300,9 @@ int main(const int argc, char *argv[]) try {
     }
     return 0;
 } catch (const std::bad_alloc &) {
-    std::cerr << "words_cli: out of memory\n";
+    std::print(stderr, "words_cli: out of memory\n");
     return 4;
 } catch (const std::exception &error) {
-    std::cerr << "words_cli: unexpected failure: " << error.what() << '\n';
+    std::print(stderr, "words_cli: unexpected failure: {}\n", error.what());
     return 4;
 }
