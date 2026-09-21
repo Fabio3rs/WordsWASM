@@ -170,6 +170,13 @@ if (process.platform === "linux" && process.arch === "x64") {
   assert.equal(stream.status, 0, stream.stderr);
   assert.equal(stream.stdout.split("\n").filter(Boolean).length, 2);
 
+  const explicitStream = spawnSync(process.execPath, [wrapperScript, "--input", "-"], {
+    encoding: "utf8",
+    input: "amo\n",
+  });
+  assert.equal(explicitStream.status, 0, explicitStream.stderr);
+  assert.equal(explicitStream.stdout.split("\n").filter(Boolean).length, 1);
+
   const pretty = spawnSync(process.execPath, [wrapperScript, "--pretty", "amo"], {
     encoding: "utf8",
   });

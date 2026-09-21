@@ -699,7 +699,6 @@ jobs:
 
   package-npm:
     name: Package npm distributions
-    if: startsWith(github.ref, 'refs/tags/')
     needs: [wasm, native-binaries]
     runs-on: ubuntu-24.04
 
@@ -729,21 +728,28 @@ jobs:
           pattern: words-cli-*
           path: release-npm/native
 
-      - name: Select npm dist-tag
+      - name: Select npm package version and dist-tag
         shell: bash
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          if [ "${{ github.event_name }}" = release ]; then
-            node scripts/select-npm-dist-tag.mjs \
-              --version "${version}" \
-              --release-prerelease "${{ github.event.release.prerelease }}" \
-              >> "${GITHUB_ENV}"
-          elif [[ "${version}" == *-* ]]; then
-            echo "PACKAGE_VERSION=${version}" >> "${GITHUB_ENV}"
+          if [ "${GITHUB_REF_TYPE}" != tag ]; then
+            # npm pack requires a valid SemVer version.  This version is used
+            # only by the CI dry-run: no non-tag workflow can publish it.
+            echo "PACKAGE_VERSION=0.0.0-ci.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_ENV}"
             echo "NPM_TAG=next" >> "${GITHUB_ENV}"
           else
-            echo "PACKAGE_VERSION=${version}" >> "${GITHUB_ENV}"
-            echo "NPM_TAG=latest" >> "${GITHUB_ENV}"
+            version="${GITHUB_REF_NAME#v}"
+            if [ "${{ github.event_name }}" = release ]; then
+              node scripts/select-npm-dist-tag.mjs \
+                --version "${version}" \
+                --release-prerelease "${{ github.event.release.prerelease }}" \
+                >> "${GITHUB_ENV}"
+            elif [[ "${version}" == *-* ]]; then
+              echo "PACKAGE_VERSION=${version}" >> "${GITHUB_ENV}"
+              echo "NPM_TAG=next" >> "${GITHUB_ENV}"
+            else
+              echo "PACKAGE_VERSION=${version}" >> "${GITHUB_ENV}"
+              echo "NPM_TAG=latest" >> "${GITHUB_ENV}"
+            fi
           fi
 
       - name: Assemble npm packages
