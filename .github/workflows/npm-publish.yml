@@ -20,6 +20,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Check out publisher
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -37,63 +42,4 @@ jobs:
 
       - name: Verify or publish packages
         shell: bash
-        run: |
-          node <<'NODE'
-          async function main() {
-            const {readFile} = require('node:fs/promises');
-            const {spawnSync} = require('node:child_process');
-            const path = require('node:path');
-
-            const root = process.env.RUNNER_TEMP + '/npm-packages';
-            const plan = JSON.parse(await readFile(path.join(root, 'publish-plan.json'), 'utf8'));
-            const npm = (args) => spawnSync('npm', args, {encoding: 'utf8'});
-            const tagValue = (name, tag) => {
-              const result = npm(['view', name, `dist-tags.${tag}`, '--json']);
-              return result.status === 0 ? JSON.parse(result.stdout) : undefined;
-            };
-            const ensureDistTags = (item) => {
-              const setTag = npm(['dist-tag', 'add', `${item.name}@${plan.version}`, plan.tag]);
-              if (setTag.status !== 0) throw new Error(setTag.stderr || `could not set ${plan.tag} for ${item.name}`);
-              if (plan.tag !== 'latest' && tagValue(item.name, 'latest') === plan.version) {
-                const removeLatest = npm(['dist-tag', 'rm', item.name, 'latest']);
-                if (removeLatest.status !== 0) throw new Error(removeLatest.stderr || `could not remove latest for ${item.name}`);
-              }
-            };
-            const remote = (name) => {
-              const result = npm(['view', `${name}@${plan.version}`, 'dist.integrity', '--json']);
-              if (result.status !== 0) return undefined;
-              return JSON.parse(result.stdout);
-            };
-            const states = plan.packages.map((item) => ({...item, remote: remote(item.name)}));
-            const present = states.filter((item) => item.remote !== undefined);
-            if (present.length !== 0 && present.length !== states.length) {
-              throw new Error('npm registry contains only part of this release; refusing to continue');
-            }
-            if (present.length === states.length) {
-              for (const item of states) {
-                if (item.remote !== item.integrity) {
-                  throw new Error(`published tarball differs for ${item.name}@${plan.version}`);
-                }
-                const tag = npm(['view', item.name, `dist-tags.${plan.tag}`, '--json']);
-                if (tag.status !== 0 || JSON.parse(tag.stdout) !== plan.version) {
-                  throw new Error(`dist-tag ${plan.tag} is not ${plan.version} for ${item.name}`);
-                }
-                ensureDistTags(item);
-              }
-              console.log(`npm release ${plan.version} was already published and verified`);
-              return;
-            }
-            for (const item of states) {
-              const result = npm(['publish', path.join(root, item.tarball), '--tag', plan.tag]);
-              if (result.status !== 0) {
-                throw new Error(result.stderr || `npm publish failed for ${item.name}`);
-              }
-              process.stdout.write(result.stdout);
-              ensureDistTags(item);
-            }
-          }
-          main().catch((error) => {
-            console.error(error.stack || error.message);
-            process.exit(1);
-          });
-          NODE
+        run: node scripts/bootstrap-publish-npm.mjs "$RUNNER_TEMP/npm-packages/publish-plan.json"

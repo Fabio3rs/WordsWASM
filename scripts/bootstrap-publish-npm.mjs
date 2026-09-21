@@ -45,15 +45,15 @@ async function lookup(name, version, userconfig) {
 }
 
 async function lookupAfterPropagation(name, version, userconfig) {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
+  // Registry reads can lag behind a successful publish.  In particular, a
+  // retry of a partially completed release must not mistake a just-published
+  // version for a missing one and attempt to publish it again.
+  const delays = [1_000, 2_000, 4_000, 8_000];
+  for (let attempt = 0; attempt <= delays.length; attempt += 1) {
     const result = await lookup(name, version, userconfig);
-    if (result.state === "present" || attempt === 4) return result;
-    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    if (result.state === "present" || attempt === delays.length) return result;
+    await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
   }
-}
-
-function ensureSuccess(result, description) {
-  if (result.status !== 0) throw new Error(`${description}:\n${output(result)}`);
 }
 
 async function main() {
@@ -66,7 +66,7 @@ async function main() {
     const tarball = await realpath(path.join(planDirectory, item.tarball));
     console.log(`\n${item.name}@${plan.version}`);
     console.log(`  tarball: ${tarball}`);
-    const remote = await lookup(item.name, plan.version, options.userconfig);
+    const remote = await lookupAfterPropagation(item.name, plan.version, options.userconfig);
     if (remote.state === "present") {
       if (remote.integrity !== item.integrity) {
         throw new Error(`  ${item.name}@${plan.version} has a different published tarball`);
@@ -81,21 +81,6 @@ async function main() {
           throw new Error(`  publication failed for ${item.name}:\n${output(published)}`);
         }
         console.log("  status: already published while the registry propagated");
-      }
-    }
-
-    ensureSuccess(
-      npm(["dist-tag", "add", `${item.name}@${plan.version}`, plan.tag], options.userconfig),
-      `could not set ${plan.tag} for ${item.name}`,
-    );
-    if (plan.tag !== "latest") {
-      const latest = npm(["view", item.name, "dist-tags.latest", "--json"], options.userconfig);
-      if (latest.status === 0 && value(latest) === plan.version) {
-        ensureSuccess(
-          npm(["dist-tag", "rm", item.name, "latest"], options.userconfig),
-          `could not remove prerelease ${plan.version} from latest for ${item.name}`,
-        );
-        console.log("  latest: removed (pre-release)");
       }
     }
   }

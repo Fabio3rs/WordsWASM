@@ -44,8 +44,12 @@ GitHub Actions using npm Trusted Publishing and OIDC.
      --userconfig "$tmp"
    ```
 
-   The helper passes `--access public` explicitly and removes `latest` when an
-   initial pre-release publication caused npm to create that tag too.
+   The helper passes `--access public` explicitly. `npm publish --tag next`
+   (or `--tag latest`) sets the intended dist-tag as part of publishing, so it
+   does not make separate dist-tag mutations. If a prior attempt published
+   only some packages, the helper waits briefly for registry propagation and
+   resumes package by package after verifying each existing tarball's
+   integrity.
 
 6. Remove the temporary credential and revoke the granular token in npm:
 
@@ -94,8 +98,8 @@ Publishing** page.
 
 The initial `npm-publish.yml` run has no npm trust configuration and will fail.
 That is expected. After all eight packages trust the workflow, re-run it in the
-GitHub Actions interface. It verifies that the locally published tarballs and
-their `next` tags match the build artifact, then succeeds without republishing.
+GitHub Actions interface. It verifies that the locally published tarballs
+match the build artifact, then succeeds without republishing.
 
 ## Later releases
 
