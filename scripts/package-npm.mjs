@@ -88,11 +88,12 @@ async function main() {
       os: [platform.os],
       cpu: [platform.cpu],
       publishConfig: {access: "public"},
-      files: ["bin", "data", "README.md", "LICENSE"],
+      files: ["bin", "data", "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"],
     };
     await writeJson(path.join(directory, "package.json"), metadata);
     await copy(path.join(source, "platform", "README.md"), path.join(directory, "README.md"));
     await copy(path.join(root, "LICENSE"), path.join(directory, "LICENSE"));
+    await copy(path.join(root, "THIRD_PARTY_NOTICES.md"), path.join(directory, "THIRD_PARTY_NOTICES.md"));
     const executableDestination = path.join(directory, "bin", platform.executable);
     await copy(
       path.join(nativeDir, platform.artifact, platform.executable),
@@ -118,6 +119,7 @@ async function main() {
   await copy(path.join(source, "wordswasm-cli", "README.md"), path.join(cliDirectory, "README.md"));
   await copy(path.join(source, "wordswasm-cli", "bin"), path.join(cliDirectory, "bin"));
   await copy(path.join(root, "LICENSE"), path.join(cliDirectory, "LICENSE"));
+  await copy(path.join(root, "THIRD_PARTY_NOTICES.md"), path.join(cliDirectory, "THIRD_PARTY_NOTICES.md"));
   packages.push({name: "wordswasm-cli", directory: path.relative(outDir, cliDirectory), kind: "wrapper"});
 
   const wasmDirectory = path.join(stagedDir, "wordswasm");
@@ -125,6 +127,7 @@ async function main() {
   await writeJson(path.join(wasmDirectory, "package.json"), packageMetadata(wasmTemplate, options.version));
   await copy(path.join(source, "wordswasm", "README.md"), path.join(wasmDirectory, "README.md"));
   await copy(path.join(root, "LICENSE"), path.join(wasmDirectory, "LICENSE"));
+  await copy(path.join(root, "THIRD_PARTY_NOTICES.md"), path.join(wasmDirectory, "THIRD_PARTY_NOTICES.md"));
   await copy(path.join(source, "wordswasm", "index.mjs"), path.join(wasmDirectory, "dist", "index.mjs"));
   await copy(path.join(source, "wordswasm", "index.d.mts"), path.join(wasmDirectory, "dist", "index.d.mts"));
   for (const file of requiredWebFiles) {

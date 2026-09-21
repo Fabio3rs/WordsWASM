@@ -559,15 +559,21 @@ jobs:
             "release/packages/dataset-manifest-${GITHUB_REF_NAME}.json"
           cp release/words-web/manifest.json \
             "release/packages/words-web-manifest-${GITHUB_REF_NAME}.json"
+          cp THIRD_PARTY_NOTICES.md \
+            "release/packages/THIRD_PARTY_NOTICES-${GITHUB_REF_NAME}.md"
+          cp THIRD_PARTY_NOTICES.md release/words-web/THIRD_PARTY_NOTICES.md
           tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 \
             -C release -czf "release/packages/words-web-${GITHUB_REF_NAME}.tar.gz" \
             words-web
+          tar -tzf "release/packages/words-web-${GITHUB_REF_NAME}.tar.gz" \
+            | grep -Fx 'words-web/THIRD_PARTY_NOTICES.md'
           cd release/packages
           sha256sum \
             "words-full-${GITHUB_REF_NAME}.wwdb"* \
             "words-search-${GITHUB_REF_NAME}.wwdb"* \
             "dataset-manifest-${GITHUB_REF_NAME}.json" \
             "words-web-manifest-${GITHUB_REF_NAME}.json" \
+            "THIRD_PARTY_NOTICES-${GITHUB_REF_NAME}.md" \
             "words-web-${GITHUB_REF_NAME}.tar.gz" \
             > "words-assets-${GITHUB_REF_NAME}.sha256"
 
@@ -631,7 +637,7 @@ jobs:
 
             mkdir -p "${destination}"
             cp "${source}" "${destination}/words_cli"
-            cp LICENSE README.md "${destination}/"
+            cp LICENSE THIRD_PARTY_NOTICES.md README.md "${destination}/"
             chmod 755 "${destination}/words_cli"
             tar --sort=name --mtime='UTC 1980-01-01' --owner=0 --group=0 \
               -C release-native/stage \
@@ -651,7 +657,7 @@ jobs:
           cp \
             release-native/raw/words-cli-windows-x86_64/words_cli.exe \
             "${windows_destination}/words_cli.exe"
-          cp LICENSE README.md "${windows_destination}/"
+          cp LICENSE THIRD_PARTY_NOTICES.md README.md "${windows_destination}/"
           find "${windows_destination}" -exec touch -t 198001010000 {} +
           (
             cd release-native/stage
@@ -663,6 +669,11 @@ jobs:
           sha256sum ./*.tar.gz ./*.zip \
             > "words-cli-${GITHUB_REF_NAME}.sha256"
           sha256sum --check "words-cli-${GITHUB_REF_NAME}.sha256"
+          for archive in ./*.tar.gz; do
+            tar -tzf "${archive}" | grep -E '/THIRD_PARTY_NOTICES\.md$'
+          done
+          unzip -Z1 "${windows_package}.zip" \
+            | grep -E '/THIRD_PARTY_NOTICES\.md$'
 
       - name: Upload native release packages
         uses: actions/upload-artifact@v4

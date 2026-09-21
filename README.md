@@ -19,7 +19,9 @@ The project currently provides:
 ## Download
 
 **[Try WordsWASM in your browser](https://fabio3rs.github.io/WordsWASM/)** ·
-**[Download a release](https://github.com/Fabio3rs/WordsWASM/releases)**
+**[Download a release](https://github.com/Fabio3rs/WordsWASM/releases)** ·
+**[Report an issue](https://github.com/Fabio3rs/WordsWASM/issues)** ·
+**[Read the documentation](#documentation)**
 
 GitHub Releases provide ready-to-run command-line binaries, the WWDB
 databases, and a deployable JavaScript/WebAssembly bundle. In the filenames
@@ -41,7 +43,9 @@ The native CLI archives do **not** contain a database. Download either
 `words-full-<tag>.wwdb` or `words-search-<tag>.wwdb` separately from the same
 release. For normal CLI use, choose the uncompressed `.wwdb`; the `.br` and
 `.gz` variants are precompressed HTTP representations intended for web
-servers.
+servers. Every CLI archive and the WebAssembly archive contains `LICENSE` and
+`THIRD_PARTY_NOTICES.md`; the latter identifies the WORDS data lineage and the
+licenses for bundled dependencies.
 
 The release also includes `words-cli-<tag>.sha256` and
 `words-assets-<tag>.sha256` for integrity verification. On Linux, verify
@@ -61,7 +65,7 @@ The WebAssembly library is published as `wordswasm` and includes the engine,
 both database projections, manifests, and TypeScript declarations:
 
 ```sh
-npm install wordswasm
+npm install wordswasm@next
 ```
 
 ```js
@@ -81,7 +85,7 @@ The optional native CLI installs independently and selects one matching
 platform package automatically:
 
 ```sh
-npm install --global wordswasm-cli
+npm install --global wordswasm-cli@next
 wordswasm mālum
 ```
 
@@ -90,6 +94,23 @@ It uses its bundled full database and `analysis-v3` by default. Pass
 
 Maintainers can follow the [npm publishing guide](docs/npm-publishing.md) for
 the local bootstrap and GitHub OIDC release process.
+
+`@next` selects the current prerelease line. After a stable release is
+published, omit it to install `latest`; applications that need reproducible
+builds should name an exact version. The package READMEs describe
+[the WebAssembly API](npm/wordswasm/README.md) and
+[the native CLI](npm/wordswasm-cli/README.md) in more detail.
+
+### Unicode behavior
+
+The default native CLI uses the complete vendored utf8proc backend. The
+default WebAssembly build has a smaller, finite backend tailored to the Latin
+alphabet accepted by WordsWASM: it decodes UTF-8 strictly and supports the
+project's ASCII, macron/breve, and `æ`/`œ` input rules, but it is not a
+general-purpose Unicode normalizer. The public lexer contract is the same in
+both builds; the compact backend is differentially tested against the full
+backend for the accepted Latin domain and rejection behavior. Advanced builds
+can select either backend with `WORDS_UNICODE_BACKEND=FULL|COMPACT`.
 
 ## Using the command-line interface
 
@@ -470,9 +491,9 @@ The original WordsWASM code is available under the
 [MIT License](LICENSE), copyright 2026 Fabio R. Sluzala.
 
 William Whitaker's WORDS source code and data under `whitakers-words/` retain
-their original permissive license and attribution request. See
-[`whitakers-words/LICENCE.txt`](whitakers-words/LICENCE.txt) for the complete
-terms.
-
-Third-party components in [`vendor/`](vendor/) retain their respective
-licenses.
+their original permissive license and attribution request. Default native CLI
+distributions contain utf8proc/Unicode data and nlohmann/json; the default
+WebAssembly distribution uses the project's compact Unicode backend. See
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the complete notices,
+source snapshots, and license texts; it is included with npm packages and
+release archives.

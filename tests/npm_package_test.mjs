@@ -18,6 +18,7 @@ for (const item of plan.packages) {
   const listing = spawnSync("tar", ["-tzf", path.join(root, item.tarball)], {encoding: "utf8"});
   assert.equal(listing.status, 0, listing.stderr);
   assert.match(listing.stdout, /package\/package\.json/);
+  assert.match(listing.stdout, /package\/THIRD_PARTY_NOTICES\.md/);
   assert.doesNotMatch(listing.stdout, /\.(?:br|gz)$/m);
 }
 
