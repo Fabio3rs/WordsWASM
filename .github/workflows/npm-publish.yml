@@ -47,6 +47,18 @@ jobs:
             const root = process.env.RUNNER_TEMP + '/npm-packages';
             const plan = JSON.parse(await readFile(path.join(root, 'publish-plan.json'), 'utf8'));
             const npm = (args) => spawnSync('npm', args, {encoding: 'utf8'});
+            const tagValue = (name, tag) => {
+              const result = npm(['view', name, `dist-tags.${tag}`, '--json']);
+              return result.status === 0 ? JSON.parse(result.stdout) : undefined;
+            };
+            const ensureDistTags = (item) => {
+              const setTag = npm(['dist-tag', 'add', `${item.name}@${plan.version}`, plan.tag]);
+              if (setTag.status !== 0) throw new Error(setTag.stderr || `could not set ${plan.tag} for ${item.name}`);
+              if (plan.tag !== 'latest' && tagValue(item.name, 'latest') === plan.version) {
+                const removeLatest = npm(['dist-tag', 'rm', item.name, 'latest']);
+                if (removeLatest.status !== 0) throw new Error(removeLatest.stderr || `could not remove latest for ${item.name}`);
+              }
+            };
             const remote = (name) => {
               const result = npm(['view', `${name}@${plan.version}`, 'dist.integrity', '--json']);
               if (result.status !== 0) return undefined;
@@ -66,6 +78,7 @@ jobs:
                 if (tag.status !== 0 || JSON.parse(tag.stdout) !== plan.version) {
                   throw new Error(`dist-tag ${plan.tag} is not ${plan.version} for ${item.name}`);
                 }
+                ensureDistTags(item);
               }
               console.log(`npm release ${plan.version} was already published and verified`);
               return;
@@ -76,6 +89,7 @@ jobs:
                 throw new Error(result.stderr || `npm publish failed for ${item.name}`);
               }
               process.stdout.write(result.stdout);
+              ensureDistTags(item);
             }
           }
           main().catch((error) => {

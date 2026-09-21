@@ -4,44 +4,57 @@ The first publication is a local bootstrap. It creates the npm package records
 without storing an npm credential in GitHub. Later releases publish through
 GitHub Actions using npm Trusted Publishing and OIDC.
 
-## First release: `1.0.0-rc2`
+## Bootstrap a pre-release
 
 1. Commit this repository state and push it.
-2. In GitHub's **Releases** page, create and publish `v1.0.0-rc2`. Mark it as
+2. In GitHub's **Releases** page, create and publish the pre-release tag. Mark it as
    **Set as a pre-release**. Publishing the release starts the `Native and
    WebAssembly build` workflow, which assigns `next` to this version.
 3. When that workflow succeeds, download its `npm-packages` artifact and
    extract it. The artifact contains eight inspected tarballs and
    `publish-plan.json`.
-4. With an npm account that has a verified email and publishing 2FA enabled,
-   authenticate locally:
+4. Authenticate locally and use a temporary granular access token with
+   publishing permission and **bypass 2FA** enabled. On npm's current direct
+   publishing flow, an account with publishing 2FA alone may return `E403`
+   without presenting an interactive challenge.
 
    ```sh
    npm login
    npm whoami
+   export NPM_TOKEN='temporary-token-value'
+   tmp="$(mktemp)"
+   chmod 600 "$tmp"
+   printf '%s\n' \
+     'registry=https://registry.npmjs.org/' \
+     "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > "$tmp"
    ```
 
-5. Change into the extracted artifact directory. Inspect its contents, then
-   publish the tarballs in the recorded dependency order:
+5. Inspect the extracted artifact, then run the idempotent bootstrap helper
+   from a checkout of this repository. It resolves each tarball to an absolute
+   local path, preserves the order in `publish-plan.json`, and logs whether a
+   package was published or already existed.
 
    ```sh
    for tarball in tarballs/*.tgz; do
      tar -tzf "$tarball"
    done
 
-   node -e '
-   const plan = require("./publish-plan.json");
-   for (const item of plan.packages) console.log(item.tarball);
-   ' | while IFS= read -r tarball; do
-     npm publish "$tarball" --tag next
-   done
+   node scripts/bootstrap-publish-npm.mjs \
+     /absolute/path/to/npm-packages/publish-plan.json \
+     --userconfig "$tmp"
    ```
 
-   The first six tarballs are the public `@fabiors/*` platform packages. Their
-   package metadata contains `publishConfig.access: public`, so no token or
-   separate access flag is needed in this command.
+   The helper passes `--access public` explicitly and removes `latest` when an
+   initial pre-release publication caused npm to create that tag too.
 
-6. Confirm the public tags:
+6. Remove the temporary credential and revoke the granular token in npm:
+
+   ```sh
+   rm -f "$tmp"
+   unset tmp NPM_TOKEN
+   ```
+
+7. Confirm the public tags:
 
    ```sh
    npm dist-tag ls wordswasm
