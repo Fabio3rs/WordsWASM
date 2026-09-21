@@ -19,7 +19,7 @@ has `words-full.wwdb`; the public CLI contract, defaults, and supported
 options are documented by
 [wordswasm-cli](https://www.npmjs.com/package/wordswasm-cli).
 The release train, WWDB 1.10 baseline, and npm channel policy are documented
-in the [versioning guide](https://github.com/Fabio3rs/WordsWASM/blob/main/docs/versioning.md).
+in the [versioning guide](https://github.com/Fabio3rs/WordsWASM/blob/master/docs/versioning.md).
 
 WordsWASM is a C++ implementation whose data is derived from William
 Whitaker's WORDS. `LICENSE` covers WordsWASM; `THIRD_PARTY_NOTICES.md` carries

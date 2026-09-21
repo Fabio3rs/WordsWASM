@@ -12,8 +12,8 @@ bundled full WWDB database; it does not install the WebAssembly library.
 [Releases]: https://github.com/Fabio3rs/WordsWASM/releases
 [Issues]: https://github.com/Fabio3rs/WordsWASM/issues
 [Documentation]: https://github.com/Fabio3rs/WordsWASM#using-the-command-line-interface
-[Versioning]: https://github.com/Fabio3rs/WordsWASM/blob/main/docs/versioning.md
-[Licensing and notices]: https://github.com/Fabio3rs/WordsWASM/blob/main/THIRD_PARTY_NOTICES.md
+[Versioning]: https://github.com/Fabio3rs/WordsWASM/blob/master/docs/versioning.md
+[Licensing and notices]: https://github.com/Fabio3rs/WordsWASM/blob/master/THIRD_PARTY_NOTICES.md
 
 ## Install
 

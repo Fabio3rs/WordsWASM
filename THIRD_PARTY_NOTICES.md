@@ -13,7 +13,7 @@ datasets are derived from William A. Whitaker's WORDS program and data. The
 Ada reference tree is used to build the datasets and as a compatibility oracle;
 it is not the WebAssembly implementation. The source snapshots used by this
 release are recorded in the repository at
-[`whitakers-words/remotes.txt`](https://github.com/Fabio3rs/WordsWASM/blob/main/whitakers-words/remotes.txt).
+[`whitakers-words/remotes.txt`](https://github.com/Fabio3rs/WordsWASM/blob/master/whitakers-words/remotes.txt).
 
 The original WORDS notice, including its request for attribution, is:
 
@@ -34,7 +34,7 @@ The original WORDS notice, including its request for attribution, is:
 > available to anyone who wishes to use them, for whatever purpose.
 
 The complete source-tree notice is available at
-[`whitakers-words/LICENCE.txt`](https://github.com/Fabio3rs/WordsWASM/blob/main/whitakers-words/LICENCE.txt).
+[`whitakers-words/LICENCE.txt`](https://github.com/Fabio3rs/WordsWASM/blob/master/whitakers-words/LICENCE.txt).
 
 ## utf8proc and Unicode data
 
