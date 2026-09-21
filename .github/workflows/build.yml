@@ -183,6 +183,10 @@ jobs:
       - name: Configure and build Linux CLI
         if: matrix.platform == 'linux'
         run: |
+          cli_version=development
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then
+            cli_version="${GITHUB_REF_NAME#v}"
+          fi
           cross_args=()
           if [ -n "${{ matrix.cross_processor }}" ]; then
             cross_args+=(
@@ -196,6 +200,7 @@ jobs:
             -DCMAKE_CXX_COMPILER="${{ matrix.cxx_compiler }}" \
             -DBUILD_SHARED_LIBS=OFF \
             -DENABLE_STATIC_CLI=ON \
+            -DWORDS_CLI_VERSION="${cli_version}" \
             -DENABLE_TESTS=OFF \
             -DENABLE_SANITIZERS=OFF \
             "${cross_args[@]}"
@@ -206,6 +211,10 @@ jobs:
         if: matrix.platform == 'windows'
         shell: msys2 {0}
         run: |
+          cli_version=development
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then
+            cli_version="${GITHUB_REF_NAME#v}"
+          fi
           gcc_major="$(g++ -dumpfullversion -dumpversion | cut -d. -f1)"
           if [ "${gcc_major}" -lt 14 ]; then
             echo "WordsWASM requires MinGW-w64 GCC 14 or newer" >&2
@@ -215,6 +224,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=OFF \
             -DENABLE_STATIC_CLI=ON \
+            -DWORDS_CLI_VERSION="${cli_version}" \
             -DENABLE_TESTS=OFF \
             -DENABLE_SANITIZERS=OFF
           cmake --build build/native-release --target words_cli --parallel
@@ -223,6 +233,10 @@ jobs:
       - name: Configure and build macOS CLI
         if: matrix.platform == 'macos'
         run: |
+          cli_version=development
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then
+            cli_version="${GITHUB_REF_NAME#v}"
+          fi
           cmake -S . -B build/native-release -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER="${LLVM_PREFIX}/bin/clang" \
@@ -231,6 +245,7 @@ jobs:
             -DCMAKE_RANLIB="${LLVM_PREFIX}/bin/llvm-ranlib" \
             -DBUILD_SHARED_LIBS=OFF \
             -DENABLE_STATIC_CLI=ON \
+            -DWORDS_CLI_VERSION="${cli_version}" \
             -DENABLE_TESTS=OFF \
             -DENABLE_SANITIZERS=OFF
           cmake --build build/native-release --target words_cli --parallel

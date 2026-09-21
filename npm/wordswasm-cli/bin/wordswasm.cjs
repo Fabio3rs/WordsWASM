@@ -4,6 +4,58 @@
 const {spawnSync} = require("node:child_process");
 const {dirname, join} = require("node:path");
 
+const args = process.argv.slice(2);
+const packageVersion = require("../package.json").version;
+
+function usage() {
+  console.log(`WordsWASM command-line interface
+
+Usage:
+  wordswasm [OPTIONS] LATIN_TEXT ...
+  wordswasm --batch-json-lines [OPTIONS] < queries.txt
+
+Examples:
+  wordswasm mālum
+  wordswasm --pretty "amo puellam"
+  printf 'amo\\npuella\\n' | wordswasm --batch-json-lines
+  wordswasm --db /path/to/words-search.wwdb --format search-v3 mālum
+
+Defaults:
+  Uses the bundled full database and compact analysis-v3 JSON output.
+
+Options:
+  --database FILE, --db FILE  Use another WWDB database.
+  --format FORMAT, -f FORMAT  analysis-v3 (default) or search-v3.
+  --pretty                    Indent one JSON result for terminal reading.
+  --batch-json-lines, --batch Read stdin as JSON Lines input: one query per line,
+                              one compact JSON value per output line.
+  --dataset-id ID             Verify the database dataset identifier.
+  --two-words=legacy          Choose the legacy two-word behavior.
+  --orthography=MODE          disabled, classical, or medieval.
+  --no-fixes, --no-prefixes, --no-suffixes, --no-tickons, --no-tackons,
+  --no-packons, --no-syncope, --no-verbal-compounds
+                              Disable individual analysis mechanisms.
+  --help, -h                  Show this help.
+  --version                   Show the wrapper package version.
+
+JSON is written to stdout; diagnostics are written to stderr. --pretty remains
+valid JSON, but cannot be combined with --batch-json-lines because JSONL needs
+one JSON value per line. The native command exits 2 for invalid input, 3 for
+database/engine errors, and 4 for unexpected failures.
+`);
+}
+
+if (args.includes("--help") || args.includes("-h")) {
+  usage();
+  process.exitCode = 0;
+  return;
+}
+if (args.includes("--version")) {
+  console.log(`wordswasm-cli ${packageVersion}`);
+  process.exitCode = 0;
+  return;
+}
+
 const platforms = new Map([
   ["linux-x64", "@fabiors/wordswasm-cli-linux-x64"],
   ["linux-arm64", "@fabiors/wordswasm-cli-linux-arm64"],
@@ -16,7 +68,10 @@ const platforms = new Map([
 const key = `${process.platform}-${process.arch}`;
 const packageName = platforms.get(key);
 if (packageName === undefined) {
-  console.error(`wordswasm: unsupported platform ${key}`);
+  console.error(
+    `wordswasm: ${key} is not supported by the npm CLI package. ` +
+    "Download a standalone build from https://github.com/Fabio3rs/WordsWASM/releases.",
+  );
   process.exitCode = 1;
   return;
 }
@@ -26,7 +81,8 @@ try {
   packageJson = require.resolve(`${packageName}/package.json`);
 } catch {
   console.error(
-    `wordswasm: ${packageName} is unavailable; reinstall without --omit=optional`,
+    `wordswasm: the native package ${packageName} is unavailable. ` +
+    "Reinstall wordswasm-cli without --omit=optional (or --no-optional).",
   );
   process.exitCode = 1;
   return;
@@ -38,17 +94,19 @@ const binary = join(
   "bin",
   process.platform === "win32" ? "words_cli.exe" : "words_cli",
 );
-const args = process.argv.slice(2);
-if (!args.includes("--database")) {
+const hasOption = (...names) => args.some((argument) =>
+  names.some((name) => argument === name || argument.startsWith(`${name}=`)),
+);
+if (!hasOption("--database", "--db")) {
   args.unshift("--database", join(packageRoot, "data", "words-full.wwdb"));
 }
-if (!args.includes("--format")) {
+if (!hasOption("--format", "-f")) {
   args.unshift("--format", "analysis-v3");
 }
 
 const result = spawnSync(binary, args, {stdio: "inherit"});
 if (result.error !== undefined) {
-  console.error(`wordswasm: ${result.error.message}`);
+  console.error(`wordswasm: could not start its native executable: ${result.error.message}`);
   process.exitCode = 1;
 } else if (result.signal !== null) {
   process.kill(process.pid, result.signal);

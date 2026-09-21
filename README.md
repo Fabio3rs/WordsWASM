@@ -177,11 +177,19 @@ printf 'amo\npuella\nmālum\n' | ./words_cli \
   --batch-json-lines
 ```
 
+`--pretty` indents one result for terminal reading while keeping it valid JSON.
+It cannot be combined with `--batch-json-lines`, because JSONL requires one
+compact JSON value per line. `--db`, `-f`, and `--batch` are aliases for
+`--database`, `--format`, and `--batch-json-lines`. Run `words_cli --help` (or
+`-h`) for the full reference, and `words_cli --version` for the build version.
+The npm wrapper provides the same `wordswasm --help` and `wordswasm --version`
+commands before resolving its optional platform package.
+
 `--dataset-id` is optional for local use. Applications that persist or combine
 IDs should pass the `datasetId` recorded in
 `words-web-manifest-<tag>.json`, because lexeme and rule IDs are local to that
-dataset. Run `words_cli` without the required arguments to print all supported
-orthography, derivation, and output options.
+dataset. Invalid command input exits with status `2`; database or engine
+failures exit with `3`; unexpected failures exit with `4`.
 
 ## Using the WebAssembly bundle
 

@@ -373,8 +373,14 @@ if(EMSCRIPTEN)
         endif()
     endif()
 else()
+    set(WORDS_CLI_VERSION "development" CACHE STRING
+        "Version reported by the native words_cli executable"
+    )
     add_executable(words_cli src/main.cpp)
     target_link_libraries(words_cli PRIVATE words_json)
+    target_compile_definitions(words_cli PRIVATE
+        WORDS_CLI_VERSION="${WORDS_CLI_VERSION}"
+    )
     words_apply_project_options(words_cli)
 
     # A presentation-free profiling target.  Keep it out of the default build:

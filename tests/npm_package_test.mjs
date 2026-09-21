@@ -131,10 +131,25 @@ try {
 
 if (process.platform === "linux" && process.arch === "x64") {
   const wrapper = plan.packages.at(-2);
+  const wrapperRoot = path.join(root, wrapper.directory);
+  const wrapperScript = path.join(wrapperRoot, "bin", "wordswasm.cjs");
+  const help = spawnSync(process.execPath, [wrapperScript, "--help"], {encoding: "utf8"});
+  assert.equal(help.status, 0, help.stderr);
+  assert.match(help.stdout, /WordsWASM command-line interface/);
+  assert.match(help.stdout, /--batch-json-lines/);
+  assert.match(help.stdout, /Exit status/);
+
+  const version = spawnSync(process.execPath, [wrapperScript, "--version"], {encoding: "utf8"});
+  assert.equal(version.status, 0, version.stderr);
+  assert.match(version.stdout, new RegExp(`wordswasm-cli ${plan.version}`));
+
+  const missing = spawnSync(process.execPath, [wrapperScript, "amo"], {encoding: "utf8"});
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /unavailable.*without --omit=optional/);
+
   const native = plan.packages.find(
     (item) => item.name === "@fabiors/wordswasm-cli-linux-x64",
   );
-  const wrapperRoot = path.join(root, wrapper.directory);
   const linkedScope = path.join(wrapperRoot, "node_modules", "@fabiors");
   await rm(path.join(wrapperRoot, "node_modules"), {recursive: true, force: true});
   await mkdir(linkedScope, {recursive: true});
@@ -143,10 +158,21 @@ if (process.platform === "linux" && process.arch === "x64") {
     path.join(linkedScope, "wordswasm-cli-linux-x64"),
     "dir",
   );
-  const result = spawnSync(process.execPath, [
-    path.join(wrapperRoot, "bin", "wordswasm.cjs"), "amo",
-  ], {encoding: "utf8"});
-  await rm(path.join(wrapperRoot, "node_modules"), {recursive: true, force: true});
+  const result = spawnSync(process.execPath, [wrapperScript, "amo"], {encoding: "utf8"});
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).schemaVersion, 3);
+
+  const pretty = spawnSync(process.execPath, [wrapperScript, "--pretty", "amo"], {
+    encoding: "utf8",
+  });
+  assert.equal(pretty.status, 0, pretty.stderr);
+  assert.ok(pretty.stdout.split("\n").length > 3);
+  assert.equal(JSON.parse(pretty.stdout).schemaVersion, 3);
+
+  const invalidBatch = spawnSync(process.execPath, [
+    wrapperScript, "--pretty", "--batch-json-lines",
+  ], {encoding: "utf8"});
+  await rm(path.join(wrapperRoot, "node_modules"), {recursive: true, force: true});
+  assert.equal(invalidBatch.status, 2);
+  assert.match(invalidBatch.stderr, /cannot be used with --batch-json-lines/);
 }

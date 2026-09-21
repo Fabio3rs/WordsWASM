@@ -34,28 +34,59 @@ one of the following optional platform packages for supported systems:
 If installation reports that no matching optional package was installed,
 download the appropriate standalone archive from [Releases] instead.
 
-## Defaults and options
+## Use
 
-The command uses its bundled full database and `analysis-v3` output by
-default:
-
-```sh
-wordswasm "amo puellam"
-```
-
-Each query writes JSON to standard output. Select another database or output
-format when needed:
+The wrapper uses its bundled full database and compact `analysis-v3` JSON by
+default. JSON is the automation interface: results go to standard output and
+diagnostics go to standard error.
 
 ```sh
-wordswasm --database /path/to/words-search.wwdb --format search-v3 mālum
-printf 'amo\npuella\n' | wordswasm --batch-json-lines
+wordswasm mālum
+wordswasm --pretty "amo puellam"
+wordswasm --version
+wordswasm --help
 ```
 
-`analysis-v3` requires a full database. `search-v3` accepts either a full or
+`--pretty` is still valid JSON, only indented for terminal reading. It must not
+be combined with batch mode: JSON Lines requires exactly one complete, compact
+JSON value per output line.
+
+### Batch / JSON Lines
+
+Pass one query per input line to keep one database snapshot alive and emit one
+result per line. This is suitable for shell pipelines and corpus jobs:
+
+```sh
+printf 'amo\npuella\n' | wordswasm --batch-json-lines > analyses.jsonl
+# --batch is an alias for --batch-json-lines
+```
+
+Use `jq` or another JSONL-aware tool to consume the output. Blank input lines
+are skipped. Do not pass a positional query together with batch mode.
+
+### Database and output choices
+
+```sh
+wordswasm --db /path/to/words-search.wwdb --format search-v3 mālum
+wordswasm -f search-v3 mālum
+```
+
+`--db` is an alias for `--database`, and `-f` is an alias for `--format`.
+`analysis-v3` requires a full database; `search-v3` accepts a full or
 search-only database. They are the stable CLI JSON contracts from 1.0 onward.
 The binary may accept older development selectors, but those are unsupported
-migration paths; new integrations should use v3. Run `wordswasm --help` for
-all CLI options and see [Versioning] for the compatibility policy.
+migration paths; new integrations should use v3. See [Versioning] for the
+compatibility policy.
+
+### Errors and exit status
+
+`wordswasm --help` works before the optional native package is resolved. If a
+platform is unsupported, or installation omitted optional dependencies, the
+wrapper explains how to install the matching package or use a standalone
+release. For a command that reaches the native CLI, exit status `2` means an
+invalid command, `3` means a database or engine failure, and `4` means an
+unexpected failure. Status `1` is reserved for wrapper setup failures.
+
 
 ## Provenance and license
 

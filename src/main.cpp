@@ -1,6 +1,8 @@
 #include "words/engine.hpp"
 #include "words/json.hpp"
 
+#include <nlohmann/json.hpp>
+
 #include <cstddef>
 #include <exception>
 #include <expected>
@@ -14,6 +16,10 @@
 #include <utility>
 #include <vector>
 
+#ifndef WORDS_CLI_VERSION
+#define WORDS_CLI_VERSION "development"
+#endif
+
 namespace {
 
 struct Options final {
@@ -23,6 +29,7 @@ struct Options final {
     std::string word;
     words::AnalysisOptions analysis;
     bool batch_json_lines{false};
+    bool pretty{false};
 };
 
 [[nodiscard]] std::expected<Options, std::string>
@@ -40,19 +47,29 @@ parse_options(const int argc, char *const argv[]) {
             return std::string_view{argv[index]};
         };
 
-        if (argument == "--database") {
+        if (argument.starts_with("--database=")) {
+            options.database = argument.substr(std::string_view{"--database="}.size());
+        } else if (argument.starts_with("--db=")) {
+            options.database = argument.substr(std::string_view{"--db="}.size());
+        } else if (argument == "--database" || argument == "--db") {
             auto value = require_value(argument);
             if (!value) {
                 return std::unexpected(std::move(value.error()));
             }
             options.database = *value;
+        } else if (argument.starts_with("--dataset-id=")) {
+            options.dataset_id = argument.substr(std::string_view{"--dataset-id="}.size());
         } else if (argument == "--dataset-id") {
             auto value = require_value(argument);
             if (!value) {
                 return std::unexpected(std::move(value.error()));
             }
             options.dataset_id = *value;
-        } else if (argument == "--format") {
+        } else if (argument.starts_with("--format=")) {
+            options.format = argument.substr(std::string_view{"--format="}.size());
+        } else if (argument.starts_with("-f=")) {
+            options.format = argument.substr(std::string_view{"-f="}.size());
+        } else if (argument == "--format" || argument == "-f") {
             auto value = require_value(argument);
             if (!value) {
                 return std::unexpected(std::move(value.error()));
@@ -85,8 +102,10 @@ parse_options(const int argc, char *const argv[]) {
             options.analysis.mechanisms.syncope = false;
         } else if (argument == "--no-verbal-compounds") {
             options.analysis.mechanisms.verbal_compounds = false;
-        } else if (argument == "--batch-json-lines") {
+        } else if (argument == "--batch-json-lines" || argument == "--batch") {
             options.batch_json_lines = true;
+        } else if (argument == "--pretty") {
+            options.pretty = true;
         } else if (argument.starts_with("--two-words=")) {
             return std::unexpected("two-words mode must be legacy");
         } else if (argument.starts_with("--orthography=")) {
@@ -108,7 +127,12 @@ parse_options(const int argc, char *const argv[]) {
     }
     if (options.batch_json_lines && !options.word.empty()) {
         return std::unexpected(
-            "batch-json-lines reads queries from stdin and accepts no word");
+            "--batch-json-lines reads queries from stdin and accepts no word");
+    }
+    if (options.batch_json_lines && options.pretty) {
+        return std::unexpected(
+            "--pretty cannot be used with --batch-json-lines because JSONL "
+            "requires one JSON value per line");
     }
     if (options.format != "analysis" && options.format != "search" &&
         options.format != "analysis-v2" && options.format != "search-v2" &&
@@ -149,57 +173,91 @@ read_file(const std::filesystem::path &path) {
 }
 
 void usage() {
-    std::cerr << "usage: words_cli --database FILE [--dataset-id sha256:...] "
-                 "--format analysis|search|analysis-v2|search-v2|"
-                 "analysis-v3|search-v3 "
-                 "[--two-words=legacy] "
-                 "[--orthography=disabled|classical|medieval] "
-                 "[--no-fixes] [--no-prefixes] [--no-suffixes] [--no-tickons] "
-                 "[--no-tackons] [--no-packons] [--no-syncope] "
-                 "[--no-verbal-compounds] "
-                 "[--batch-json-lines | LATIN_TEXT ...]\n";
+    std::cout << R"(WordsWASM native CLI
+
+Usage:
+  words_cli --database FILE --format FORMAT [OPTIONS] LATIN_TEXT ...
+  words_cli --database FILE --format FORMAT --batch-json-lines [OPTIONS] < queries.txt
+
+Options:
+  --database FILE, --db FILE  WWDB database to load.
+  --dataset-id ID             Expected dataset identifier, when known.
+  --format FORMAT, -f FORMAT  analysis-v3 (recommended) or search-v3.
+  --pretty                    Indent a single JSON result for terminal reading.
+  --batch-json-lines, --batch Read one query per stdin line; emit one compact JSON value per line.
+  --two-words=legacy          Use the legacy two-word choice.
+  --orthography=MODE          disabled, classical, or medieval.
+  --no-fixes, --no-prefixes, --no-suffixes, --no-tickons, --no-tackons,
+  --no-packons, --no-syncope, --no-verbal-compounds
+                              Disable individual analysis mechanisms.
+  --help, -h                  Show this help.
+
+Formats:
+  analysis-v3  Full morphological analysis; requires a full WWDB.
+  search-v3    Search-oriented result; works with full and search WWDBs.
+
+Exit status: 0 success; 2 invalid command; 3 database or engine failure;
+4 unexpected failure. JSON is written to stdout and diagnostics to stderr.
+)";
 }
 
 void write_result(const words::Engine &engine, const words::QueryResult &result,
-                  const std::string_view format) {
+                  const std::string_view format, const bool pretty) {
+    std::string document;
     if (format == "analysis") {
-        std::cout << words::analysis_json(engine, result) << '\n';
+        document = words::analysis_json(engine, result);
     } else if (format == "analysis-v2") {
-        std::cout << words::analysis_json_v2(engine, result) << '\n';
+        document = words::analysis_json_v2(engine, result);
     } else if (format == "analysis-v3") {
-        std::cout << words::analysis_json_v3(engine, result) << '\n';
+        document = words::analysis_json_v3(engine, result);
     } else if (format == "search-v2") {
-        std::cout << words::search_json_v2(engine, result) << '\n';
+        document = words::search_json_v2(engine, result);
     } else if (format == "search-v3") {
-        std::cout << words::search_json_v3(engine, result) << '\n';
+        document = words::search_json_v3(engine, result);
     } else {
-        std::cout << words::search_json(engine, result) << '\n';
+        document = words::search_json(engine, result);
+    }
+    if (pretty) {
+        std::cout << nlohmann::ordered_json::parse(document).dump(2) << '\n';
+    } else {
+        std::cout << document << '\n';
     }
 }
 
 void write_text_result(const words::Engine &engine,
                        const std::string_view query,
                        const std::string_view format,
-                       const words::AnalysisOptions options) {
-    write_result(engine, engine.analyze_text(query, options), format);
+                       const words::AnalysisOptions options, const bool pretty) {
+    write_result(engine, engine.analyze_text(query, options), format, pretty);
 }
 
 void write_line_results(const words::Engine &engine,
                         const std::string_view query,
                         const std::string_view format,
-                        const words::AnalysisOptions options) {
+                        const words::AnalysisOptions options, const bool pretty) {
     for (const auto &result : engine.analyze_line(query, options)) {
-        write_result(engine, result, format);
+        write_result(engine, result, format, pretty);
     }
 }
 
 } // namespace
 
 int main(const int argc, char *argv[]) try {
+    for (int index = 1; index < argc; ++index) {
+        const std::string_view argument = argv[index];
+        if (argument == "--help" || argument == "-h") {
+            usage();
+            return 0;
+        }
+        if (argument == "--version") {
+            std::cout << "words_cli " << WORDS_CLI_VERSION << '\n';
+            return 0;
+        }
+    }
     auto options = parse_options(argc, argv);
     if (!options) {
-        usage();
-        std::cerr << "words_cli: " << options.error() << '\n';
+        std::cerr << "words_cli: " << options.error()
+                  << ". Run 'wordswasm --help' for usage.\n";
         return 2;
     }
     auto bytes = read_file(options->database);
@@ -233,12 +291,12 @@ int main(const int argc, char *argv[]) try {
             }
             if (!query.empty()) {
                 write_text_result(**engine, query, options->format,
-                                  analysis_options);
+                                  analysis_options, false);
             }
         }
     } else {
         write_line_results(**engine, options->word, options->format,
-                           analysis_options);
+                           analysis_options, options->pretty);
     }
     return 0;
 } catch (const std::bad_alloc &) {
