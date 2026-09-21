@@ -1,4 +1,5 @@
 #include "words/json.hpp"
+#include "json_document.hpp"
 #include "words/artificial.hpp"
 #include "words/lexeme.hpp"
 #include "words/projection.hpp"
@@ -984,7 +985,7 @@ search_two_word_suggestion(const TwoWordSuggestionIR &suggestion,
 
 } // namespace
 
-std::string analysis_json(const Engine &engine, const QueryResult &result) {
+Json analysis_json_document(const Engine &engine, const QueryResult &result) {
     if (!engine.owns(result)) {
         throw std::logic_error{
             "analysis result belongs to a different dataset"};
@@ -1046,10 +1047,10 @@ std::string analysis_json(const Engine &engine, const QueryResult &result) {
         output["suggestions"] = Json::array(
             {full_two_word_suggestion(engine, *result.two_word_suggestion)});
     }
-    return output.dump();
+    return output;
 }
 
-std::string analysis_json_v2(const Engine &engine, const QueryResult &result) {
+Json analysis_json_v2_document(const Engine &engine, const QueryResult &result) {
     if (!engine.owns(result)) {
         throw std::logic_error{
             "analysis result belongs to a different dataset"};
@@ -1117,8 +1118,8 @@ std::string analysis_json_v2(const Engine &engine, const QueryResult &result) {
     if (!result.independent_tokens.empty()) {
         Json tokens = Json::array();
         for (const auto &token : result.independent_tokens) {
-            const auto token_document = Json::parse(analysis_json_v2(
-                engine, independent_token_result(result, token)));
+            const auto token_document = analysis_json_v2_document(
+                engine, independent_token_result(result, token));
             tokens.push_back(Json{
                 {"query", token_document.at("query")},
                 {"status", token_document.at("status")},
@@ -1128,10 +1129,10 @@ std::string analysis_json_v2(const Engine &engine, const QueryResult &result) {
         }
         output["tokens"] = std::move(tokens);
     }
-    return output.dump();
+    return output;
 }
 
-std::string search_json(const Engine &engine, const QueryResult &result) {
+Json search_json_document(const Engine &engine, const QueryResult &result) {
     if (!engine.owns(result)) {
         throw std::logic_error{
             "analysis result belongs to a different dataset"};
@@ -1186,10 +1187,10 @@ std::string search_json(const Engine &engine, const QueryResult &result) {
         output["suggestions"] = Json::array(
             {search_two_word_suggestion(*result.two_word_suggestion)});
     }
-    return output.dump();
+    return output;
 }
 
-std::string search_json_v2(const Engine &engine, const QueryResult &result) {
+Json search_json_v2_document(const Engine &engine, const QueryResult &result) {
     if (!engine.owns(result)) {
         throw std::logic_error{
             "analysis result belongs to a different dataset"};
@@ -1294,8 +1295,8 @@ std::string search_json_v2(const Engine &engine, const QueryResult &result) {
     if (!result.independent_tokens.empty()) {
         Json tokens = Json::array();
         for (const auto &token : result.independent_tokens) {
-            const auto token_document = Json::parse(search_json_v2(
-                engine, independent_token_result(result, token)));
+            const auto token_document = search_json_v2_document(
+                engine, independent_token_result(result, token));
             tokens.push_back(Json{
                 {"query", token_document.at("query")},
                 {"status", token_document.at("status")},
@@ -1305,10 +1306,10 @@ std::string search_json_v2(const Engine &engine, const QueryResult &result) {
         }
         output["tokens"] = std::move(tokens);
     }
-    return output.dump();
+    return output;
 }
 
-std::string analysis_json_v3(const Engine &engine, const QueryResult &result) {
+Json analysis_json_v3_document(const Engine &engine, const QueryResult &result) {
     if (!engine.owns(result)) {
         throw std::logic_error{
             "analysis result belongs to a different dataset"};
@@ -1395,8 +1396,8 @@ std::string analysis_json_v3(const Engine &engine, const QueryResult &result) {
     if (!result.independent_tokens.empty()) {
         Json tokens = Json::array();
         for (const auto &token : result.independent_tokens) {
-            const auto token_document = Json::parse(analysis_json_v3(
-                engine, independent_token_result(result, token)));
+            const auto token_document = analysis_json_v3_document(
+                engine, independent_token_result(result, token));
             tokens.push_back(Json{
                 {"query", token_document.at("query")},
                 {"status", token_document.at("status")},
@@ -1406,10 +1407,10 @@ std::string analysis_json_v3(const Engine &engine, const QueryResult &result) {
         }
         output["tokens"] = std::move(tokens);
     }
-    return output.dump();
+    return output;
 }
 
-std::string search_json_v3(const Engine &engine, const QueryResult &result) {
+Json search_json_v3_document(const Engine &engine, const QueryResult &result) {
     if (!engine.owns(result)) {
         throw std::logic_error{
             "analysis result belongs to a different dataset"};
@@ -1492,8 +1493,8 @@ std::string search_json_v3(const Engine &engine, const QueryResult &result) {
     if (!result.independent_tokens.empty()) {
         Json tokens = Json::array();
         for (const auto &token : result.independent_tokens) {
-            const auto token_document = Json::parse(search_json_v3(
-                engine, independent_token_result(result, token)));
+            const auto token_document = search_json_v3_document(
+                engine, independent_token_result(result, token));
             tokens.push_back(Json{
                 {"query", token_document.at("query")},
                 {"status", token_document.at("status")},
@@ -1503,7 +1504,31 @@ std::string search_json_v3(const Engine &engine, const QueryResult &result) {
         }
         output["tokens"] = std::move(tokens);
     }
-    return output.dump();
+    return output;
+}
+
+std::string analysis_json(const Engine &engine, const QueryResult &result) {
+    return analysis_json_document(engine, result).dump();
+}
+
+std::string search_json(const Engine &engine, const QueryResult &result) {
+    return search_json_document(engine, result).dump();
+}
+
+std::string analysis_json_v2(const Engine &engine, const QueryResult &result) {
+    return analysis_json_v2_document(engine, result).dump();
+}
+
+std::string search_json_v2(const Engine &engine, const QueryResult &result) {
+    return search_json_v2_document(engine, result).dump();
+}
+
+std::string analysis_json_v3(const Engine &engine, const QueryResult &result) {
+    return analysis_json_v3_document(engine, result).dump();
+}
+
+std::string search_json_v3(const Engine &engine, const QueryResult &result) {
+    return search_json_v3_document(engine, result).dump();
 }
 
 } // namespace words

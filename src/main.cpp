@@ -1,7 +1,7 @@
 #include "words/engine.hpp"
 #include "words/json.hpp"
+#include "json_document.hpp"
 
-#include <nlohmann/json.hpp>
 
 #include <cstddef>
 #include <exception>
@@ -203,25 +203,21 @@ Exit status: 0 success; 2 invalid command; 3 database or engine failure;
 
 void write_result(const words::Engine &engine, const words::QueryResult &result,
                   const std::string_view format, const bool pretty) {
-    std::string document;
+    words::JsonDocument document;
     if (format == "analysis") {
-        document = words::analysis_json(engine, result);
+        document = words::analysis_json_document(engine, result);
     } else if (format == "analysis-v2") {
-        document = words::analysis_json_v2(engine, result);
+        document = words::analysis_json_v2_document(engine, result);
     } else if (format == "analysis-v3") {
-        document = words::analysis_json_v3(engine, result);
+        document = words::analysis_json_v3_document(engine, result);
     } else if (format == "search-v2") {
-        document = words::search_json_v2(engine, result);
+        document = words::search_json_v2_document(engine, result);
     } else if (format == "search-v3") {
-        document = words::search_json_v3(engine, result);
+        document = words::search_json_v3_document(engine, result);
     } else {
-        document = words::search_json(engine, result);
+        document = words::search_json_document(engine, result);
     }
-    if (pretty) {
-        std::cout << nlohmann::ordered_json::parse(document).dump(2) << '\n';
-    } else {
-        std::cout << document << '\n';
-    }
+    std::cout << document.dump(pretty ? 2 : -1) << '\n';
 }
 
 void write_text_result(const words::Engine &engine,
