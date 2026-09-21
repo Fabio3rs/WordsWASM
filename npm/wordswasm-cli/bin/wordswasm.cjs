@@ -12,12 +12,13 @@ function usage() {
 
 Usage:
   wordswasm [OPTIONS] LATIN_TEXT ...
-  wordswasm --batch-json-lines [OPTIONS] < queries.txt
+  wordswasm [OPTIONS] --input FILE
+  wordswasm [OPTIONS] < queries.txt
 
 Examples:
   wordswasm mālum
   wordswasm --pretty "amo puellam"
-  printf 'amo\\npuella\\n' | wordswasm --batch-json-lines
+  printf 'amo\\npuella\\n' | wordswasm
   wordswasm --db /path/to/words-search.wwdb --format search-v3 mālum
 
 Defaults:
@@ -27,8 +28,9 @@ Options:
   --database FILE, --db FILE  Use another WWDB database.
   --format FORMAT, -f FORMAT  analysis-v3 (default) or search-v3.
   --pretty                    Indent JSON for terminal reading; emit an array for multiple results.
-  --batch-json-lines, --batch Read stdin as JSON Lines input: one query per line,
-                              one compact JSON value per output line.
+  -i FILE, --input FILE       Read one query per line; use - for standard input.
+                              With no text and no --input, read from standard input.
+  --batch-json-lines, --batch Legacy aliases for --input -.
   --dataset-id ID             Verify the database dataset identifier.
   --two-words=legacy          Choose the legacy two-word behavior.
   --orthography=MODE          disabled, classical, or medieval.
@@ -39,9 +41,9 @@ Options:
   --version                   Show the wrapper package version.
 
 JSON is written to stdout; diagnostics are written to stderr. --pretty remains
-valid JSON, but cannot be combined with --batch-json-lines because JSONL needs
-one JSON value per line. The native command exits 2 for invalid input, 3 for
-database/engine errors, and 4 for unexpected failures.
+valid JSON, but cannot be used with stream input because JSONL needs one compact
+JSON value per line. The native command exits 2 for invalid input, 3 for
+database/engine/input errors, and 4 for unexpected failures.
 `);
 }
 

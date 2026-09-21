@@ -5,6 +5,7 @@ import copy
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import jsonschema
@@ -131,7 +132,6 @@ def main() -> None:
         ]
         if two_words:
             command.append("--two-words=legacy")
-        command.append("--batch-json-lines")
         return load_json_lines(command, queries)
 
     standard_queries = (
@@ -392,7 +392,7 @@ def main() -> None:
         search_validator.validate(document)
 
     batch_lines = subprocess.run(
-        [*native_base, "--format", "search", "--batch-json-lines"],
+        [*native_base, "--format", "search"],
         check=True,
         input="amo amare\namatus sum\n",
         text=True,
@@ -414,6 +414,58 @@ def main() -> None:
         raise AssertionError("a recognized compound must work in batch mode")
     for document in batch_documents:
         search_validator.validate(document)
+
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8") as input_file:
+        input_file.write("amo amare\namatus sum\n\n")
+        input_file.flush()
+        for input_arguments in (
+            ["--input", input_file.name],
+            ["-i", input_file.name],
+            [f"--input={input_file.name}"],
+        ):
+            file_lines = subprocess.run(
+                [*native_base, "--format", "search", *input_arguments],
+                check=True,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            file_documents = [json.loads(document)
+                              for document in file_lines.stdout.splitlines()]
+            if [document["query"]["text"] for document in file_documents] != [
+                "amo amare", "amatus sum",
+            ]:
+                raise AssertionError("--input did not preserve file query lines")
+
+    invalid_stream = subprocess.run(
+        [*native_base, "--format", "search", "--input", "-", "amo"],
+        input="",
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if invalid_stream.returncode != 2 or "positional text" not in invalid_stream.stderr:
+        raise AssertionError("positional text was accepted with --input")
+
+    duplicate_stream = subprocess.run(
+        [*native_base, "--format", "search", "--input", "-", "--batch"],
+        input="",
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if duplicate_stream.returncode != 2 or "only be specified once" not in duplicate_stream.stderr:
+        raise AssertionError("duplicate stream selectors were accepted")
+
+    invalid_pretty = subprocess.run(
+        [*native_base, "--format", "search", "--pretty"],
+        input="amo\n",
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if invalid_pretty.returncode != 2 or "stream input" not in invalid_pretty.stderr:
+        raise AssertionError("--pretty was accepted for implicit stdin")
 
     if cpp_documents:
         raise AssertionError(

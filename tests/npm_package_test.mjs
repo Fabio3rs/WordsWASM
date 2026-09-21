@@ -136,6 +136,7 @@ if (process.platform === "linux" && process.arch === "x64") {
   const help = spawnSync(process.execPath, [wrapperScript, "--help"], {encoding: "utf8"});
   assert.equal(help.status, 0, help.stderr);
   assert.match(help.stdout, /WordsWASM command-line interface/);
+  assert.match(help.stdout, /--input FILE/);
   assert.match(help.stdout, /--batch-json-lines/);
   assert.match(help.stdout, /Exit status/);
 
@@ -162,6 +163,13 @@ if (process.platform === "linux" && process.arch === "x64") {
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).schemaVersion, 3);
 
+  const stream = spawnSync(process.execPath, [wrapperScript], {
+    encoding: "utf8",
+    input: "amo\npuella\n",
+  });
+  assert.equal(stream.status, 0, stream.stderr);
+  assert.equal(stream.stdout.split("\n").filter(Boolean).length, 2);
+
   const pretty = spawnSync(process.execPath, [wrapperScript, "--pretty", "amo"], {
     encoding: "utf8",
   });
@@ -183,5 +191,5 @@ if (process.platform === "linux" && process.arch === "x64") {
   ], {encoding: "utf8"});
   await rm(path.join(wrapperRoot, "node_modules"), {recursive: true, force: true});
   assert.equal(invalidBatch.status, 2);
-  assert.match(invalidBatch.stderr, /cannot be used with --batch-json-lines/);
+  assert.match(invalidBatch.stderr, /cannot be used with stream input/);
 }

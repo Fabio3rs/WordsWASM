@@ -48,22 +48,24 @@ wordswasm --help
 ```
 
 `--pretty` is still valid JSON, only indented for terminal reading. A query
-with multiple independent results is emitted as one JSON array. It must not be
-combined with batch mode: JSON Lines requires exactly one complete, compact
-JSON value per output line.
+with multiple independent results is emitted as one JSON array. It is available
+only for a single command-line query; stream input always emits compact JSONL.
 
-### Batch / JSON Lines
+### Input streams / JSON Lines
 
-Pass one query per input line to keep one database snapshot alive and emit one
-result per line. This is suitable for shell pipelines and corpus jobs:
+With no positional text, stdin is read as one query per line. `--input FILE`
+selects a file, and `--input -` selects stdin explicitly:
 
 ```sh
-printf 'amo\npuella\n' | wordswasm --batch-json-lines > analyses.jsonl
-# --batch is an alias for --batch-json-lines
+printf 'amo\npuella\n' | wordswasm > analyses.jsonl
+wordswasm < corpus.txt
+wordswasm --input corpus.txt > analyses.jsonl
+wordswasm -i - < corpus.txt
 ```
 
 Use `jq` or another JSONL-aware tool to consume the output. Blank input lines
-are skipped. Do not pass a positional query together with batch mode.
+are skipped. Do not pass positional text together with `--input`. The legacy
+`--batch-json-lines` and `--batch` options remain silent aliases for `--input -`.
 
 ### Database and output choices
 

@@ -168,21 +168,25 @@ separate JSON lines:
 ```
 
 For many queries, keep one database snapshot loaded and stream one query per
-input line with `--batch-json-lines`:
+input line. With no positional text, stdin is the default stream source; use
+`--input FILE` for a named file or `--input -` to select stdin explicitly:
 
 ```sh
 printf 'amo\npuella\nmālum\n' | ./words_cli \
   --database ../words-full-v1.0.0-rc1.wwdb \
-  --format analysis-v3 \
-  --batch-json-lines
+  --format analysis-v3
+./words_cli --database ../words-full-v1.0.0-rc1.wwdb \
+  --format analysis-v3 --input corpus.txt
 ```
 
 `--pretty` indents JSON for terminal reading while keeping it valid JSON. If a
 query produces multiple independent results, it emits one JSON array.
-It cannot be combined with `--batch-json-lines`, because JSONL requires one
-compact JSON value per line. `--db`, `-f`, and `--batch` are aliases for
-`--database`, `--format`, and `--batch-json-lines`. Run `words_cli --help` (or
-`-h`) for the full reference, and `words_cli --version` for the build version.
+It is available only for a single command-line query; stream input always emits
+one compact JSON value per non-empty input line. `-i` is an alias for
+`--input`, `--db` and `-f` remain aliases for `--database` and `--format`, and
+`--batch-json-lines`/`--batch` remain legacy aliases for `--input -`. Run
+`words_cli --help` (or `-h`) for the full reference, and `words_cli --version`
+for the build version.
 The npm wrapper provides the same `wordswasm --help` and `wordswasm --version`
 commands before resolving its optional platform package.
 

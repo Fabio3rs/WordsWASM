@@ -9,6 +9,7 @@
 #include <iostream>
 #include <limits>
 #include <new>
+#include <optional>
 #include <print>
 #include <string>
 #include <string_view>
@@ -27,7 +28,8 @@ struct Options final {
     std::string format;
     std::string word;
     words::AnalysisOptions analysis;
-    bool batch_json_lines{false};
+    bool stream_input{false};
+    std::optional<std::filesystem::path> input;
     bool pretty{false};
 };
 
@@ -105,8 +107,35 @@ parse_options(const int argc, char *const argv[]) {
             options.analysis.mechanisms.syncope = false;
         } else if (argument == "--no-verbal-compounds") {
             options.analysis.mechanisms.verbal_compounds = false;
+        } else if (argument.starts_with("--input=")) {
+            if (options.stream_input) {
+                return std::unexpected(
+                    "input selector may only be specified once");
+            }
+            if (argument.size() == std::string_view{"--input="}.size()) {
+                return std::unexpected("missing value for --input");
+            }
+            options.stream_input = true;
+            options.input = std::filesystem::path{
+                argument.substr(std::string_view{"--input="}.size())};
+        } else if (argument == "--input" || argument == "-i") {
+            if (options.stream_input) {
+                return std::unexpected(
+                    "input selector may only be specified once");
+            }
+            auto value = require_value(argument);
+            if (!value) {
+                return std::unexpected(std::move(value.error()));
+            }
+            options.stream_input = true;
+            options.input = std::filesystem::path{*value};
         } else if (argument == "--batch-json-lines" || argument == "--batch") {
-            options.batch_json_lines = true;
+            if (options.stream_input) {
+                return std::unexpected(
+                    "input selector may only be specified once");
+            }
+            options.stream_input = true;
+            options.input = std::filesystem::path{"-"};
         } else if (argument == "--pretty") {
             options.pretty = true;
         } else if (argument.starts_with("--two-words=")) {
@@ -124,18 +153,15 @@ parse_options(const int argc, char *const argv[]) {
         }
     }
 
-    if (options.database.empty() || options.format.empty() ||
-        (!options.batch_json_lines && options.word.empty())) {
-        return std::unexpected("database, format, and word are required");
+    if (options.database.empty() || options.format.empty()) {
+        return std::unexpected("database and format are required");
     }
-    if (options.batch_json_lines && !options.word.empty()) {
+    if (options.stream_input && !options.word.empty()) {
         return std::unexpected(
-            "--batch-json-lines reads queries from stdin and accepts no word");
+            "positional text cannot be used with stream input");
     }
-    if (options.batch_json_lines && options.pretty) {
-        return std::unexpected(
-            "--pretty cannot be used with --batch-json-lines because JSONL "
-            "requires one JSON value per line");
+    if ((options.stream_input || options.word.empty()) && options.pretty) {
+        return std::unexpected("--pretty cannot be used with stream input");
     }
     if (options.format != "analysis" && options.format != "search" &&
         options.format != "analysis-v2" && options.format != "search-v2" &&
@@ -180,14 +206,17 @@ void usage() {
 
 Usage:
   words_cli --database FILE --format FORMAT [OPTIONS] LATIN_TEXT ...
-  words_cli --database FILE --format FORMAT --batch-json-lines [OPTIONS] < queries.txt
+  words_cli --database FILE --format FORMAT [OPTIONS] --input FILE
+  words_cli --database FILE --format FORMAT [OPTIONS] < queries.txt
 
 Options:
   --database FILE, --db FILE  WWDB database to load.
   --dataset-id ID             Expected dataset identifier, when known.
   --format FORMAT, -f FORMAT  analysis-v3 (recommended) or search-v3.
   --pretty                    Indent JSON for terminal reading; emit an array for multiple results.
-  --batch-json-lines, --batch Read one query per stdin line; emit one compact JSON value per line.
+  -i FILE, --input FILE       Read one query per line; use - for standard input.
+                              With no text and no --input, read from standard input.
+  --batch-json-lines, --batch Legacy aliases for --input -.
   --two-words=legacy          Use the legacy two-word choice.
   --orthography=MODE          disabled, classical, or medieval.
   --no-fixes, --no-prefixes, --no-suffixes, --no-tickons, --no-tackons,
@@ -299,11 +328,22 @@ int main(const int argc, char *argv[]) try {
     }
 
     const auto analysis_options = options->analysis;
-    if (options->batch_json_lines) {
+    if (options->stream_input || options->word.empty()) {
         // WHY: corpus acceptance should exercise one long-lived immutable
         // snapshot instead of measuring thousands of process startups.
+        std::ifstream input_file;
+        std::istream *input = &std::cin;
+        if (options->input && *options->input != std::filesystem::path{"-"}) {
+            input_file.open(*options->input);
+            if (!input_file) {
+                std::print(stderr, "words_cli: cannot open input: {}\n",
+                           options->input->string());
+                return 3;
+            }
+            input = &input_file;
+        }
         std::string query;
-        while (std::getline(std::cin, query)) {
+        while (std::getline(*input, query)) {
             if (!query.empty() && query.back() == '\r') {
                 query.pop_back();
             }
@@ -311,6 +351,14 @@ int main(const int argc, char *argv[]) try {
                 write_text_result(**engine, query, options->format,
                                   analysis_options, false);
             }
+        }
+        if (input->bad()) {
+            const auto source =
+                options->input && *options->input != std::filesystem::path{"-"}
+                    ? options->input->string()
+                    : std::string{"standard input"};
+            std::print(stderr, "words_cli: cannot read input: {}\n", source);
+            return 3;
         }
     } else {
         write_line_results(**engine, options->word, options->format,
