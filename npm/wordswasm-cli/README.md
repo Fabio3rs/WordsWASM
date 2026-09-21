@@ -5,13 +5,14 @@ Latin morphological analysis engine derived from William Whitaker's WORDS
 source data. The wrapper installs the matching native platform package and its
 bundled full WWDB database; it does not install the WebAssembly library.
 
-[Demo] · [Releases] · [Issues] · [Documentation] · [Licensing and notices]
+[Demo] · [Releases] · [Issues] · [Documentation] · [Versioning] · [Licensing and notices]
 
 [WordsWASM]: https://github.com/Fabio3rs/WordsWASM
 [Demo]: https://fabio3rs.github.io/WordsWASM/
 [Releases]: https://github.com/Fabio3rs/WordsWASM/releases
 [Issues]: https://github.com/Fabio3rs/WordsWASM/issues
 [Documentation]: https://github.com/Fabio3rs/WordsWASM#using-the-command-line-interface
+[Versioning]: https://github.com/Fabio3rs/WordsWASM/blob/main/docs/versioning.md
 [Licensing and notices]: https://github.com/Fabio3rs/WordsWASM/blob/main/THIRD_PARTY_NOTICES.md
 
 ## Install
@@ -51,7 +52,10 @@ printf 'amo\npuella\n' | wordswasm --batch-json-lines
 ```
 
 `analysis-v3` requires a full database. `search-v3` accepts either a full or
-search-only database. Run `wordswasm --help` for all CLI options.
+search-only database. They are the stable CLI JSON contracts from 1.0 onward.
+The binary may accept older development selectors, but those are unsupported
+migration paths; new integrations should use v3. Run `wordswasm --help` for
+all CLI options and see [Versioning] for the compatibility policy.
 
 ## Provenance and license
 

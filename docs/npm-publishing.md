@@ -99,8 +99,14 @@ their `next` tags match the build artifact, then succeeds without republishing.
 
 ## Later releases
 
-Publish a GitHub pre-release to build and publish `next`. Publish a normal
-GitHub release to build and publish `latest`. The workflow uses the release's
-**Pre-release** checkbox, rather than trying to infer a channel from the tag
-name. It receives its npm identity from GitHub OIDC; it deliberately does not
-use `NPM_TOKEN`, `NODE_AUTH_TOKEN`, or another npm publishing secret.
+Publish a GitHub prerelease whose SemVer tag has a prerelease suffix, such as
+`v1.0.0-rc2`, to build and publish `next`. Publish a stable `vX.Y.Z` GitHub
+Release to publish `latest`. The **Pre-release** checkbox and the tag must
+agree; the build rejects a mismatch so an RC cannot become `latest` by
+accident. A stable publication does not move `next`, which continues to point
+to the most recent prerelease until another prerelease is published.
+
+The release receives its npm identity from GitHub OIDC; it deliberately does
+not use `NPM_TOKEN`, `NODE_AUTH_TOKEN`, or another npm publishing secret. See
+[versioning and compatibility](versioning.md) for the stable API baseline and
+SemVer policy.

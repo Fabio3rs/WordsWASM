@@ -2,6 +2,10 @@
 
 Data da auditoria: 2026-09-10
 
+> Nota histórica: as versões de schema e WWDB abaixo descrevem o estado desta
+> auditoria. A compatibilidade pública da stable 1.0 é definida em
+> [versioning and compatibility](versioning.md).
+
 Estado: backlog prioritário implementado em TDD, incluindo IR multi-token,
 flags lossless, manifesto inicial, gate de síncope e relatório de cobertura.
 

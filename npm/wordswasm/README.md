@@ -5,13 +5,14 @@ morphological analysis engine derived from William Whitaker's WORDS source
 data. It includes the engine, TypeScript declarations, the full and
 search-only WWDB databases, and manifests. It does not install a native CLI.
 
-[Demo] · [Releases] · [Issues] · [Documentation] · [Licensing and notices]
+[Demo] · [Releases] · [Issues] · [Documentation] · [Versioning] · [Licensing and notices]
 
 [WordsWASM]: https://github.com/Fabio3rs/WordsWASM
 [Demo]: https://fabio3rs.github.io/WordsWASM/
 [Releases]: https://github.com/Fabio3rs/WordsWASM/releases
 [Issues]: https://github.com/Fabio3rs/WordsWASM/issues
 [Documentation]: https://github.com/Fabio3rs/WordsWASM#documentation
+[Versioning]: https://github.com/Fabio3rs/WordsWASM/blob/main/docs/versioning.md
 [Licensing and notices]: https://github.com/Fabio3rs/WordsWASM/blob/main/THIRD_PARTY_NOTICES.md
 
 ## Install
@@ -22,8 +23,9 @@ The current release line is a prerelease. Install its moving prerelease tag:
 npm install wordswasm@next
 ```
 
-When a stable release is available, `npm install wordswasm` selects `latest`.
+When stable 1.0 is available, `npm install wordswasm` selects `latest`.
 To make a deployment reproducible, replace `@next` with an exact version.
+`next` remains the most recent prerelease after a stable publication.
 
 ## Use in a browser, worker, or bundler
 
@@ -51,6 +53,10 @@ engine.dispose();
 Use the full database with `analyze()` and `analyzeLine()`. Use the search
 database with `search()` and `searchLine()`. Pass the `datasetId` from the
 manifest when your application stores or joins IDs across requests.
+
+The stable browser contract is schema 5. It is independent of the npm version,
+WWDB format, and `datasetId`; see [Versioning] before mixing downloaded data
+with a package from another release.
 
 ## Use in Node.js
 

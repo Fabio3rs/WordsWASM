@@ -100,6 +100,9 @@ published, omit it to install `latest`; applications that need reproducible
 builds should name an exact version. The package READMEs describe
 [the WebAssembly API](npm/wordswasm/README.md) and
 [the native CLI](npm/wordswasm-cli/README.md) in more detail.
+The [versioning and compatibility policy](docs/versioning.md) defines the
+stable 1.0 baseline and the relationship between package versions, JSON
+schemas, WWDB, and `datasetId`.
 
 ### Unicode behavior
 
@@ -151,8 +154,9 @@ recommended output formats are:
 | `analysis-v3` | `words-full` | Complete analyses and quantity-resolved forms, lexical metadata, and meanings. |
 | `search-v3` | `words-full` or `words-search` | Compact hits with quantity-resolved forms and no meanings. |
 
-The v2 formats remain available unchanged, and the unversioned `analysis` and
-`search` formats remain available for v1 compatibility. Quote a phrase or line containing spaces; compounds recognized
+The binary may still accept older format selectors from development releases,
+but they are not part of the stable 1.x API. New integrations should select
+v3 explicitly. Quote a phrase or line containing spaces; compounds recognized
 by the grammar are returned as one unit, while independent words produce
 separate JSON lines:
 
@@ -222,6 +226,8 @@ headers, and ownership rules, see the
 Browser schema v5 returns presentation-ready `form.display` and structured
 quantity evidence through typed Embind structures; it does not serialize JSON
 inside WASM. See [quantity-resolved returned forms](docs/quantity-resolved-forms.md).
+Schema v5, WWDB 1.10, and the dataset provenance rules are defined by the
+[versioning and compatibility policy](docs/versioning.md).
 
 ## Relationship to vanilla Whitaker's WORDS
 
@@ -418,7 +424,7 @@ cmake --build build/native \
   -j"$(nproc)"
 
 # 3. Generate both database profiles expected by the tests.
-# The packer emits production WWDB 1.10 by default; the runtime also reads 1.9.
+# The packer emits the stable public WWDB 1.10 format.
 mkdir -p whitakers-words/poc/compact-db/output
 build/native/wwdb_poc_pack \
   whitakers-words \
@@ -477,6 +483,10 @@ The detailed design notes are in
 [`whitakers-words/docs/`](whitakers-words/docs/). They cover the Ada oracle,
 the C++23 architecture, Unicode and vowel quantity, compact storage, browser
 integration, and lexical enrichment.
+
+The public compatibility baseline starts at stable 1.0 and is documented in
+[versioning and compatibility](docs/versioning.md). Audit reports may describe
+earlier development schemas and database images.
 
 ## Development disclosure
 

@@ -22,7 +22,7 @@ Este diretório materializa a aproximação descrita em
 
 No perfil colunar, IDs densos são posições nos vetores e cada coluna pode ser
 acessada diretamente; não é necessário reconstruir um array de structs. Ainda
-assim, este não é o formato final. A versão PoC 1.9 carrega 24 seções no
+assim, este não é o formato final. A versão PoC 1.10 carrega 24 seções no
 perfil full e 19 no search. Nove
 delas representam todos os registros de formação de `ADDONS.LAT`: 135 prefixos
 (incluindo seis tickons), 179 sufixos e 29 tackons, dos quais 11 são packons.

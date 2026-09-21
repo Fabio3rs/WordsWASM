@@ -2,6 +2,10 @@
 
 Data da sessão: 2026-09-08
 
+> Nota histórica: as versões de schema e WWDB abaixo descrevem o estado desta
+> sessão. A compatibilidade pública da stable 1.0 é definida em
+> [versioning and compatibility](versioning.md).
+
 ## Método e autoridades
 
 1. O código Ada em `whitakers-words/src` define o comportamento legado.

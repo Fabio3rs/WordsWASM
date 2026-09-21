@@ -1,6 +1,9 @@
 # Política do repositório e releases
 
-Data do corte: 2026-08-29.
+Este documento descreve a arquitetura e a composição dos releases. A política
+de compatibilidade pública começa na stable 1.0 e está em
+[`docs/versioning.md`](../../docs/versioning.md). Referências a releases e
+schemas anteriores são histórico de desenvolvimento, não promessas de suporte.
 
 O diretório `whitakers-words/` faz parte deste repositório. Ele contém a fonte
 Ada usada como oráculo, os dados canônicos legados, os testes históricos e o
@@ -42,14 +45,14 @@ Os nomes de distribuição descrevem capacidade, não layout:
 
 | Arquivo | Conteúdo | Estado |
 | --- | --- | --- |
-| `words-full.wwdb` | morfologia, metadados e significados | implementado; layout `dense` PoC 1.9 |
-| `words-search.wwdb` | morfologia e IDs, sem definições | implementado; layout `search-only` PoC 1.9 |
+| `words-full.wwdb` | morfologia, metadados e significados | implementado; layout `dense` WWDB 1.10 |
+| `words-search.wwdb` | morfologia e IDs, sem definições | implementado; layout `search-only` WWDB 1.10 |
 
-No CLI, o banco full produz os JSONs `analysis-v1` e `search-v1`; o banco
-search produz somente `search-v1`. No navegador, ambos expõem a projeção
-tipada Embind v2, mas somente o full admite `analyze()` e inclui `meaning`.
-Uma tentativa de análise completa no search falha explicitamente. Ambos usam
-o mesmo `datasetId`, calculado
+No CLI estável, o banco full produz `analysis-v3` e `search-v3`; o banco search
+produz somente `search-v3`. No navegador, ambos expõem a projeção tipada
+Embind schema 5, mas somente o full admite `analyze()` e inclui `meaning`.
+Uma tentativa de análise completa no search falha explicitamente. Ambos usam o
+mesmo `datasetId`, calculado
 sobre o manifesto canônico de fontes e atribuição de IDs. Cada projeção tem
 também seu próprio hash físico para integridade e cache.
 
@@ -94,8 +97,8 @@ Os builds Ada/GPRBuild, C++ nativo e WebAssembly usam `-j"$(nproc)"` no
 runner. O Makefile Ada permanece serial na orquestração dos geradores por
 dependência, mas cada chamada ao `gprbuild` recebe o mesmo número de CPUs.
 
-Uma tag `v*` acrescenta `words-web-VERSAO.tar.gz` e um manifesto SHA-256 a uma
-GitHub Release. O pacote contém:
+Uma GitHub Release publicada para uma tag SemVer acrescenta
+`words-web-VERSAO.tar.gz` e um manifesto SHA-256. O pacote contém:
 
 - `words-engine.mjs`, `words-engine.d.mts` e `words-engine.d.ts`, a API de
   aplicação;
@@ -116,12 +119,15 @@ completo:
 Além dos assets web e dos bancos, a release anexa os executáveis nativos:
 
 - `words-cli-VERSAO-linux-x86_64.tar.gz`;
+- `words-cli-VERSAO-linux-arm64.tar.gz`;
+- `words-cli-VERSAO-linux-armhf.tar.gz`;
 - `words-cli-VERSAO-windows-x86_64.zip`;
 - `words-cli-VERSAO-macos-x86_64.tar.gz`;
 - `words-cli-VERSAO-macos-arm64.tar.gz`;
-- `words-cli-VERSAO.sha256`, cobrindo os quatro pacotes nativos.
+- `words-cli-VERSAO.sha256`, cobrindo os seis pacotes nativos.
 
-Cada pacote nativo contém o executável, o `README.md` e a licença do projeto.
+Cada pacote nativo contém o executável, o `README.md`, a licença do projeto e
+`THIRD_PARTY_NOTICES.md`.
 Os bancos não são duplicados dentro desses pacotes: o CLI deve receber um dos
 WWDB anexados à mesma release e o `datasetId` registrado no manifesto publicado.
 

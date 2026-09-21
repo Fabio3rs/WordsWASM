@@ -4,13 +4,14 @@ The engine keeps mechanically generated candidates separate from decisions
 about whether to display or rank them. This is important for historical Latin:
 a form rejected by Whitaker's `Trim_Output` policy is not thereby impossible.
 
-Native `AnalysisIR` carries a `MorphologicalAssessmentIR`. Native JSON exposes
-it only in schema v2 (`--format analysis-v2` or `search-v2`). The WebAssembly
-API exposes the same information as typed Embind objects in browser schema v4;
-JSON parsing and serialization remain outside the WASM binary.
-The browser contracts are documented by
-`schemas/browser-search-v4.schema.json` and
-`schemas/browser-analysis-v4.schema.json`.
+Native `AnalysisIR` carries a `MorphologicalAssessmentIR`. Native JSON first
+exposed it in schema v2; the stable CLI contracts expose it through
+`analysis-v3` and `search-v3`. The WebAssembly API exposes the same
+information as typed Embind objects in browser schema v5; JSON parsing and
+serialization remain outside the WASM binary. The browser contracts are
+documented by `schemas/browser-search-v5.schema.json` and
+`schemas/browser-analysis-v5.schema.json`. Earlier schemas remain historical
+development records; see [versioning and compatibility](versioning.md).
 The Pages demo maps the typed reason/notice codes to explanatory English,
 Brazilian Portuguese, and Latin strings in `web/app.js`; those presentation
 strings are deliberately absent from WWDB and the WASM module.
@@ -31,8 +32,8 @@ strings are deliberately absent from WWDB and the WASM module.
 Annotation is the only engine policy. Every candidate remains in the native
 result and in every JSON/browser projection; consumers receive compatibility
 reasons and notices instead of a switch that reproduces Whitaker's removal.
-The schema-v2 option field remains `whitakerTrim: "annotate"` for existing
-readers, but it is descriptive rather than configurable.
+The `whitakerTrim: "annotate"` option field is descriptive rather than
+configurable.
 
 ## Reviewed semideponent exceptions
 

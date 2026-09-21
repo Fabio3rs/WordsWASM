@@ -30,6 +30,12 @@ if(NOT EMSCRIPTEN)
             COMMAND "${NODE_EXECUTABLE}" --test
                 "${CMAKE_CURRENT_SOURCE_DIR}/wasm_wrapper_test.mjs"
         )
+        add_test(
+            NAME words_npm_dist_tag
+            COMMAND "${NODE_EXECUTABLE}" --test
+                "${CMAKE_CURRENT_SOURCE_DIR}/npm_dist_tag_test.mjs"
+        )
+        set_tests_properties(words_npm_dist_tag PROPERTIES LABELS unit)
     endif()
 
     find_package(Python3 COMPONENTS Interpreter QUIET)
