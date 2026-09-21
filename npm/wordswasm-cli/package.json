@@ -1,0 +1,28 @@
+{
+  "name": "wordswasm-cli",
+  "version": "0.0.0-development",
+  "description": "Command-line interface for WordsWASM",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Fabio3rs/WordsWASM.git"
+  },
+  "bugs": "https://github.com/Fabio3rs/WordsWASM/issues",
+  "homepage": "https://github.com/Fabio3rs/WordsWASM#readme",
+  "bin": {
+    "wordswasm": "./bin/wordswasm.cjs"
+  },
+  "optionalDependencies": {
+    "@fabiors/wordswasm-cli-linux-x64": "0.0.0-development",
+    "@fabiors/wordswasm-cli-linux-arm64": "0.0.0-development",
+    "@fabiors/wordswasm-cli-linux-arm": "0.0.0-development",
+    "@fabiors/wordswasm-cli-darwin-x64": "0.0.0-development",
+    "@fabiors/wordswasm-cli-darwin-arm64": "0.0.0-development",
+    "@fabiors/wordswasm-cli-win32-x64": "0.0.0-development"
+  },
+  "files": [
+    "bin",
+    "README.md",
+    "LICENSE"
+  ]
+}

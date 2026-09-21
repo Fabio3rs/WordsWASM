@@ -55,6 +55,42 @@ sha256sum --check words-assets-v1.0.0-rc1.sha256 --ignore-missing
 Replace `v1.0.0-rc1` in these and the following examples with the tag you
 downloaded.
 
+## npm packages
+
+The WebAssembly library is published as `wordswasm` and includes the engine,
+both database projections, manifests, and TypeScript declarations:
+
+```sh
+npm install wordswasm
+```
+
+```js
+import {assets, createWordsAnalysisEngine} from "wordswasm";
+
+const engine = await createWordsAnalysisEngine({
+  databaseUrl: assets.fullDatabase,
+});
+console.log(engine.analyze("mālum"));
+engine.dispose();
+```
+
+For Node.js, read `assets.fullDatabase` with `node:fs/promises` and pass it as
+`databaseBytes`; browser applications can use the URL directly.
+
+The optional native CLI installs independently and selects one matching
+platform package automatically:
+
+```sh
+npm install --global wordswasm-cli
+wordswasm mālum
+```
+
+It uses its bundled full database and `analysis-v3` by default. Pass
+`--database FILE` or `--format FORMAT` to override either choice.
+
+Maintainers can follow the [npm publishing guide](docs/npm-publishing.md) for
+the local bootstrap and GitHub OIDC release process.
+
 ## Using the command-line interface
 
 ### Linux and macOS

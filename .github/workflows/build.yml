@@ -3,8 +3,9 @@ name: Native and WebAssembly build
 "on":
   push:
     branches: [main, master]
-    tags: ["v*"]
   pull_request:
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -670,9 +671,76 @@ jobs:
           path: release-native/packages/*
           if-no-files-found: error
 
+  package-npm:
+    name: Package npm distributions
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [wasm, native-binaries]
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout package metadata
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Download WebAssembly distribution
+        uses: actions/download-artifact@v4
+        with:
+          name: words-web
+          path: release-npm/web
+
+      - name: Download native CLI binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: words-cli-*
+          path: release-npm/native
+
+      - name: Select npm dist-tag
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [ "${{ github.event_name }}" = release ]; then
+            if [ "${{ github.event.release.prerelease }}" = true ]; then
+              npm_tag=next
+            else
+              npm_tag=latest
+            fi
+          elif [[ "${version}" == *-* ]]; then
+            npm_tag=next
+          else
+            npm_tag=latest
+          fi
+          echo "PACKAGE_VERSION=${version}" >> "${GITHUB_ENV}"
+          echo "NPM_TAG=${npm_tag}" >> "${GITHUB_ENV}"
+
+      - name: Assemble npm packages
+        run: |
+          node scripts/package-npm.mjs \
+            --version "${PACKAGE_VERSION}" \
+            --tag "${NPM_TAG}" \
+            --web-dir release-npm/web/words-web \
+            --native-dir release-npm/native \
+            --out-dir release/npm
+          node scripts/pack-npm-packages.mjs release/npm
+
+      - name: Smoke-test staged packages
+        run: node tests/npm_package_test.mjs release/npm/publish-plan.json
+
+      - name: Upload npm packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-packages
+          path: release/npm/**
+          if-no-files-found: error
+
   publish-release:
     name: Publish tagged GitHub release
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'release'
     needs: [wasm, package-native, sanitizer-tests]
     runs-on: ubuntu-latest
     permissions:
@@ -696,12 +764,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
-          if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release create "${GITHUB_REF_NAME}" \
-              --title "${GITHUB_REF_NAME}" \
-              --generate-notes
-          fi
-
           mapfile -d '' web_files < <(
             find release-downloads/web -path '*/packages/*' -type f -print0
           )

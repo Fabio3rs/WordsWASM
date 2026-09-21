@@ -1,0 +1,25 @@
+{
+  "name": "wordswasm",
+  "version": "0.0.0-development",
+  "description": "Latin morphological analysis engine for WebAssembly",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Fabio3rs/WordsWASM.git"
+  },
+  "bugs": "https://github.com/Fabio3rs/WordsWASM/issues",
+  "homepage": "https://github.com/Fabio3rs/WordsWASM#readme",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./assets/*": "./dist/*"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ]
+}
