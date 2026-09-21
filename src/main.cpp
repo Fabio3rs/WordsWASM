@@ -186,7 +186,7 @@ Options:
   --database FILE, --db FILE  WWDB database to load.
   --dataset-id ID             Expected dataset identifier, when known.
   --format FORMAT, -f FORMAT  analysis-v3 (recommended) or search-v3.
-  --pretty                    Indent a single JSON result for terminal reading.
+  --pretty                    Indent JSON for terminal reading; emit an array for multiple results.
   --batch-json-lines, --batch Read one query per stdin line; emit one compact JSON value per line.
   --two-words=legacy          Use the legacy two-word choice.
   --orthography=MODE          disabled, classical, or medieval.
@@ -194,6 +194,7 @@ Options:
   --no-packons, --no-syncope, --no-verbal-compounds
                               Disable individual analysis mechanisms.
   --help, -h                  Show this help.
+  --version                   Show the CLI version.
 
 Formats:
   analysis-v3  Full morphological analysis; requires a full WWDB.
@@ -204,8 +205,9 @@ Exit status: 0 success; 2 invalid command; 3 database or engine failure;
 )");
 }
 
-void write_result(const words::Engine &engine, const words::QueryResult &result,
-                  const std::string_view format, const bool pretty) {
+[[nodiscard]] words::JsonDocument
+result_document(const words::Engine &engine, const words::QueryResult &result,
+                const std::string_view format) {
     words::JsonDocument document;
     if (format == "analysis") {
         document = words::analysis_json_document(engine, result);
@@ -220,6 +222,12 @@ void write_result(const words::Engine &engine, const words::QueryResult &result,
     } else {
         document = words::search_json_document(engine, result);
     }
+    return document;
+}
+
+void write_result(const words::Engine &engine, const words::QueryResult &result,
+                  const std::string_view format, const bool pretty) {
+    const auto document = result_document(engine, result, format);
     std::print(stdout, "{}\n", document.dump(pretty ? 2 : -1));
 }
 
@@ -236,7 +244,16 @@ void write_line_results(const words::Engine &engine,
                         const std::string_view format,
                         const words::AnalysisOptions options,
                         const bool pretty) {
-    for (const auto &result : engine.analyze_line(query, options)) {
+    const auto results = engine.analyze_line(query, options);
+    if (pretty && results.size() > 1U) {
+        auto document = words::JsonDocument::array();
+        for (const auto &result : results) {
+            document.push_back(result_document(engine, result, format));
+        }
+        std::print(stdout, "{}\n", document.dump(2));
+        return;
+    }
+    for (const auto &result : results) {
         write_result(engine, result, format, pretty);
     }
 }
@@ -257,7 +274,8 @@ int main(const int argc, char *argv[]) try {
     }
     auto options = parse_options(argc, argv);
     if (!options) {
-        std::print(stderr, "words_cli: {}\n", options.error());
+        std::print(stderr, "words_cli: {}. Run with --help for usage.\n",
+                   options.error());
         return 2;
     }
     auto bytes = read_file(options->database);

@@ -26,7 +26,7 @@ Defaults:
 Options:
   --database FILE, --db FILE  Use another WWDB database.
   --format FORMAT, -f FORMAT  analysis-v3 (default) or search-v3.
-  --pretty                    Indent one JSON result for terminal reading.
+  --pretty                    Indent JSON for terminal reading; emit an array for multiple results.
   --batch-json-lines, --batch Read stdin as JSON Lines input: one query per line,
                               one compact JSON value per output line.
   --dataset-id ID             Verify the database dataset identifier.

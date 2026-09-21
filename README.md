@@ -177,7 +177,8 @@ printf 'amo\npuella\nmālum\n' | ./words_cli \
   --batch-json-lines
 ```
 
-`--pretty` indents one result for terminal reading while keeping it valid JSON.
+`--pretty` indents JSON for terminal reading while keeping it valid JSON. If a
+query produces multiple independent results, it emits one JSON array.
 It cannot be combined with `--batch-json-lines`, because JSONL requires one
 compact JSON value per line. `--db`, `-f`, and `--batch` are aliases for
 `--database`, `--format`, and `--batch-json-lines`. Run `words_cli --help` (or

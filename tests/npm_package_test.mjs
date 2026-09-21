@@ -169,6 +169,15 @@ if (process.platform === "linux" && process.arch === "x64") {
   assert.ok(pretty.stdout.split("\n").length > 3);
   assert.equal(JSON.parse(pretty.stdout).schemaVersion, 3);
 
+  const prettyLine = spawnSync(process.execPath, [
+    wrapperScript, "--pretty", "amo puellam",
+  ], {encoding: "utf8"});
+  assert.equal(prettyLine.status, 0, prettyLine.stderr);
+  const prettyLineDocument = JSON.parse(prettyLine.stdout);
+  assert.ok(Array.isArray(prettyLineDocument));
+  assert.equal(prettyLineDocument.length, 2);
+  assert.ok(prettyLineDocument.every((item) => item.schemaVersion === 3));
+
   const invalidBatch = spawnSync(process.execPath, [
     wrapperScript, "--pretty", "--batch-json-lines",
   ], {encoding: "utf8"});

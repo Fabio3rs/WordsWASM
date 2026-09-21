@@ -47,8 +47,9 @@ wordswasm --version
 wordswasm --help
 ```
 
-`--pretty` is still valid JSON, only indented for terminal reading. It must not
-be combined with batch mode: JSON Lines requires exactly one complete, compact
+`--pretty` is still valid JSON, only indented for terminal reading. A query
+with multiple independent results is emitted as one JSON array. It must not be
+combined with batch mode: JSON Lines requires exactly one complete, compact
 JSON value per output line.
 
 ### Batch / JSON Lines
