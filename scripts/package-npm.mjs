@@ -1,4 +1,4 @@
-import {cp, mkdir, readFile, rm, writeFile} from "node:fs/promises";
+import {chmod, cp, mkdir, readFile, rm, writeFile} from "node:fs/promises";
 import path from "node:path";
 
 const platformPackages = [
@@ -93,10 +93,14 @@ async function main() {
     await writeJson(path.join(directory, "package.json"), metadata);
     await copy(path.join(source, "platform", "README.md"), path.join(directory, "README.md"));
     await copy(path.join(root, "LICENSE"), path.join(directory, "LICENSE"));
+    const executableDestination = path.join(directory, "bin", platform.executable);
     await copy(
       path.join(nativeDir, platform.artifact, platform.executable),
-      path.join(directory, "bin", platform.executable),
+      executableDestination,
     );
+    if (platform.os !== "win32") {
+      await chmod(executableDestination, 0o755);
+    }
     await copy(path.join(webDir, "words-full.wwdb"), path.join(directory, "data", "words-full.wwdb"));
     packages.push({name, directory: path.relative(outDir, directory), kind: "platform"});
   }
