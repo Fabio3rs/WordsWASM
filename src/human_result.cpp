@@ -391,7 +391,9 @@ assessment_note(const MorphologicalAssessmentIR &assessment,
                               : (options.compact ? "semidep" : "semideponent"));
     }
     reading.features = features(analysis.morphology, lexeme.verb_kind);
-    reading.meaning = short_meaning(database.meaning(lexeme.meaning));
+    const auto meaning = database.meaning(lexeme.meaning);
+    reading.meaning =
+        options.detailed ? normalized_meaning(meaning) : short_meaning(meaning);
     reading.note = assessment_note(analysis.assessment, options.detailed);
     if (options.detailed) {
         reading.metadata = lexical_metadata(
@@ -454,7 +456,9 @@ assessment_note(const MorphologicalAssessmentIR &assessment,
             "passive periphrastic with " + analysis.auxiliary);
     else
         add(reading.features, "compound with " + analysis.auxiliary);
-    reading.meaning = short_meaning(database.meaning(lexeme.meaning));
+    const auto meaning = database.meaning(lexeme.meaning);
+    reading.meaning =
+        options.detailed ? normalized_meaning(meaning) : short_meaning(meaning);
     reading.note = assessment_note(analysis.assessment, options.detailed);
     if (options.detailed)
         reading.metadata = lexical_metadata(

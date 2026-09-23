@@ -30,7 +30,7 @@ Options:
   --format FORMAT, -f FORMAT  human (default), analysis-v3, or search-v3.
   --pretty                    Indent JSON for terminal reading; emit an array for multiple results.
   --human-style STYLE         normal (default) or compact (tab-separated rows).
-  --detailed                  Explain editorial notes and quantity evidence.
+  --detailed                  Show full meanings, editorial notes, and quantity evidence.
   --color MODE                auto (TTY), always, or never; human display only.
   -i FILE, --input FILE       Read one query per line; use - for standard input.
                               With no text and no --input, read from standard input.
@@ -53,6 +53,8 @@ Results are written to stdout; CLI errors to stderr. --pretty selects JSON
 when --format is omitted, but cannot be used with stream input because JSONL
 needs one compact JSON value per line. The native command exits 2 for invalid input, 3 for
 database/engine/input errors, and 4 for unexpected failures.
+Human output, including compact TSV, may change in minor releases.
+Select analysis-v3 or search-v3 for a stable machine contract.
 `);
 }
 

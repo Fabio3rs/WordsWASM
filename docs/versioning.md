@@ -80,6 +80,11 @@ prerelease interfaces.
 A future CLI JSON schema is additive only when it receives a new selector,
 such as `analysis-v4`; the v3 selectors remain intact throughout 1.x.
 
+`human` and `human --human-style compact` are presentation formats, not stable
+API or TSV schemas. Their wording, ordering, and compact column layout may
+change in minor releases. Scripts that need a stable contract should select
+`analysis-v3` or `search-v3` explicitly.
+
 ### Browser and WebAssembly
 
 `createWordsAnalysisEngine()` and its TypeScript declarations return browser

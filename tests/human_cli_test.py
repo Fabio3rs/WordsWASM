@@ -84,11 +84,17 @@ assert all("passive" not in row["features"] for row in semideponent_present
 assert "Deponent verb:" in run("--format", "human", "--detailed", "hortor")
 assert "Semideponent verb:" in run("--format", "human", "--detailed", "ausi")
 assert "Lexical details:" in run("--format", "human", "--detailed", "audio")
+assert "[res publica => the state]" not in run("--format", "human", "publica")
+assert "[res publica => the state]" in run(
+    "--format", "human", "--detailed", "publica")
+assert any("[res publica => the state]" in row["meaning"] for row in
+           rows("--detailed", "publica"))
 
 compound = run("--format", "human", "--detailed", "amaturus est")
 assert compound.startswith("Construction: amaturus est\n")
 assert "active periphrastic with est" in compound
 assert "future active participle" in compound.lower()
+assert "be fond of" in compound
 assert "PPL+" not in compound
 assert "present indicative passive" not in compound
 active_rows = rows("amaturus est")

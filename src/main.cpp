@@ -261,7 +261,7 @@ read_file(const std::filesystem::path &path) {
     input.seekg(0);
     if (!bytes.empty()) {
         if (bytes.size() > static_cast<std::size_t>(
-                               std::numeric_limits<std::streamsize>::max())) {
+                               (std::numeric_limits<std::streamsize>::max)())) {
             return std::unexpected("database exceeds stream limits");
         }
         input.read(reinterpret_cast<char *>(bytes.data()),
@@ -288,7 +288,7 @@ Options:
   --format FORMAT, -f FORMAT  human, analysis-v3, or search-v3.
   --pretty                    Indent JSON for terminal reading; emit an array for multiple results.
   --human-style STYLE         normal (default) or compact (tab-separated rows).
-  --detailed                  Explain editorial notes and quantity evidence.
+  --detailed                  Show full meanings, editorial notes, and quantity evidence.
   --color MODE                auto (TTY), always, or never; human display only.
   -i FILE, --input FILE       Read one query per line; use - for standard input.
                               With no text and no --input, read from standard input.
@@ -311,6 +311,9 @@ Formats:
   analysis-v3  Full morphological analysis; requires a full WWDB.
   search-v3    Search-oriented result; works with full and search WWDBs.
   human        Readable analyses; requires a full WWDB.
+
+Human output, including compact TSV, is presentation and may change in minor releases.
+Select analysis-v3 or search-v3 for a stable machine contract.
 
 Exit status: 0 success; 2 invalid command; 3 database or engine failure;
 4 unexpected failure. Results are written to stdout; CLI errors to stderr.

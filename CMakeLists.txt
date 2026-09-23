@@ -395,6 +395,9 @@ else()
     target_compile_definitions(words_cli PRIVATE
         WORDS_CLI_VERSION="${WORDS_CLI_VERSION}"
     )
+    if(WIN32)
+        target_compile_definitions(words_cli PRIVATE NOMINMAX)
+    endif()
     words_apply_project_options(words_cli)
 
     # A presentation-free profiling target.  Keep it out of the default build:

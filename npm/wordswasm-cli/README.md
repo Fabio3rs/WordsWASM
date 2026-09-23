@@ -65,9 +65,10 @@ database has no evidence; `partial` does not mean that every vowel is marked.
 For example, the current bundled data displays `res` as `rēs` with complete
 coverage, while different readings of `malum` show `mālum` (partial) and
 `mālŭm` (complete). `puella` can display `pŭellă` or `pŭellā`, both partial.
-`--detailed` expands editorial notes and shows the database-marked form when
-available. Deponent and semideponent readings are labeled by verb class, not
-by the underlying passive-form flag. A short warning marks readings Whitaker
+`--detailed` shows the full dictionary meaning, expands editorial notes, and
+shows the database-marked form when available. Deponent and semideponent
+readings are labeled by verb class rather than the underlying passive-form
+flag. A short warning marks readings Whitaker
 would omit or that have an editorial note.
 For a recognized verbal construction such as `amandus est`, the human view
 shows the construction separately from each token's independent readings.
@@ -90,6 +91,9 @@ The actual separators are tabs. There is one row per reading, and one row with
 `main`, `construction`, independent `token:N` readings, and unconfirmed
 `suggestion:N` parts. Embedded
 tabs, newlines, backslashes, and control characters are escaped within fields.
+Both human styles are presentation formats; the TSV columns and their order may
+change in minor releases. Use `analysis-v3` or `search-v3` for a stable machine
+contract.
 Compact output never contains color codes. In normal human output,
 `--color=auto` uses color only when stdout is a terminal; `always` and `never`
 override that choice. Redirected human output is plain text by default.
