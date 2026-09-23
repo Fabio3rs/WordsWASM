@@ -1,4 +1,5 @@
 #include "json_document.hpp"
+#include "human_result.hpp"
 #include "result_filters.hpp"
 #include "words/engine.hpp"
 
@@ -17,6 +18,13 @@
 #include <utility>
 #include <vector>
 
+#ifdef _WIN32
+#include <io.h>
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
 #ifndef WORDS_CLI_VERSION
 #define WORDS_CLI_VERSION "development"
 #endif
@@ -34,6 +42,11 @@ struct Options final {
     bool stream_input{false};
     std::optional<std::filesystem::path> input;
     bool pretty{false};
+    bool detailed{false};
+    std::string human_style{"normal"};
+    bool human_style_specified{false};
+    std::string color{"auto"};
+    bool color_specified{false};
 };
 
 [[nodiscard]] std::expected<Options, std::string>
@@ -159,6 +172,25 @@ parse_options(const int argc, char *const argv[]) {
             options.input = std::filesystem::path{"-"};
         } else if (argument == "--pretty") {
             options.pretty = true;
+        } else if (argument == "--detailed") {
+            options.detailed = true;
+        } else if (argument.starts_with("--human-style=")) {
+            options.human_style_specified = true;
+            options.human_style = argument.substr(
+                std::string_view{"--human-style="}.size());
+        } else if (argument == "--human-style") {
+            options.human_style_specified = true;
+            auto value = require_value(argument);
+            if (!value) return std::unexpected(std::move(value.error()));
+            options.human_style = *value;
+        } else if (argument.starts_with("--color=")) {
+            options.color_specified = true;
+            options.color = argument.substr(std::string_view{"--color="}.size());
+        } else if (argument == "--color") {
+            options.color_specified = true;
+            auto value = require_value(argument);
+            if (!value) return std::unexpected(std::move(value.error()));
+            options.color = *value;
         } else if (argument.starts_with("--two-words=")) {
             return std::unexpected("two-words mode must be legacy");
         } else if (argument.starts_with("--orthography=")) {
@@ -186,14 +218,30 @@ parse_options(const int argc, char *const argv[]) {
     }
     if (options.format != "analysis" && options.format != "search" &&
         options.format != "analysis-v2" && options.format != "search-v2" &&
-        options.format != "analysis-v3" && options.format != "search-v3") {
+        options.format != "analysis-v3" && options.format != "search-v3" &&
+        options.format != "human") {
         return std::unexpected(
             "format must be analysis, search, analysis-v2, search-v2, "
-            "analysis-v3, or search-v3");
+            "analysis-v3, search-v3, or human");
     }
     if (!options.filters.exclude_whitaker_trim_reasons.empty() &&
-        options.format != "analysis-v3" && options.format != "search-v3") {
-        return std::unexpected("trim filters require analysis-v3 or search-v3");
+        options.format != "analysis-v3" && options.format != "search-v3" &&
+        options.format != "human") {
+        return std::unexpected("trim filters require a v3 or human format");
+    }
+    if (options.human_style != "normal" && options.human_style != "compact")
+        return std::unexpected("human style must be normal or compact");
+    if (options.color != "auto" && options.color != "always" &&
+        options.color != "never")
+        return std::unexpected("color must be auto, always, or never");
+    if (options.format == "human") {
+        if (options.pretty)
+            return std::unexpected("--pretty requires a JSON format");
+        if (options.human_style == "compact" && options.color == "always")
+            return std::unexpected("compact human output cannot be colored");
+    } else if (options.detailed || options.human_style_specified ||
+               options.color_specified) {
+        return std::unexpected("--detailed, --human-style, and --color require human format");
     }
     return options;
 }
@@ -237,12 +285,15 @@ Usage:
 Options:
   --database FILE, --db FILE  WWDB database to load.
   --dataset-id ID             Expected dataset identifier, when known.
-  --format FORMAT, -f FORMAT  analysis-v3 (recommended) or search-v3.
+  --format FORMAT, -f FORMAT  human, analysis-v3, or search-v3.
   --pretty                    Indent JSON for terminal reading; emit an array for multiple results.
+  --human-style STYLE         normal (default) or compact (tab-separated rows).
+  --detailed                  Explain editorial notes and quantity evidence.
+  --color MODE                auto (TTY), always, or never; human display only.
   -i FILE, --input FILE       Read one query per line; use - for standard input.
                               With no text and no --input, read from standard input.
   --batch-json-lines, --batch Legacy aliases for --input -.
-  --filter-trim MOTIVES       Comma-separated Whitaker trim reasons to hide (v3 only).
+  --filter-trim MOTIVES       Comma-separated Whitaker trim reasons to hide (v3/human).
                               Use none to explicitly disable filtering (default).
                               unsupported-short-imperative, invalid-imperative-person,
                               impersonal-non-third-person, deponent-active-form,
@@ -259,10 +310,31 @@ Options:
 Formats:
   analysis-v3  Full morphological analysis; requires a full WWDB.
   search-v3    Search-oriented result; works with full and search WWDBs.
+  human        Readable analyses; requires a full WWDB.
 
 Exit status: 0 success; 2 invalid command; 3 database or engine failure;
-4 unexpected failure. JSON is written to stdout and diagnostics to stderr.
+4 unexpected failure. Results are written to stdout; CLI errors to stderr.
 )");
+}
+
+[[nodiscard]] bool stdout_is_tty() noexcept {
+#ifdef _WIN32
+    return _isatty(_fileno(stdout)) != 0;
+#else
+    return isatty(fileno(stdout)) != 0;
+#endif
+}
+
+[[nodiscard]] bool terminal_color_ready() noexcept {
+#ifdef _WIN32
+    const auto handle = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD mode{};
+    if (handle == INVALID_HANDLE_VALUE || !GetConsoleMode(handle, &mode))
+        return false;
+    return SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0;
+#else
+    return true;
+#endif
 }
 
 [[nodiscard]] words::JsonDocument
@@ -289,7 +361,15 @@ result_document(const words::Engine &engine, const words::QueryResult &result,
 
 void write_result(const words::Engine &engine, const words::QueryResult &result,
                   const std::string_view format, const bool pretty,
-                  const words::client::ResultFilters &filters) {
+                  const words::client::ResultFilters &filters,
+                  const words::client::HumanOptions human,
+                  std::size_t &result_number) {
+    if (format == "human") {
+        if (result_number > 0U && !human.compact) std::print(stdout, "\n");
+        std::print(stdout, "{}", words::client::render_human(
+            engine, result, filters, human, ++result_number));
+        return;
+    }
     const auto document = result_document(engine, result, format, filters);
     std::print(stdout, "{}\n", document.dump(pretty ? 2 : -1));
 }
@@ -299,9 +379,11 @@ void write_text_result(const words::Engine &engine,
                        const std::string_view format,
                        const words::AnalysisOptions options,
                        const bool pretty,
-                       const words::client::ResultFilters &filters) {
+                       const words::client::ResultFilters &filters,
+                       const words::client::HumanOptions human,
+                       std::size_t &result_number) {
     write_result(engine, engine.analyze_text(query, options), format, pretty,
-                 filters);
+                 filters, human, result_number);
 }
 
 void write_line_results(const words::Engine &engine,
@@ -309,7 +391,9 @@ void write_line_results(const words::Engine &engine,
                         const std::string_view format,
                         const words::AnalysisOptions options,
                         const bool pretty,
-                        const words::client::ResultFilters &filters) {
+                        const words::client::ResultFilters &filters,
+                        const words::client::HumanOptions human,
+                        std::size_t &result_number) {
     const auto results = engine.analyze_line(query, options);
     if (pretty && results.size() > 1U) {
         auto document = words::JsonDocument::array();
@@ -320,7 +404,8 @@ void write_line_results(const words::Engine &engine,
         return;
     }
     for (const auto &result : results) {
-        write_result(engine, result, format, pretty, filters);
+        write_result(engine, result, format, pretty, filters, human,
+                     result_number);
     }
 }
 
@@ -357,14 +442,25 @@ int main(const int argc, char *argv[]) try {
         return 3;
     }
     if ((options->format == "analysis" || options->format == "analysis-v2" ||
-         options->format == "analysis-v3") &&
+         options->format == "analysis-v3" || options->format == "human") &&
         !(*engine)->supports_full_analysis()) {
-        std::print(stderr, "words_cli: unsupported-output: analysis format "
+        std::print(stderr, "words_cli: unsupported-output: selected format "
                            "requires a full WWDB with meanings\n");
         return 3;
     }
 
     const auto analysis_options = options->analysis;
+    const auto compact = options->human_style == "compact";
+    const auto color = options->format == "human" && !compact &&
+        options->color != "never" &&
+        (options->color == "always"
+             ? (!stdout_is_tty() || terminal_color_ready())
+             : (stdout_is_tty() && terminal_color_ready()));
+    const words::client::HumanOptions human{
+        .compact = compact, .detailed = options->detailed, .color = color};
+    if (options->format == "human" && compact)
+        std::print(stdout, "{}", words::client::human_header());
+    std::size_t result_number{};
     if (options->stream_input || options->word.empty()) {
         // WHY: corpus acceptance should exercise one long-lived immutable
         // snapshot instead of measuring thousands of process startups.
@@ -386,7 +482,8 @@ int main(const int argc, char *argv[]) try {
             }
             if (!query.empty()) {
                 write_text_result(**engine, query, options->format,
-                                  analysis_options, false, options->filters);
+                                  analysis_options, false, options->filters,
+                                  human, result_number);
             }
         }
         if (input->bad()) {
@@ -399,7 +496,8 @@ int main(const int argc, char *argv[]) try {
         }
     } else {
         write_line_results(**engine, options->word, options->format,
-                           analysis_options, options->pretty, options->filters);
+                           analysis_options, options->pretty, options->filters,
+                           human, result_number);
     }
     return 0;
 } catch (const std::bad_alloc &) {

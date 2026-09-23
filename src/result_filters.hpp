@@ -1,6 +1,7 @@
 #pragma once
 
 #include "json_document.hpp"
+#include "words/model.hpp"
 
 #include <expected>
 #include <string>
@@ -15,6 +16,9 @@ struct ResultFilters final {
 
 [[nodiscard]] std::expected<ResultFilters, std::string>
 parse_trim_filters(std::string_view value);
+
+[[nodiscard]] bool excludes(const MorphologicalAssessmentIR &assessment,
+                            const ResultFilters &filters) noexcept;
 
 // Presentation only: call after projection, before JSON or human rendering.
 void filter_result(JsonDocument &document, const ResultFilters &filters);

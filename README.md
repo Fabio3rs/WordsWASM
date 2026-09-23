@@ -89,8 +89,8 @@ npm install --global wordswasm-cli@next
 wordswasm mālum
 ```
 
-It uses its bundled full database and `analysis-v3` by default. Pass
-`--database FILE` or `--format FORMAT` to override either choice.
+It uses its bundled full database and human-readable output by default. Pass
+`--format analysis-v3` or `--format search-v3` for JSON automation.
 
 Maintainers can follow the [npm publishing guide](docs/npm-publishing.md) for
 the local bootstrap and GitHub OIDC release process.
@@ -146,13 +146,13 @@ Set-Location words-cli-v1.0.0-rc1-windows-x86_64\words-cli-v1.0.0-rc1-windows-x8
   amamus
 ```
 
-The CLI writes one JSON document per analyzed unit to standard output. Its
-recommended output formats are:
+The native CLI requires an explicit database and format. Its output formats are:
 
 | Format | Compatible database | Output |
 | --- | --- | --- |
 | `analysis-v3` | `words-full` | Complete analyses and quantity-resolved forms, lexical metadata, and meanings. |
 | `search-v3` | `words-full` or `words-search` | Compact hits with quantity-resolved forms and no meanings. |
+| `human` | `words-full` | Readable analyses or tab-separated rows (`--human-style compact`). |
 
 The binary may still accept older format selectors from development releases,
 but they are not part of the stable 1.x API. New integrations should select
@@ -188,7 +188,14 @@ one compact JSON value per non-empty input line. `-i` is an alias for
 `words_cli --help` (or `-h`) for the full reference, and `words_cli --version`
 for the build version.
 The npm wrapper provides the same `wordswasm --help` and `wordswasm --version`
-commands before resolving its optional platform package.
+commands before resolving its optional platform package. Its default output is
+`human`; `--pretty` without an explicit format selects `analysis-v3`.
+Human output displays quantity coverage (`none`, `partial`, or `complete`) per
+reading. A displayed macron may come from the input where database evidence is
+absent, so coverage does not claim a fully marked word.
+For recognized two-token verb constructions, human output groups the construction
+separately from independent token readings; compact rows identify them with
+`unit=construction` and `unit=token:N`.
 
 `--dataset-id` is optional for local use. Applications that persist or combine
 IDs should pass the `datasetId` recorded in
@@ -492,7 +499,7 @@ The format and data pipeline are described in
 
 ### Optional presentation filters
 
-The CLI accepts `--filter-trim=deponent-active-form` with v3 formats; use
+The CLI accepts `--filter-trim=deponent-active-form` with v3 and human formats; use
 `--filter-trim=none` to explicitly keep all analyses. The JS/WASM query methods
 accept `{filters: {excludeWhitakerTrimReasons: ["deponent-active-form"]}}`.
 Both default to no filtering and reuse the six existing trim reasons.

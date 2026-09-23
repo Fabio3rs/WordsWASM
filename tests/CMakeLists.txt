@@ -51,6 +51,15 @@ if(NOT EMSCRIPTEN)
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
         add_test(
+            NAME words_human_cli
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/human_cli_test.py"
+                "$<TARGET_FILE:words_cli>"
+                "${CMAKE_SOURCE_DIR}/whitakers-words/poc/compact-db/output/words-poc-dense.wwdb"
+                "${CMAKE_SOURCE_DIR}/whitakers-words/poc/compact-db/output/words-poc-search-only.wwdb"
+        )
+        set_tests_properties(words_human_cli PROPERTIES LABELS unit)
+        add_test(
             NAME words_differential
             COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/differential_test.py"

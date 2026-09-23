@@ -17,22 +17,26 @@ Usage:
 
 Examples:
   wordswasm mālum
-  wordswasm --pretty "amo puellam"
+  wordswasm --format analysis-v3 --pretty "amo puellam"
+  wordswasm --human-style compact amo | rg 'verb'
   printf 'amo\\npuella\\n' | wordswasm
   wordswasm --db /path/to/words-search.wwdb --format search-v3 mālum
 
 Defaults:
-  Uses the bundled full database and compact analysis-v3 JSON output.
+  Uses the bundled full database and human-readable output.
 
 Options:
   --database FILE, --db FILE  Use another WWDB database.
-  --format FORMAT, -f FORMAT  analysis-v3 (default) or search-v3.
+  --format FORMAT, -f FORMAT  human (default), analysis-v3, or search-v3.
   --pretty                    Indent JSON for terminal reading; emit an array for multiple results.
+  --human-style STYLE         normal (default) or compact (tab-separated rows).
+  --detailed                  Explain editorial notes and quantity evidence.
+  --color MODE                auto (TTY), always, or never; human display only.
   -i FILE, --input FILE       Read one query per line; use - for standard input.
                               With no text and no --input, read from standard input.
   --batch-json-lines, --batch Legacy aliases for --input -.
   --dataset-id ID             Verify the database dataset identifier.
-  --filter-trim MOTIVES       Hide comma-separated trim reasons (v3 only); none disables.
+  --filter-trim MOTIVES       Hide comma-separated trim reasons (v3/human); none disables.
                               unsupported-short-imperative, invalid-imperative-person,
                               impersonal-non-third-person, deponent-active-form,
                               semideponent-passive-present-system,
@@ -45,9 +49,9 @@ Options:
   --help, -h                  Show this help.
   --version                   Show the wrapper package version.
 
-JSON is written to stdout; diagnostics are written to stderr. --pretty remains
-valid JSON, but cannot be used with stream input because JSONL needs one compact
-JSON value per line. The native command exits 2 for invalid input, 3 for
+Results are written to stdout; CLI errors to stderr. --pretty selects JSON
+when --format is omitted, but cannot be used with stream input because JSONL
+needs one compact JSON value per line. The native command exits 2 for invalid input, 3 for
 database/engine/input errors, and 4 for unexpected failures.
 `);
 }
@@ -108,7 +112,9 @@ if (!hasOption("--database", "--db")) {
   args.unshift("--database", join(packageRoot, "data", "words-full.wwdb"));
 }
 if (!hasOption("--format", "-f")) {
-  args.unshift("--format", "analysis-v3");
+  const jsonRequested = ["--pretty", "--batch-json-lines", "--batch"]
+    .some((option) => args.includes(option));
+  args.unshift("--format", jsonRequested ? "analysis-v3" : "human");
 }
 
 const result = spawnSync(binary, args, {stdio: "inherit"});

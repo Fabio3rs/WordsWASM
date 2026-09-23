@@ -13,13 +13,19 @@ bool filter_list(JsonDocument &values, const ResultFilters &filters) {
     std::erase_if(array, [&](const JsonDocument &analysis) {
         const auto &reasons = analysis.at("assessment")
                                  .at("whitakerTrim").at("reasons");
-        return std::ranges::any_of(
-            filters.exclude_whitaker_trim_reasons, [&](const auto reason) {
-                return std::ranges::any_of(reasons, [&](const auto &value) {
-                    return value.template get<std::string_view>() ==
-                           whitaker_trim_reason_name(reason);
-                });
-            });
+        MorphologicalAssessmentIR assessment;
+        for (const auto &value : reasons) {
+            const auto name = value.template get<std::string_view>();
+            for (std::size_t index{}; index < whitaker_trim_reason_count;
+                 ++index) {
+                const auto reason = static_cast<WhitakerTrimReason>(index);
+                if (whitaker_trim_reason_name(reason) == name) {
+                    assessment.whitaker_trim.add(reason);
+                    break;
+                }
+            }
+        }
+        return excludes(assessment, filters);
     });
     return had_values && values.empty();
 }
@@ -55,6 +61,15 @@ parse_trim_filters(std::string_view value) {
         }
         value.remove_prefix(separator + 1U);
     }
+}
+
+bool excludes(const MorphologicalAssessmentIR &assessment,
+              const ResultFilters &filters) noexcept {
+    return std::ranges::any_of(filters.exclude_whitaker_trim_reasons,
+                               [&](const WhitakerTrimReason reason) {
+                                   return std::ranges::contains(
+                                       assessment.whitaker_trim.values(), reason);
+                               });
 }
 
 void filter_result(JsonDocument &document, const ResultFilters &filters) {

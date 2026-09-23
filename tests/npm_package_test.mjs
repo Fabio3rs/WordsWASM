@@ -161,16 +161,24 @@ if (process.platform === "linux" && process.arch === "x64") {
   );
   const result = spawnSync(process.execPath, [wrapperScript, "amo"], {encoding: "utf8"});
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(JSON.parse(result.stdout).schemaVersion, 3);
+  assert.match(result.stdout, /verb/);
+  assert.match(result.stdout, /quantity evidence/);
 
-  const stream = spawnSync(process.execPath, [wrapperScript], {
+  const explicitJson = spawnSync(process.execPath, [
+    wrapperScript, "--format", "analysis-v3", "amo",
+  ], {encoding: "utf8"});
+  assert.equal(explicitJson.status, 0, explicitJson.stderr);
+  assert.equal(JSON.parse(explicitJson.stdout).schemaVersion, 3);
+
+  const stream = spawnSync(process.execPath, [wrapperScript, "--format", "analysis-v3"], {
     encoding: "utf8",
     input: "amo\npuella\n",
   });
   assert.equal(stream.status, 0, stream.stderr);
   assert.equal(stream.stdout.split("\n").filter(Boolean).length, 2);
 
-  const explicitStream = spawnSync(process.execPath, [wrapperScript, "--input", "-"], {
+  const explicitStream = spawnSync(process.execPath, [
+    wrapperScript, "--format", "analysis-v3", "--input", "-"], {
     encoding: "utf8",
     input: "amo\n",
   });

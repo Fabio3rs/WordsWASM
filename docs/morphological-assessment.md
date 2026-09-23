@@ -72,12 +72,12 @@ list becomes empty, that document receives the informational diagnostic
 to its local list, not to nested tokens or suggestions. Originally empty lists
 receive no new diagnostic, and existing diagnostics remain intact.
 
-Filtering occurs after projection and before rendering. The native JSON
-serializers and WASM bindings keep their existing behavior; no new database
+Filtering occurs before human rendering or after JSON projection. The native
+JSON serializers and WASM bindings keep their existing behavior; no new database
 bits, engine options or output fields are introduced. Output schemas remain
-CLI v3 and browser v5. Default calls produce the same output as before.
-The same presentation helpers can support a future human-readable renderer;
-this change does not introduce that renderer or change defaults.
+CLI v3 and browser v5. Omitting filter options still retains every candidate.
+The native `human` renderer applies the same selected reasons directly to the
+typed result and presents review notes in ordinary language.
 
 ## Reviewed semideponent exceptions
 

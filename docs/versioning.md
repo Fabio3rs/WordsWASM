@@ -63,8 +63,10 @@ The stable JSON contracts are selected explicitly:
 | `analysis-v3` | `whitakers-words.analysis` | 3 | Full WWDB |
 | `search-v3` | `whitakers-words.search` | 3 | Full or search-only WWDB |
 
-`wordswasm-cli` supplies its bundled full database and selects `analysis-v3`
-when neither `--database` nor `--format` overrides it. The standalone native
+`wordswasm-cli` supplies its bundled full database and selects `human`
+when `--format` is omitted. `--pretty` without an explicit format selects
+`analysis-v3`. Scripts needing JSON must select `--format analysis-v3` or
+`--format search-v3`. The standalone native
 binary requires an explicit `--database` and `--format`.
 
 The binary currently also accepts the unversioned `analysis` and `search`
@@ -75,9 +77,8 @@ implementation and schema records, plus historical examples, remain in the
 repository as development records rather than a promise to preserve all
 prerelease interfaces.
 
-A future CLI schema is additive only when it receives a new selector, such as
-`analysis-v4`; the v3 selectors and the stable wrapper default remain intact
-throughout 1.x.
+A future CLI JSON schema is additive only when it receives a new selector,
+such as `analysis-v4`; the v3 selectors remain intact throughout 1.x.
 
 ### Browser and WebAssembly
 
