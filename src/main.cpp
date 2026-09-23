@@ -10,6 +10,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <new>
 #include <optional>
 #include <print>
@@ -21,6 +22,7 @@
 #ifdef _WIN32
 #include <io.h>
 #include <windows.h>
+#include <shellapi.h>
 #else
 #include <unistd.h>
 #endif
@@ -30,6 +32,36 @@
 #endif
 
 namespace {
+
+#ifdef _WIN32
+[[nodiscard]] std::expected<std::vector<std::string>, std::string>
+utf8_command_line() {
+    int count{};
+    const auto release = [](LPWSTR *value) { static_cast<void>(LocalFree(value)); };
+    std::unique_ptr<LPWSTR, decltype(release)> wide{
+        CommandLineToArgvW(GetCommandLineW(), &count), release};
+    if (!wide)
+        return std::unexpected("cannot read the Windows command line");
+
+    std::vector<std::string> arguments;
+    arguments.reserve(static_cast<std::size_t>(count));
+    for (int index{}; index < count; ++index) {
+        const int length = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+                                               wide.get()[index], -1, nullptr,
+                                               0, nullptr, nullptr);
+        if (length <= 0)
+            return std::unexpected("cannot encode a command-line argument as UTF-8");
+        std::string argument(static_cast<std::size_t>(length), '\0');
+        if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+                                wide.get()[index], -1, argument.data(), length,
+                                nullptr, nullptr) != length)
+            return std::unexpected("cannot encode a command-line argument as UTF-8");
+        argument.pop_back();
+        arguments.push_back(std::move(argument));
+    }
+    return arguments;
+}
+#endif
 
 struct Options final {
     std::filesystem::path database;
@@ -415,8 +447,26 @@ void write_line_results(const words::Engine &engine,
 } // namespace
 
 int main(const int argc, char *argv[]) try {
-    for (int index = 1; index < argc; ++index) {
-        const std::string_view argument = argv[index];
+#ifdef _WIN32
+    static_cast<void>(argc);
+    static_cast<void>(argv);
+    auto utf8_arguments = utf8_command_line();
+    if (!utf8_arguments) {
+        std::print(stderr, "words_cli: {}\n", utf8_arguments.error());
+        return 2;
+    }
+    std::vector<char *> argument_pointers;
+    argument_pointers.reserve(utf8_arguments->size());
+    for (auto &argument : *utf8_arguments)
+        argument_pointers.push_back(argument.data());
+    const auto argument_count = static_cast<int>(argument_pointers.size());
+    char *const *arguments = argument_pointers.data();
+#else
+    const auto argument_count = argc;
+    char *const *arguments = argv;
+#endif
+    for (int index = 1; index < argument_count; ++index) {
+        const std::string_view argument = arguments[index];
         if (argument == "--help" || argument == "-h") {
             usage();
             return 0;
@@ -426,7 +476,7 @@ int main(const int argc, char *argv[]) try {
             return 0;
         }
     }
-    auto options = parse_options(argc, argv);
+    auto options = parse_options(argument_count, arguments);
     if (!options) {
         std::print(stderr, "words_cli: {}. Run with --help for usage.\n",
                    options.error());

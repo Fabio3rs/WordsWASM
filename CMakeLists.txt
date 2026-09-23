@@ -397,6 +397,7 @@ else()
     )
     if(WIN32)
         target_compile_definitions(words_cli PRIVATE NOMINMAX)
+        target_link_libraries(words_cli PRIVATE shell32)
     endif()
     words_apply_project_options(words_cli)
 
