@@ -118,6 +118,15 @@ the full and search projections only when their `datasetId` strings match.
 Omit `datasetId` only for anonymous local or test datasets where that
 provenance guard is intentionally not needed.
 
+## Optional presentation filters
+
+The CLI `--filter-trim` option and JS/WASM `AnalyzeOptions.filters` are optional
+input capabilities. They preserve default results and the existing output
+schemas; the informational `all-analyses-filtered` code uses the existing
+open diagnostic vocabulary. No new output field or WWDB format is introduced.
+Changing the stable no-filter default is not part of this addition and must
+follow the compatibility policy above.
+
 ## Historical documents
 
 Research reports and audit notes retain the schema and WWDB values observed at

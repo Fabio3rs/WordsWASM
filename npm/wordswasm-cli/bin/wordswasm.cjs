@@ -32,6 +32,11 @@ Options:
                               With no text and no --input, read from standard input.
   --batch-json-lines, --batch Legacy aliases for --input -.
   --dataset-id ID             Verify the database dataset identifier.
+  --filter-trim MOTIVES       Hide comma-separated trim reasons (v3 only); none disables.
+                              unsupported-short-imperative, invalid-imperative-person,
+                              impersonal-non-third-person, deponent-active-form,
+                              semideponent-passive-present-system,
+                              semideponent-active-perfect-system.
   --two-words=legacy          Choose the legacy two-word behavior.
   --orthography=MODE          disabled, classical, or medieval.
   --no-fixes, --no-prefixes, --no-suffixes, --no-tickons, --no-tackons,

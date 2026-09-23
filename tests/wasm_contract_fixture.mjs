@@ -18,6 +18,9 @@ const engine = await createWordsAnalysisEngine({
 
 try {
   const fixtures = [
+    ["reg", {filters: {excludeWhitakerTrimReasons: ["unsupported-short-imperative"]}}],
+    ["rēs", {filters: {excludeWhitakerTrimReasons: ["deponent-active-form"]}}],
+    ["audebantur", {filters: {excludeWhitakerTrimReasons: ["semideponent-passive-present-system"]}}],
     ["studiisque", undefined],
     ["pretoribusque", undefined],
     ["anaticulus", undefined],

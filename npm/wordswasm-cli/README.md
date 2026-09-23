@@ -81,6 +81,25 @@ The binary may accept older development selectors, but those are unsupported
 migration paths; new integrations should use v3. See [Versioning] for the
 compatibility policy.
 
+### Optional result filters
+
+```sh
+wordswasm --filter-trim=deponent-active-form rēs
+wordswasm --filter-trim=semideponent-passive-present-system,semideponent-active-perfect-system audebantur
+wordswasm --filter-trim=none rēs
+```
+
+No filtering is enabled by default. `--filter-trim` accepts the six existing
+Whitaker trim reasons listed in `--help`, separated by commas, or `none`.
+Specify the option once; duplicate reasons are ignored. Active filters require
+`analysis-v3` or `search-v3` and work with JSONL and `--pretty`.
+
+These filters select presentation results; they do not change generation or
+assert that hidden forms are historically invalid. Notices do not override
+selected filters. Status remains the engine's status; a newly emptied main
+or token list receives an informational `all-analyses-filtered` diagnostic.
+Output schemas and default behavior remain unchanged.
+
 ### Errors and exit status
 
 `wordswasm --help` works before the optional native package is resolved. If a

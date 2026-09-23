@@ -490,6 +490,15 @@ The two deployable WWDB profiles share the same lexeme and rule IDs:
 The format and data pipeline are described in
 [the implementation overview](whitakers-words/docs/estado-implementacao.md).
 
+### Optional presentation filters
+
+The CLI accepts `--filter-trim=deponent-active-form` with v3 formats; use
+`--filter-trim=none` to explicitly keep all analyses. The JS/WASM query methods
+accept `{filters: {excludeWhitakerTrimReasons: ["deponent-active-form"]}}`.
+Both default to no filtering and reuse the six existing trim reasons.
+See [client filter behavior](docs/morphological-assessment.md#optional-client-filters)
+for nested results, diagnostics, and the distinction from historical validity.
+
 ## Documentation
 
 The detailed design notes are in

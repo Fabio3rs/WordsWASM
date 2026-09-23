@@ -66,3 +66,13 @@ void createWordsAnalysisEngine({
   databaseBytes: new Uint8Array(),
   databaseUrl: "/words-search.wwdb",
 });
+
+const filters = {excludeWhitakerTrimReasons: ["deponent-active-form"] as const};
+engine.analyze("rēs", {filters}) satisfies AnalysisDocument;
+engine.search("rēs", {filters}) satisfies SearchDocument;
+engine.analyzeLine("rēs reg", {filters}) satisfies AnalysisDocument[];
+engine.searchLine("rēs reg", {filters}) satisfies SearchDocument[];
+// @ts-expect-error Filter values reuse the existing closed reason vocabulary.
+engine.analyze("rēs", {filters: {excludeWhitakerTrimReasons: ["invalid-latin"]}});
+// @ts-expect-error A list is required, not a scalar reason.
+engine.search("rēs", {filters: {excludeWhitakerTrimReasons: "deponent-active-form"}});

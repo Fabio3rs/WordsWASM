@@ -3,6 +3,8 @@ add_executable(words_tests
     database_test.cpp
     engine_test.cpp
     lexer_test.cpp
+    result_filters_test.cpp
+    ../src/result_filters.cpp
 )
 # The test inspects the CLI-only JSON projection directly.  The analysis core
 # and WebAssembly graph deliberately do not depend on that presentation layer.
@@ -30,6 +32,14 @@ if(NOT EMSCRIPTEN)
             COMMAND "${NODE_EXECUTABLE}" --test
                 "${CMAKE_CURRENT_SOURCE_DIR}/wasm_wrapper_test.mjs"
         )
+        add_test(
+            NAME words_client_filters
+            COMMAND "${NODE_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/client_filters_test.mjs"
+                "$<TARGET_FILE:words_cli>"
+                "${CMAKE_SOURCE_DIR}/whitakers-words/poc/compact-db/output/words-poc-dense.wwdb"
+        )
+        set_tests_properties(words_client_filters PROPERTIES LABELS unit)
         add_test(
             NAME words_npm_dist_tag
             COMMAND "${NODE_EXECUTABLE}" --test

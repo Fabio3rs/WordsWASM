@@ -523,3 +523,118 @@ test("releases nested derivation handles when their copy throws", async () => {
   );
   engine.dispose();
 });
+
+const filterReasons = [
+  "unsupported-short-imperative", "invalid-imperative-person",
+  "impersonal-non-third-person", "deponent-active-form",
+  "semideponent-passive-present-system", "semideponent-active-perfect-system",
+];
+
+function filterHit(id, reasons = []) {
+  return {
+    kind: "artificial", partOfSpeech: "numeral",
+    morphology: {kind: "numeral"},
+    form: {stem: "I", ending: "", recognized: "I", display: "I",
+      quantity: {hasAnnotated: false, coverage: "none", positions: []}},
+    derivation: {method: "regular", steps: []},
+    assessment: {generatedByWhitaker: true,
+      whitakerTrimCompatible: reasons.length === 0,
+      whitakerTrimReasons: reasons, notices: ["source-disagreement"]},
+    artificialMethod: "roman-numeral", artificialValue: id,
+    artificialWellFormed: true,
+  };
+}
+
+async function filteringEngine(log, decorate) {
+  const baseFactory = fakeFactory(log);
+  return createWordsAnalysisEngine({
+    databaseBytes: new Uint8Array([1]),
+    moduleFactory: async () => {
+      const base = await baseFactory();
+      class FilterFixture extends base.AnalysisEngine {}
+      for (const operation of ["analyze", "search", "analyzeLine", "searchLine"]) {
+        FilterFixture.prototype[operation] = function (...args) {
+          const raw = base.AnalysisEngine.prototype[operation].apply(this, args);
+          if (Array.isArray(raw)) raw.forEach(decorate);
+          else decorate(raw);
+          return raw;
+        };
+      }
+      return {AnalysisEngine: FilterFixture};
+    },
+  });
+}
+
+test("all six filters work across APIs without changing native calls or surviving hits", async () => {
+  const log = [];
+  const engine = await filteringEngine(log, (raw) => {
+    raw.hits = [filterHit(1), ...filterReasons.map((reason, i) => filterHit(i + 2, [reason])), filterHit(8)];
+  });
+  try {
+    for (const method of ["analyze", "search", "analyzeLine", "searchLine"]) {
+      const plain = engine[method]("test");
+      for (const filters of [undefined, {}, {excludeWhitakerTrimReasons: []}]) {
+        assert.deepEqual(engine[method]("test", {filters}), plain);
+      }
+      for (const reason of filterReasons) {
+        const output = engine[method]("test", {
+          twoWords: true, filters: {excludeWhitakerTrimReasons: [reason, reason]},
+        });
+        const doc = Array.isArray(output) ? output[0] : output;
+        const before = Array.isArray(plain) ? plain[0] : plain;
+        assert.deepEqual(doc.hits, before.hits.filter(
+          (hit) => !hit.assessment.whitakerTrim.reasons.includes(reason),
+        ));
+        assert.deepEqual(doc.diagnostics, []);
+        assert.deepEqual(log.at(-1), [method, "test", true]);
+      }
+    }
+  } finally { engine.dispose(); }
+});
+
+test("filters nested collections, preserves status, and diagnoses only newly empty lists", async () => {
+  const engine = await filteringEngine([], (raw) => {
+    const hidden = filterHit(1, [filterReasons[0], filterReasons[3]]);
+    const visible = filterHit(2);
+    raw.hits = [hidden];
+    raw.diagnostics = [{code: "existing", severity: "info", partOfSpeech: ""}];
+    raw.tokens = [[hidden], [], [visible]].map((hits) => ({
+      query: raw.query, status: "analyzed", hits, diagnostics: [],
+    }));
+    raw.suggestions = [[hidden], [hidden, visible]].map((hits) => ({
+      method: "two-words", splitAt: 1, classification: "unconstrained",
+      segments: [{text: "a", hits}, {text: "b", hits: [visible]}],
+    }));
+  });
+  try {
+    const result = engine.analyze("test", {
+      filters: {excludeWhitakerTrimReasons: [filterReasons[3], filterReasons[1]]},
+    });
+    assert.equal(result.status, "analyzed");
+    assert.deepEqual(result.hits, []);
+    assert.deepEqual(result.diagnostics.map(({code}) => code), ["existing", "all-analyses-filtered"]);
+    assert.deepEqual(result.tokens.map(({status}) => status), ["analyzed", "analyzed", "analyzed"]);
+    assert.deepEqual(result.tokens.map(({diagnostics}) => diagnostics.length), [1, 0, 0]);
+    assert.equal(result.suggestions.length, 1);
+    assert.deepEqual(result.suggestions[0].segments.map(({hits}) => hits.length), [1, 1]);
+    assert.equal(engine.analyze("test").hits.length, 1);
+  } finally { engine.dispose(); }
+});
+
+test("rejects invalid filter parameters before invoking WASM", async () => {
+  const log = [];
+  const engine = await filteringEngine(log, () => {});
+  try {
+    for (const filters of [null, [], true, "none", {other: []},
+      {excludeWhitakerTrimReasons: "deponent-active-form"},
+      {excludeWhitakerTrimReasons: ["invalid-latin"]},
+      {excludeWhitakerTrimReasons: [null]},
+      {excludeWhitakerTrimReasons: new Array(1)}]) {
+      const count = log.length;
+      for (const method of ["analyze", "search", "analyzeLine", "searchLine"]) {
+        assert.throws(() => engine[method]("test", {filters}), TypeError);
+      }
+      assert.equal(log.length, count);
+    }
+  } finally { engine.dispose(); }
+});

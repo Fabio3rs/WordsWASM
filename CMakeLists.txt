@@ -384,7 +384,7 @@ else()
     set(WORDS_CLI_VERSION "development" CACHE STRING
         "Version reported by the native words_cli executable"
     )
-    add_executable(words_cli src/main.cpp)
+    add_executable(words_cli src/main.cpp src/result_filters.cpp)
     target_link_libraries(words_cli PRIVATE
         words_json
         nlohmann_json::nlohmann_json

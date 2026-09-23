@@ -1,4 +1,5 @@
 #include "json_document.hpp"
+#include "result_filters.hpp"
 #include "words/engine.hpp"
 
 #include <cstddef>
@@ -28,6 +29,8 @@ struct Options final {
     std::string format;
     std::string word;
     words::AnalysisOptions analysis;
+    words::client::ResultFilters filters;
+    bool filters_specified{false};
     bool stream_input{false};
     std::optional<std::filesystem::path> input;
     bool pretty{false};
@@ -80,6 +83,24 @@ parse_options(const int argc, char *const argv[]) {
                 return std::unexpected(std::move(value.error()));
             }
             options.format = *value;
+        } else if (argument == "--filter-trim" ||
+                   argument.starts_with("--filter-trim=")) {
+            if (options.filters_specified) {
+                return std::unexpected("--filter-trim may only be specified once");
+            }
+            options.filters_specified = true;
+            auto value = argument == "--filter-trim"
+                ? require_value(argument)
+                : std::expected<std::string_view, std::string>{
+                      argument.substr(std::string_view{"--filter-trim="}.size())};
+            if (!value) {
+                return std::unexpected(std::move(value.error()));
+            }
+            auto filters = words::client::parse_trim_filters(*value);
+            if (!filters) {
+                return std::unexpected(std::move(filters.error()));
+            }
+            options.filters = std::move(*filters);
         } else if (argument == "--two-words=legacy") {
             options.analysis.two_words =
                 words::TwoWordsMode::legacy_first_match;
@@ -170,6 +191,10 @@ parse_options(const int argc, char *const argv[]) {
             "format must be analysis, search, analysis-v2, search-v2, "
             "analysis-v3, or search-v3");
     }
+    if (!options.filters.exclude_whitaker_trim_reasons.empty() &&
+        options.format != "analysis-v3" && options.format != "search-v3") {
+        return std::unexpected("trim filters require analysis-v3 or search-v3");
+    }
     return options;
 }
 
@@ -217,6 +242,12 @@ Options:
   -i FILE, --input FILE       Read one query per line; use - for standard input.
                               With no text and no --input, read from standard input.
   --batch-json-lines, --batch Legacy aliases for --input -.
+  --filter-trim MOTIVES       Comma-separated Whitaker trim reasons to hide (v3 only).
+                              Use none to explicitly disable filtering (default).
+                              unsupported-short-imperative, invalid-imperative-person,
+                              impersonal-non-third-person, deponent-active-form,
+                              semideponent-passive-present-system,
+                              semideponent-active-perfect-system.
   --two-words=legacy          Use the legacy two-word choice.
   --orthography=MODE          disabled, classical, or medieval.
   --no-fixes, --no-prefixes, --no-suffixes, --no-tickons, --no-tackons,
@@ -236,7 +267,8 @@ Exit status: 0 success; 2 invalid command; 3 database or engine failure;
 
 [[nodiscard]] words::JsonDocument
 result_document(const words::Engine &engine, const words::QueryResult &result,
-                const std::string_view format) {
+                const std::string_view format,
+                const words::client::ResultFilters &filters) {
     words::JsonDocument document;
     if (format == "analysis") {
         document = words::analysis_json_document(engine, result);
@@ -251,12 +283,14 @@ result_document(const words::Engine &engine, const words::QueryResult &result,
     } else {
         document = words::search_json_document(engine, result);
     }
+    words::client::filter_result(document, filters);
     return document;
 }
 
 void write_result(const words::Engine &engine, const words::QueryResult &result,
-                  const std::string_view format, const bool pretty) {
-    const auto document = result_document(engine, result, format);
+                  const std::string_view format, const bool pretty,
+                  const words::client::ResultFilters &filters) {
+    const auto document = result_document(engine, result, format, filters);
     std::print(stdout, "{}\n", document.dump(pretty ? 2 : -1));
 }
 
@@ -264,26 +298,29 @@ void write_text_result(const words::Engine &engine,
                        const std::string_view query,
                        const std::string_view format,
                        const words::AnalysisOptions options,
-                       const bool pretty) {
-    write_result(engine, engine.analyze_text(query, options), format, pretty);
+                       const bool pretty,
+                       const words::client::ResultFilters &filters) {
+    write_result(engine, engine.analyze_text(query, options), format, pretty,
+                 filters);
 }
 
 void write_line_results(const words::Engine &engine,
                         const std::string_view query,
                         const std::string_view format,
                         const words::AnalysisOptions options,
-                        const bool pretty) {
+                        const bool pretty,
+                        const words::client::ResultFilters &filters) {
     const auto results = engine.analyze_line(query, options);
     if (pretty && results.size() > 1U) {
         auto document = words::JsonDocument::array();
         for (const auto &result : results) {
-            document.push_back(result_document(engine, result, format));
+            document.push_back(result_document(engine, result, format, filters));
         }
         std::print(stdout, "{}\n", document.dump(2));
         return;
     }
     for (const auto &result : results) {
-        write_result(engine, result, format, pretty);
+        write_result(engine, result, format, pretty, filters);
     }
 }
 
@@ -349,7 +386,7 @@ int main(const int argc, char *argv[]) try {
             }
             if (!query.empty()) {
                 write_text_result(**engine, query, options->format,
-                                  analysis_options, false);
+                                  analysis_options, false, options->filters);
             }
         }
         if (input->bad()) {
@@ -362,7 +399,7 @@ int main(const int argc, char *argv[]) try {
         }
     } else {
         write_line_results(**engine, options->word, options->format,
-                           analysis_options, options->pretty);
+                           analysis_options, options->pretty, options->filters);
     }
     return 0;
 } catch (const std::bad_alloc &) {

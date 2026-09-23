@@ -39,11 +39,14 @@ struct Options final {
     std::string dataset_id{PARSERS_INVESTIGATION_DATASET_ID};
     std::optional<std::string> text;
     std::optional<parsers::Strategy> strategy;
+    bool corpus_explicit{};
+    bool all_strategies{};
     std::uint64_t max_product{1'000'000U};
     words::AnalysisOptions analysis_options{};
     bool fragment{};
     bool self_test{};
     bool human{};
+    bool json{};
     bool include_nbest{};
     bool help{};
 };
@@ -93,6 +96,7 @@ parse_options(const int argc, char *const argv[]) {
                 return std::unexpected(std::move(value.error()));
             }
             options.corpus = *value;
+            options.corpus_explicit = true;
         } else if (argument == "--text") {
             auto value = require_value();
             if (!value) {
@@ -110,6 +114,8 @@ parse_options(const int argc, char *const argv[]) {
                     return std::unexpected("unknown strategy: " +
                                            std::string{*value});
                 }
+            } else {
+                options.all_strategies = true;
             }
         } else if (argument == "--max-product") {
             auto value = require_value();
@@ -172,6 +178,8 @@ parse_options(const int argc, char *const argv[]) {
             options.self_test = true;
         } else if (argument == "--human") {
             options.human = true;
+        } else if (argument == "--json") {
+            options.json = true;
         } else if (argument == "--include-nbest") {
             options.include_nbest = true;
         } else if (argument == "--help" || argument == "-h") {
@@ -186,35 +194,43 @@ parse_options(const int argc, char *const argv[]) {
     if (options.fragment && !options.text) {
         return std::unexpected("--fragment is only valid with --text");
     }
+    if (options.json && options.human) {
+        return std::unexpected("--json and --human cannot be combined");
+    }
+    if (options.text && !options.strategy && !options.all_strategies) {
+        options.strategy = parsers::Strategy::dependency_mst;
+    }
     return options;
 }
 
 void usage(std::ostream &output) {
-    output << "usage: parsers_investigation [OPTIONS]\n"
-              "  --strategy "
-              "morphology|cartesian-leaf-check|incremental-dfs|"
-              "dfs-mrv-forward-checking|worklist-prefilter|"
-              "gac-propagation|gac-residue-cache|"
-              "dependency-projection|dependency-attachment-search|"
-              "dependency-tree-oracle|dependency-eisner|dependency-mst|"
-              "earley-fixed-point-recognizer|"
-              "gslr-stackset-recognizer|all\n"
-              "  --text 'Latin text'       parse one text (default: built-in "
-              "corpus)\n"
-              "  --fragment                allow a verbless --text\n"
-              "  --corpus FILE             use a v2 JSON or legacy TSV corpus\n"
-              "  --database FILE           load another full or search WWDB\n"
-              "  --dataset-id ID           dataset identifier for the WWDB\n"
-              "  --max-product N           exact-enumeration safety budget\n"
-              "  --orthography MODE        disabled, classical-only, or "
-              "classical-and-medieval (default)\n"
-              "  --disable-mechanism NAME  disable one core mechanism; may "
-              "repeat\n"
-              "  --human                   compact table instead of NDJSON\n"
-              "  --include-nbest           include every possible morphology "
-              "analysis in NDJSON\n"
-              "  --self-test               verify strategy invariants on the "
-              "corpus\n";
+    output
+        << "usage: parsers_investigation [OPTIONS]\n"
+           "  --strategy "
+           "morphology|cartesian-leaf-check|incremental-dfs|"
+           "dfs-mrv-forward-checking|worklist-prefilter|"
+           "gac-propagation|gac-residue-cache|"
+           "dependency-projection|dependency-attachment-search|"
+           "dependency-tree-oracle|dependency-eisner|dependency-mst|"
+           "earley-fixed-point-recognizer|"
+           "gslr-stackset-recognizer|all\n"
+           "  --text 'Latin text'       inspect one text with dependency-mst\n"
+           "  --fragment                allow a verbless --text\n"
+           "  --corpus FILE             use a v2 JSON or legacy TSV corpus; "
+           "with --text, find an exact matching fixture for gold\n"
+           "  --database FILE           load another full or search WWDB\n"
+           "  --dataset-id ID           dataset identifier for the WWDB\n"
+           "  --max-product N           exact-enumeration safety budget\n"
+           "  --orthography MODE        disabled, classical-only, or "
+           "classical-and-medieval (default)\n"
+           "  --disable-mechanism NAME  disable one core mechanism; may "
+           "repeat\n"
+           "  --human                   compact table instead of NDJSON\n"
+           "  --json                    NDJSON output for --text\n"
+           "  --include-nbest           include every possible analysis "
+           "in NDJSON\n"
+           "  --self-test               verify strategy invariants on the "
+           "corpus\n";
 }
 
 [[nodiscard]] std::vector<std::byte>
@@ -264,6 +280,101 @@ void print_human(const parsers::Result &result) {
               << '\n';
 }
 
+void print_inspection(const parsers::Result &result) {
+    std::cout << result.text << "\n"
+              << "Estratégia: " << parsers::strategy_name(result.strategy)
+              << " | estado: " << result.status;
+    if (result.strategy != parsers::Strategy::morphology) {
+        std::cout << " | análises aceitas: " << result.accepted_assignments;
+    }
+    if (result.best_score) {
+        std::cout << " | score: " << *result.best_score;
+    }
+    std::cout << "\n";
+    if (!result.best_analysis.empty()) {
+        std::cout << "\nMelhor análise:\n";
+        for (const auto &choice : result.best_analysis) {
+            const auto surface = choice.token < result.surface_tokens.size()
+                                     ? result.surface_tokens[choice.token]
+                                     : "?";
+            std::cout << "  " << choice.token + 1U << ". " << surface << " → "
+                      << choice.lemma << " (" << choice.part;
+            if (!choice.morphology.empty()) {
+                std::cout << ", " << choice.morphology;
+            }
+            std::cout << ")";
+            if (choice.token < result.candidate_counts.size()) {
+                std::cout << " [candidato " << choice.candidate + 1U << '/'
+                          << result.candidate_counts[choice.token] << ']';
+            }
+            std::cout << '\n';
+        }
+    } else {
+        std::cout << "\nNenhuma análise selecionada.\n";
+        if (result.strategy == parsers::Strategy::morphology) {
+            std::cout << "Candidatos morfológicos por token:\n";
+            for (std::size_t token = 0; token < result.surface_tokens.size();
+                 ++token) {
+                std::cout << "  " << token + 1U << ". "
+                          << result.surface_tokens[token] << ": "
+                          << result.candidate_counts[token] << '\n';
+            }
+        }
+    }
+    if (!result.best_relations.empty()) {
+        std::cout << "\nDependências:\n";
+        for (const auto &relation : result.best_relations) {
+            const auto dependent =
+                relation.dependent < result.surface_tokens.size()
+                    ? result.surface_tokens[relation.dependent]
+                    : "?";
+            std::cout << "  " << relation.dependent + 1U << ':' << dependent
+                      << " → ";
+            if (relation.head &&
+                *relation.head < result.surface_tokens.size()) {
+                std::cout << *relation.head + 1U << ':'
+                          << result.surface_tokens[*relation.head];
+            } else {
+                std::cout << "ROOT";
+            }
+            std::cout << " (" << relation.label << ")\n";
+        }
+    }
+    if (result.morphology_gold_declared || result.dependency_gold_declared) {
+        std::cout << "\nGold da fixture " << result.fixture_id << ":\n";
+        if (result.morphology_gold_declared) {
+            std::cout << "  Morfologia: ";
+            if (result.strategy == parsers::Strategy::morphology) {
+                std::cout << (result.morphology_gold_in_lattice
+                                  ? "presente no lattice"
+                                  : "ausente do lattice");
+            } else {
+                std::cout << (result.morphology_gold_survives ? "preservada"
+                                                              : "ausente");
+            }
+            if (result.morphology_gold_rank) {
+                std::cout << " (rank " << *result.morphology_gold_rank << ')';
+            }
+            std::cout << '\n';
+        }
+        if (result.dependency_gold_declared) {
+            std::cout << "  Dependências: "
+                      << (result.dependency_gold_survives
+                              ? (*result.dependency_gold_survives
+                                     ? "preservadas"
+                                     : "ausentes")
+                              : "não avaliadas");
+            if (result.dependency_gold_rank) {
+                std::cout << " (rank " << *result.dependency_gold_rank << ')';
+            }
+            std::cout << '\n';
+        }
+    }
+    for (const auto &diagnostic : result.diagnostics) {
+        std::cout << "  Diagnóstico: " << diagnostic << '\n';
+    }
+}
+
 } // namespace
 
 int main(const int argc, char *argv[]) try {
@@ -288,18 +399,39 @@ int main(const int argc, char *argv[]) try {
     }
     const parsers::Experiment experiment{**engine, options->max_product,
                                          options->analysis_options};
-    auto fixtures = parsers::load_corpus(options->corpus);
+    std::vector<parsers::Fixture> fixtures;
     if (options->text) {
-        fixtures = {parsers::Fixture{
-            .id = "ad-hoc",
-            .text = *options->text,
-            .phenomenon = "ad-hoc",
-            .preferred_lemmas = {},
-            .mode = options->fragment ? parsers::GrammarMode::fragment
-                                      : parsers::GrammarMode::complete_clause,
-            .lookup_overrides = {},
-            .annotation = std::nullopt,
-            .gold = std::nullopt}};
+        if (options->corpus_explicit) {
+            auto corpus = parsers::load_corpus(options->corpus);
+            for (auto &fixture : corpus) {
+                if (fixture.text == *options->text) {
+                    fixtures.push_back(std::move(fixture));
+                }
+            }
+            if (fixtures.size() != 1U) {
+                std::cerr << "parsers_investigation: --text must match exactly "
+                             "one fixture in --corpus (found "
+                          << fixtures.size() << ")\n";
+                return 2;
+            }
+            if (options->fragment) {
+                fixtures.front().mode = parsers::GrammarMode::fragment;
+            }
+        } else {
+            fixtures = {parsers::Fixture{
+                .id = "ad-hoc",
+                .text = *options->text,
+                .phenomenon = "ad-hoc",
+                .preferred_lemmas = {},
+                .mode = options->fragment
+                            ? parsers::GrammarMode::fragment
+                            : parsers::GrammarMode::complete_clause,
+                .lookup_overrides = {},
+                .annotation = std::nullopt,
+                .gold = std::nullopt}};
+        }
+    } else {
+        fixtures = parsers::load_corpus(options->corpus);
     }
 
     if (options->self_test) {
@@ -328,6 +460,7 @@ int main(const int argc, char *argv[]) try {
         parsers::Strategy::dependency_mst,
         parsers::Strategy::earley_fixed_point_recognizer,
         parsers::Strategy::gslr_stackset_recognizer};
+    const bool inspect = options->text && !options->json && !options->human;
     if (options->human) {
         print_human_header();
     }
@@ -339,6 +472,11 @@ int main(const int argc, char *argv[]) try {
             const auto result = experiment.run(fixture, strategy);
             if (options->human) {
                 print_human(result);
+            } else if (inspect) {
+                print_inspection(result);
+                if (options->all_strategies) {
+                    std::cout << '\n';
+                }
             } else {
                 std::cout << parsers::to_json(result, options->include_nbest)
                           << '\n';

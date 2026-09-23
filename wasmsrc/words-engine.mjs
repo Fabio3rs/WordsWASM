@@ -383,6 +383,59 @@ function copyResult(raw) {
   }
 }
 
+// These are the existing assessment reason codes, not a new grammatical policy.
+const trimReasons = new Set([
+  "unsupported-short-imperative",
+  "invalid-imperative-person",
+  "impersonal-non-third-person",
+  "deponent-active-form",
+  "semideponent-passive-present-system",
+  "semideponent-active-perfect-system",
+]);
+
+function resultFilters(filters) {
+  if (filters === undefined) return new Set();
+  if (filters === null || typeof filters !== "object" || Array.isArray(filters)) {
+    throw new TypeError("filters must be an object");
+  }
+  if (Object.keys(filters).some((key) => key !== "excludeWhitakerTrimReasons")) {
+    throw new TypeError("unknown result filter");
+  }
+  const reasons = filters.excludeWhitakerTrimReasons;
+  if (reasons === undefined) return new Set();
+  if (!Array.isArray(reasons) ||
+      Array.from(reasons).some((reason) => !trimReasons.has(reason))) {
+    throw new TypeError("excludeWhitakerTrimReasons must contain known trim reasons");
+  }
+  return new Set(reasons);
+}
+
+// Operates only on copied client documents, after Embind handles are released.
+// Future presentation backends can consume the same filtered documents.
+function filterResult(document, excluded) {
+  if (excluded.size === 0) return document;
+  const keep = (hit) => !hit.assessment.whitakerTrim.reasons.some(
+    (reason) => excluded.has(reason),
+  );
+  const hadHits = document.hits.length > 0;
+  document.hits = document.hits.filter(keep);
+  if (hadHits && document.hits.length === 0) {
+    document.diagnostics.push({
+      code: "all-analyses-filtered", severity: "info", parameters: {},
+    });
+  }
+  for (const token of document.tokens ?? []) filterResult(token, excluded);
+  if (document.suggestions !== undefined) {
+    document.suggestions = document.suggestions.filter((suggestion) => {
+      for (const segment of suggestion.segments) {
+        segment.hits = segment.hits.filter(keep);
+      }
+      return suggestion.segments.every((segment) => segment.hits.length > 0);
+    });
+  }
+  return document;
+}
+
 /**
  * Creates one long-lived immutable Words analysis snapshot.
  *
@@ -441,12 +494,16 @@ export async function createWordsAnalysisEngine({
       if (operation === "analyze" && databaseKind !== "full") {
         throw new Error("analysis requires words-full.wwdb");
       }
+      const excluded = resultFilters(options?.filters);
       const twoWords = options?.twoWords === true;
       // WHY: Embind transports typed value objects.  Only the CLI owns JSON
       // presentation; browser callers receive normal JavaScript structures.
       const nativeOperation = line ? `${operation}Line` : operation;
       const result = native[nativeOperation](text, twoWords);
-      return line ? copyOwnedVector(result, copyResult) : copyResult(result);
+      const copied = line ? copyOwnedVector(result, copyResult) : copyResult(result);
+      return line
+        ? copied.map((document) => filterResult(document, excluded))
+        : filterResult(copied, excluded);
     };
 
     return Object.freeze({

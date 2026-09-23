@@ -337,8 +337,15 @@ export interface SearchDocument extends DocumentBase {
   tokens: Array<IndependentToken<SearchHit>>;
 }
 
+export interface ResultFilters {
+  /** Hide candidates with any selected reason; omitted or empty keeps all. */
+  excludeWhitakerTrimReasons?: readonly WhitakerTrimReason[];
+}
+
 export interface AnalyzeOptions {
   twoWords?: boolean;
+  /** Client presentation only; does not change engine generation. */
+  filters?: ResultFilters;
 }
 
 export interface WordsAnalysisEngine {

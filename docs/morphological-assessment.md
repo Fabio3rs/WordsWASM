@@ -30,10 +30,54 @@ strings are deliberately absent from WWDB and the WASM module.
 - `semideponent-active-perfect-system`
 
 Annotation is the only engine policy. Every candidate remains in the native
-result and in every JSON/browser projection; consumers receive compatibility
-reasons and notices instead of a switch that reproduces Whitaker's removal.
-The `whitakerTrim: "annotate"` option field is descriptive rather than
-configurable.
+engine result. CLI and JS/WASM clients also retain all candidates by default,
+and can optionally filter their presentation using the existing reasons.
+The `whitakerTrim: "annotate"` output option remains descriptive of the engine,
+not a claim that the client has disabled presentation filters.
+
+## Optional client filters
+
+The native CLI accepts `--filter-trim REASONS` (or `--filter-trim=REASONS`)
+with `analysis-v3` and `search-v3`. Supply comma-separated names from the six
+reasons above, without spaces, or `none` to explicitly disable filtering.
+Specify the option once; duplicate reasons are harmless. Unknown names,
+empty items and active filters with legacy formats are argument errors.
+
+The JS/WASM wrapper accepts an optional field on all four query methods:
+
+```js
+engine.analyze("rēs", {
+  filters: {excludeWhitakerTrimReasons: ["deponent-active-form"]}
+});
+```
+
+`ResultFilters` reuses the existing `WhitakerTrimReason` type. Omitting
+`filters`, passing `{}`, or an empty reason list retains all candidates.
+Invalid filter objects or reason values throw `TypeError` before invoking
+WASM. Filters are applied per call; they do not become engine configuration.
+
+The client removes a candidate if any selected reason occurs in its
+assessment. Notices neither trigger removal nor override it: choosing a
+semideponent filter can therefore hide historically supported forms as well
+as unreviewed candidates. This is a display preference, not a validity judgment.
+
+Filtering preserves surviving records and their order, and covers the main
+list, independent token lists and suggestion segments. Tokens remain present
+even if empty. A two-word suggestion is removed if either segment becomes
+empty; the client does not ask the engine to find another split.
+
+Statuses retain the engine's meaning. If a previously nonempty main or token
+list becomes empty, that document receives the informational diagnostic
+`all-analyses-filtered`, with empty `parameters`. The diagnostic refers only
+to its local list, not to nested tokens or suggestions. Originally empty lists
+receive no new diagnostic, and existing diagnostics remain intact.
+
+Filtering occurs after projection and before rendering. The native JSON
+serializers and WASM bindings keep their existing behavior; no new database
+bits, engine options or output fields are introduced. Output schemas remain
+CLI v3 and browser v5. Default calls produce the same output as before.
+The same presentation helpers can support a future human-readable renderer;
+this change does not introduce that renderer or change defaults.
 
 ## Reviewed semideponent exceptions
 

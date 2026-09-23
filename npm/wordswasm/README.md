@@ -52,6 +52,28 @@ console.log(engine.search("amo"));
 engine.dispose();
 ```
 
+## Optional result filters
+
+All four query methods accept client-side filters:
+
+```js
+engine.analyze("rēs", {
+  filters: {excludeWhitakerTrimReasons: ["deponent-active-form"]}
+});
+```
+
+The list uses the exported `WhitakerTrimReason` type. Omit `filters`, use `{}`,
+or pass an empty list to keep all results. Any selected reason removes the
+matching analysis, including analyses with notices; this is a presentation
+choice, not a judgment that a form is impossible. The engine and database are
+unchanged, and filtering does not persist between calls.
+
+The filter also covers tokens and suggestions. Status retains the engine's
+value; a newly emptied main or token list receives `all-analyses-filtered` in
+`diagnostics`. Result schemas are unchanged. See the
+[morphological assessment documentation](https://github.com/Fabio3rs/WordsWASM/blob/master/docs/morphological-assessment.md#optional-client-filters)
+for the six reason names and full behavior.
+
 ## Advanced loading and assets
 
 Use `createWordsAnalysisEngine()` when a host stores the database elsewhere,
