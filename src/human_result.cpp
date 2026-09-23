@@ -254,65 +254,71 @@ void add_ordinal(std::string &target, const unsigned value,
 }
 
 [[nodiscard]] std::string trim_note(const WhitakerTrimReason reason) {
-    switch (reason) {
-    case WhitakerTrimReason::unsupported_short_imperative:
+    switch (std::to_underlying(reason)) {
+    case std::to_underlying(WhitakerTrimReason::unsupported_short_imperative):
         return "short imperative outside Whitaker's listed forms";
-    case WhitakerTrimReason::invalid_imperative_person:
+    case std::to_underlying(WhitakerTrimReason::invalid_imperative_person):
         return "imperative person outside Whitaker's display policy";
-    case WhitakerTrimReason::impersonal_non_third_person:
+    case std::to_underlying(WhitakerTrimReason::impersonal_non_third_person):
         return "non-third-person form of an impersonal verb";
-    case WhitakerTrimReason::deponent_active_form:
+    case std::to_underlying(WhitakerTrimReason::deponent_active_form):
         return "form outside Whitaker's usual deponent display";
-    case WhitakerTrimReason::semideponent_passive_present_system:
+    case std::to_underlying(
+        WhitakerTrimReason::semideponent_passive_present_system):
         return "present-system form outside Whitaker's usual semideponent "
                "display";
-    case WhitakerTrimReason::semideponent_active_perfect_system:
+    case std::to_underlying(
+        WhitakerTrimReason::semideponent_active_perfect_system):
         return "perfect-system form outside Whitaker's usual semideponent "
                "display";
+    default:
+        return {};
     }
-    return {};
 }
 
 [[nodiscard]] std::string notice_note(const MorphologicalNotice notice) {
-    switch (notice) {
-    case MorphologicalNotice::related_passive_usage_attested:
+    switch (std::to_underlying(notice)) {
+    case std::to_underlying(
+        MorphologicalNotice::related_passive_usage_attested):
         return "related usage is attested; the queried form is not thereby "
                "attested";
-    case MorphologicalNotice::source_disagreement:
+    case std::to_underlying(MorphologicalNotice::source_disagreement):
         return "grammatical or lexical sources disagree with Whitaker's "
                "display policy";
-    case MorphologicalNotice::manual_review_recommended:
+    case std::to_underlying(MorphologicalNotice::manual_review_recommended):
         return "contextual review recommended";
+    default:
+        return {};
     }
-    return {};
 }
 
 [[nodiscard]] std::string diagnostic_text(const DiagnosticCode code) {
-    switch (code) {
-    case DiagnosticCode::empty_input:
+    switch (std::to_underlying(code)) {
+    case std::to_underlying(DiagnosticCode::empty_input):
         return "empty input";
-    case DiagnosticCode::input_too_large:
+    case std::to_underlying(DiagnosticCode::input_too_large):
         return "input is too long";
-    case DiagnosticCode::invalid_utf8:
+    case std::to_underlying(DiagnosticCode::invalid_utf8):
         return "invalid UTF-8 text";
-    case DiagnosticCode::invalid_vowel_quantity:
+    case std::to_underlying(DiagnosticCode::invalid_vowel_quantity):
         return "invalid vowel quantity marks";
-    case DiagnosticCode::unicode_normalization_failed:
+    case std::to_underlying(DiagnosticCode::unicode_normalization_failed):
         return "could not normalize the input";
-    case DiagnosticCode::unsupported_character:
+    case std::to_underlying(DiagnosticCode::unsupported_character):
         return "unsupported character";
-    case DiagnosticCode::unsupported_part_of_speech:
+    case std::to_underlying(DiagnosticCode::unsupported_part_of_speech):
         return "unsupported part of speech";
-    case DiagnosticCode::unsupported_token_count:
+    case std::to_underlying(DiagnosticCode::unsupported_token_count):
         return "too many tokens";
-    case DiagnosticCode::unsupported_multi_token:
+    case std::to_underlying(DiagnosticCode::unsupported_multi_token):
         return "unsupported multiword input";
-    case DiagnosticCode::unknown_word:
+    case std::to_underlying(DiagnosticCode::unknown_word):
         return "no reading found";
-    case DiagnosticCode::two_words_suggestion:
+    case std::to_underlying(DiagnosticCode::two_words_suggestion):
         return "no confirmed reading; possible split below";
+    default:
+        return "analysis unavailable";
     }
-    return "analysis unavailable";
 }
 
 [[nodiscard]] std::string
