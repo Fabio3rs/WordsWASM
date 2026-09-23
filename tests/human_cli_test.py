@@ -19,6 +19,7 @@ def run(*args, input_text=None):
         [CLI, "--database", DATABASE, *args],
         input=input_text,
         text=True,
+        encoding="utf-8",
         capture_output=True,
         check=False,
     )
@@ -193,12 +194,13 @@ for args in (
     ("--format", "analysis-v3", "--human-style=normal", "amo"),
 ):
     result = subprocess.run(
-        [CLI, "--database", DATABASE, *args], capture_output=True, text=True)
+        [CLI, "--database", DATABASE, *args], capture_output=True, text=True,
+        encoding="utf-8")
     assert result.returncode == 2, (args, result.stderr)
 
 search_only = subprocess.run(
     [CLI, "--database", SEARCH_DATABASE, "--format", "human", "amo"],
-    capture_output=True, text=True)
+    capture_output=True, text=True, encoding="utf-8")
 assert search_only.returncode == 3
 assert "requires a full WWDB" in search_only.stderr
 
@@ -219,7 +221,7 @@ if sys.platform == "linux" and platform.machine() == "x86_64" and shutil.which("
         def wrapper_run(*args, input_text=None):
             result = subprocess.run(
                 ["node", str(wrapper), *args], input=input_text, text=True,
-                capture_output=True, env=environment)
+                encoding="utf-8", capture_output=True, env=environment)
             assert result.returncode == 0, (args, result.stderr)
             return result.stdout
 
