@@ -36,11 +36,13 @@ A seção 25 carrega propriedades esparsas de regras de adendos, ligadas ao
 `AddonId` global. Cada registro de 8 bytes contém tipo, paradigma de origem e
 duas máscaras de quantidade e um bit de política de coexistência. O empacotador
 confere a identidade da regra contra `ADDONS.LAT`; o registro atual é o sufixo
-adverbial `-ē`. `QUANTITIES.LAT` fornece o paradigma e a quantidade;
-`ADDON_POLICIES.LAT` autoriza sua análise junto de uma leitura regular. A seção e sua
-entrada de diretório acrescentam 40 bytes aos perfis full e search. O arquivo
-editorial `QUANTITIES.LAT` continua separado para preservar a proveniência,
-mas o WWDB associa os atributos à regra antes de a engine analisar palavras.
+adverbial `-ē`. `ADDON_POLICIES.LAT` define o paradigma de origem e autoriza
+sua análise junto de uma leitura regular. `QUANTITIES.LAT` fornece a evidência
+vocálica opcional; quando presente, seu paradigma deve concordar com a política.
+A seção e sua entrada de diretório acrescentam 40 bytes aos perfis full e
+search. O arquivo editorial `QUANTITIES.LAT` continua separado para preservar
+a proveniência, mas o WWDB associa os atributos à regra antes de a engine
+analisar palavras.
 
 **Quebra de compatibilidade do protótipo:** o binário da engine que usa esses
 atributos exige WWDB 1.11. O loader pode inspecionar imagens antigas, mas

@@ -256,13 +256,13 @@ def main() -> None:
         quantity_path.write_text(original_quantities, encoding="utf-8")
         policy_path = root / "ADDON_POLICIES.LAT"
         original_policy = policy_path.read_text(encoding="utf-8")
-        policy_signature = "SUFFIX 156 e ADJ 2 ADV 1 POS - COEXIST_REGULAR"
+        policy_signature = "SUFFIX 156 e ADJ 2 ADV 1 POS - 1 1 COEXIST_REGULAR"
         if policy_signature not in original_policy:
             raise AssertionError("expected reviewed suffix policy is absent")
         policy_path.unlink()
         policy_path.write_text(
             original_policy.replace(policy_signature,
-                                    "SUFFIX 156 e ADJ 1 ADV 1 POS - COEXIST_REGULAR"),
+                                    "SUFFIX 156 e ADJ 1 ADV 1 POS - 1 1 COEXIST_REGULAR"),
             encoding="utf-8",
         )
         invalid_policy = subprocess.run(
@@ -272,6 +272,76 @@ def main() -> None:
         if (invalid_policy.returncode == 0 or
                 "suffix policy is inconsistent with ADDONS.LAT" not in invalid_policy.stderr):
             raise AssertionError("packer accepted policy linked to a changed suffix rule")
+
+        # Quantity evidence is optional. Removing it must not remove the
+        # policy's source-paradigm restriction or admit *sole as an adverb.
+        policy_path.write_text(original_policy, encoding="utf-8")
+        quantity_path.write_text(
+            original_quantities.replace(signature + "\n", ""),
+            encoding="utf-8",
+        )
+        policy_only_database = root / "policy-only.wwdb"
+        subprocess.run(
+            [str(arguments.packer), str(root), str(policy_only_database), "dense"],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        sole = run_json([
+            str(arguments.cli), "--database", str(policy_only_database),
+            "--format", "analysis-v4", "sole",
+        ])
+        if any(item["partOfSpeech"] == "adverb" and
+               item["derivation"]["method"] == "derived"
+               for item in sole["analyses"]):
+            raise AssertionError("policy without quantity admitted *sole")
+        sancte = run_json([
+            str(arguments.cli), "--database", str(policy_only_database),
+            "--format", "analysis-v4", "sancte",
+        ])
+        if not any(item["partOfSpeech"] == "adverb" and
+                   item["derivation"]["method"] == "derived"
+                   for item in sancte["analyses"]):
+            raise AssertionError("policy without quantity lost sancte adverb")
+        for spelling in ("sanctē", "sanctĕ"):
+            marked = run_json([
+                str(arguments.cli), "--database", str(policy_only_database),
+                "--format", "analysis-v4", spelling,
+            ])
+            if not any(item["partOfSpeech"] == "adverb" and
+                       item["derivation"]["method"] == "derived" and
+                       item["quantityMatch"] == "unknown"
+                       for item in marked["analyses"]):
+                raise AssertionError(
+                    f"missing suffix evidence did not report unknown for {spelling}"
+                )
+
+        # A scoped quantity record cannot define morphology by itself.
+        quantity_path.write_text(original_quantities, encoding="utf-8")
+        policy_path.write_text("-- omitted policy\n", encoding="utf-8")
+        missing_policy = subprocess.run(
+            [str(arguments.packer), str(root), str(root / "missing-policy.wwdb"),
+             "dense"],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        if (missing_policy.returncode == 0 or
+                "suffix quantity requires an addon policy" not in missing_policy.stderr):
+            raise AssertionError("packer accepted scoped quantity without policy")
+
+        policy_path.write_text(
+            original_policy.replace(
+                policy_signature,
+                "SUFFIX 156 e ADJ 2 ADV 1 POS - 2 1 COEXIST_REGULAR",
+            ),
+            encoding="utf-8",
+        )
+        mismatched_paradigm = subprocess.run(
+            [str(arguments.packer), str(root),
+             str(root / "mismatched-paradigm.wwdb"), "dense"],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        if (mismatched_paradigm.returncode == 0 or
+                "suffix policy conflicts with quantity evidence" not in
+                mismatched_paradigm.stderr):
+            raise AssertionError("packer accepted conflicting suffix paradigms")
 
 
 if __name__ == "__main__":

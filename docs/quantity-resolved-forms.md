@@ -25,6 +25,11 @@ matching analyses. In v4/v6, its adverbial reading displays `sanctē` and
 identifies the last vowel as suffix evidence. The adjective reading remains
 independent. Native v3 continues to expose only stem and ending origins.
 
+`ADDON_POLICIES.LAT` owns the source paradigm and coexistence behavior of a
+productive suffix. `QUANTITIES.LAT` contributes optional vowel evidence and
+must agree with that paradigm when present. Without evidence, explicitly
+marked suffix readings remain eligible with `quantityMatch: unknown`.
+
 The evidence compiled into `QUANTITIES.LAT` is traceable through
 `whitakers-words/QUANTITY_EVIDENCE.jsonl`. Grammar-derived inflection evidence
 names the worksheet and paradigm; lexical evidence names the dictionary,

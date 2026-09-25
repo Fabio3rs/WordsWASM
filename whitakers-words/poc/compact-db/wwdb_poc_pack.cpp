@@ -188,6 +188,8 @@ struct SuffixPolicySource final {
     std::uint8_t target_key{};
     std::uint8_t target_degree{};
     char connector{};
+    std::uint8_t root_declension{};
+    std::uint8_t root_variant{};
 };
 
 struct QuantitySources final {
@@ -1239,14 +1241,21 @@ read_suffix_policies(const std::filesystem::path &path) {
         if (fields.empty()) {
             continue;
         }
-        if (fields.size() != 10U || fields[0] != "SUFFIX" ||
-            fields[9] != "COEXIST_REGULAR") {
+        if (fields.size() != 12U || fields[0] != "SUFFIX" ||
+            fields[11] != "COEXIST_REGULAR") {
             fail("invalid ADDON_POLICIES.LAT record shape: " + line);
         }
         const auto id = parse_u32(fields[1], "addon ID", source);
         if (id > std::numeric_limits<std::uint16_t>::max() ||
             (fields[8] != "-" && fields[8].size() != 1U)) {
             fail("invalid suffix policy ID or connector");
+        }
+        const auto root_declension =
+            parse_u8(fields[9], "suffix root declension", source);
+        const auto root_variant =
+            parse_u8(fields[10], "suffix root variant", source);
+        if (root_declension > 9U || root_variant > 9U) {
+            fail("suffix source paradigm exceeds 0..9 in ADDON_POLICIES.LAT");
         }
         result.push_back({
             static_cast<std::uint16_t>(id), std::string{fields[2]},
@@ -1257,6 +1266,7 @@ read_suffix_policies(const std::filesystem::path &path) {
             enum_value(fields[7], {"X", "POS", "COMP", "SUPER"},
                        "suffix target degree", source),
             fields[8] == "-" ? '\0' : fields[8].front(),
+            root_declension, root_variant,
         });
     }
     return result;
@@ -2308,17 +2318,30 @@ int main(int argc, char **argv) try {
             fail("suffix policy is inconsistent with ADDONS.LAT");
         }
         policy_ids.push_back(policy.addon_id);
-        if (std::ranges::none_of(suffix_attributes, [&](const auto &item) {
-                return item.addon_id == policy.addon_id;
-            })) {
+        const auto attribute = std::ranges::find(
+            suffix_attributes, policy.addon_id,
+            &SuffixAttributeSource::addon_id);
+        if (attribute == suffix_attributes.end()) {
             suffix_attributes.push_back({policy.addon_id, policy.fix,
                                          policy.root, policy.root_key,
-                                         policy.target, policy.target_key});
+                                         policy.target, policy.target_key,
+                                         policy.root_declension,
+                                         policy.root_variant});
+        } else if (attribute->root_declension != policy.root_declension ||
+                   attribute->root_variant != policy.root_variant) {
+            fail("suffix policy conflicts with quantity evidence");
         }
     }
+    std::ranges::sort(policy_ids);
     std::ranges::sort(suffix_attributes, {}, &SuffixAttributeSource::addon_id);
     std::optional<std::uint16_t> previous_addon_id;
     for (const auto &attribute : suffix_attributes) {
+        const auto has_policy =
+            std::ranges::binary_search(policy_ids, attribute.addon_id);
+        if (!has_policy &&
+            (attribute.root_declension != 0U || attribute.root_variant != 0U)) {
+            fail("suffix quantity requires an addon policy");
+        }
         const auto found = std::ranges::find(addons.suffixes, attribute.addon_id,
                                               &SuffixSource::addon_id);
         if (found == addons.suffixes.end() ||
@@ -2336,10 +2359,9 @@ int main(int argc, char **argv) try {
             fail("suffix attribute is inconsistent with ADDONS.LAT");
         }
         append_u16_le(addon_attribute_records, attribute.addon_id);
-        const auto policy_flags =
-            std::ranges::find(policy_ids, attribute.addon_id) != policy_ids.end()
-                ? wwdb::addon_attribute_coexists_with_regular
-                : 0U;
+        const auto policy_flags = has_policy
+                                      ? wwdb::addon_attribute_coexists_with_regular
+                                      : 0U;
         append_u8(addon_attribute_records, static_cast<std::uint8_t>(
             std::to_underlying(words::AddonKind::suffix) | policy_flags));
         append_u8(addon_attribute_records,

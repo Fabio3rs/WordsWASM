@@ -12,6 +12,7 @@
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -296,6 +297,54 @@ transformed_paradigm_matches(const SuffixRule &suffix,
     return part_matches && key_matches && paradigm_matches;
 }
 
+struct QuantitySegment final {
+    SurfaceRange range;
+    QuantityMask mask;
+};
+
+[[nodiscard]] std::optional<QuantityMatch>
+match_quantity_segments(const SurfaceForm &surface,
+                        const std::span<const QuantitySegment> segments,
+                        const QuantityMatch no_mark_result) noexcept {
+    bool marked{};
+    bool has_unknown_evidence{};
+    for (std::size_t index = 0; index < surface.quantities.size(); ++index) {
+        const auto observed = surface.quantities[index];
+        if (observed == VowelQuantity::unknown) {
+            continue;
+        }
+        marked = true;
+
+        bool covered{};
+        for (const auto &segment : segments) {
+            if (index < segment.range.begin ||
+                index - segment.range.begin >= segment.range.count) {
+                continue;
+            }
+            covered = true;
+            const auto relative = index - segment.range.begin;
+            if (relative >= std::numeric_limits<std::uint32_t>::digits ||
+                (segment.mask.known & (std::uint32_t{1U} << relative)) == 0U) {
+                has_unknown_evidence = true;
+                break;
+            }
+            const auto expected_long =
+                (segment.mask.long_vowel & (std::uint32_t{1U} << relative)) !=
+                0U;
+            if (expected_long != (observed == VowelQuantity::long_vowel)) {
+                return std::nullopt;
+            }
+            break;
+        }
+        if (!covered) {
+            has_unknown_evidence = true;
+        }
+    }
+    return !marked ? no_mark_result
+                   : has_unknown_evidence ? QuantityMatch::unknown
+                                          : QuantityMatch::exact;
+}
+
 [[nodiscard]] std::optional<QuantityMatch> suffix_quantity_match(
     const Database &database, const SurfaceForm &surface,
     const CandidateIR &candidate, const StemReference &stem,
@@ -307,46 +356,25 @@ transformed_paradigm_matches(const SuffixRule &suffix,
     if (!surface_has_quantity) {
         return QuantityMatch::unspecified;
     }
-    const auto suffix_begin =
-        candidate.stem.begin + candidate.stem.count - suffix_size;
-    const auto stem_quantity =
-        database.stem_quantity(stem.lexeme, stem.lexical_slot);
-    const auto ending_quantity = database.inflection_quantity(candidate.rule);
-    bool marked{};
-    bool unknown{};
-    for (std::size_t index = 0; index < surface.quantities.size(); ++index) {
-        const auto observed = surface.quantities[index];
-        if (observed == VowelQuantity::unknown) {
-            continue;
-        }
-        marked = true;
-        QuantityMask expected;
-        std::size_t relative = std::numeric_limits<std::size_t>::max();
-        if (index >= candidate.stem.begin && index < suffix_begin) {
-            expected = stem_quantity;
-            relative = index - candidate.stem.begin;
-        } else if (index >= suffix_begin &&
-                   index < suffix_begin + suffix_size) {
-            expected = suffix.quantity;
-            relative = index - suffix_begin;
-        } else if (index >= candidate.ending.begin &&
-                   index < candidate.ending.begin + candidate.ending.count) {
-            expected = ending_quantity;
-            relative = index - candidate.ending.begin;
-        }
-        if (relative >= std::numeric_limits<std::uint32_t>::digits ||
-            (expected.known & (std::uint32_t{1U} << relative)) == 0U) {
-            unknown = true;
-            continue;
-        }
-        const auto bit = std::uint32_t{1U} << relative;
-        if (((expected.long_vowel & bit) != 0U) !=
-            (observed == VowelQuantity::long_vowel)) {
-            return std::nullopt;
-        }
-    }
-    return !marked ? QuantityMatch::unspecified
-                   : unknown ? QuantityMatch::unknown : QuantityMatch::exact;
+    const auto lexical_stem_size = static_cast<std::uint32_t>(
+        candidate.stem.count - suffix_size);
+    const auto suffix_begin = candidate.stem.begin + lexical_stem_size;
+    const std::array segments{
+        QuantitySegment{
+            .range = {candidate.stem.begin, lexical_stem_size},
+            .mask = database.stem_quantity(stem.lexeme, stem.lexical_slot),
+        },
+        QuantitySegment{
+            .range = {suffix_begin, static_cast<std::uint32_t>(suffix_size)},
+            .mask = suffix.quantity,
+        },
+        QuantitySegment{
+            .range = candidate.ending,
+            .mask = database.inflection_quantity(candidate.rule),
+        },
+    };
+    return match_quantity_segments(surface, segments,
+                                   QuantityMatch::unspecified);
 }
 
 [[nodiscard]] bool has_quantity(const SurfaceForm &surface) noexcept {
@@ -364,42 +392,17 @@ candidate_quantity_match(const Database &database, const SurfaceForm &surface,
     if (!surface_has_quantity) {
         return QuantityMatch::unspecified;
     }
-
-    const auto stem_quantity =
-        database.stem_quantity(stem.lexeme, stem.lexical_slot);
-    const auto ending_quantity = database.inflection_quantity(candidate.rule);
-    bool has_unknown_evidence{};
-    for (std::size_t index = 0; index < surface.quantities.size(); ++index) {
-        const auto observed = surface.quantities[index];
-        if (observed == VowelQuantity::unknown) {
-            continue;
-        }
-
-        QuantityMask expected;
-        std::size_t relative = std::numeric_limits<std::size_t>::max();
-        if (index >= candidate.stem.begin &&
-            index < candidate.stem.begin + candidate.stem.count) {
-            expected = stem_quantity;
-            relative = index - candidate.stem.begin;
-        } else if (index >= candidate.ending.begin &&
-                   index < candidate.ending.begin + candidate.ending.count) {
-            expected = ending_quantity;
-            relative = index - candidate.ending.begin;
-        }
-
-        if (relative >= std::numeric_limits<std::uint32_t>::digits ||
-            (expected.known & (std::uint32_t{1U} << relative)) == 0U) {
-            has_unknown_evidence = true;
-            continue;
-        }
-        const auto expected_long =
-            (expected.long_vowel & (std::uint32_t{1U} << relative)) != 0U;
-        const auto observed_long = observed == VowelQuantity::long_vowel;
-        if (expected_long != observed_long) {
-            return std::nullopt;
-        }
-    }
-    return has_unknown_evidence ? QuantityMatch::unknown : QuantityMatch::exact;
+    const std::array segments{
+        QuantitySegment{
+            .range = candidate.stem,
+            .mask = database.stem_quantity(stem.lexeme, stem.lexical_slot),
+        },
+        QuantitySegment{
+            .range = candidate.ending,
+            .mask = database.inflection_quantity(candidate.rule),
+        },
+    };
+    return match_quantity_segments(surface, segments, QuantityMatch::exact);
 }
 
 [[nodiscard]] MorphologyKey
@@ -931,7 +934,8 @@ void append_prefix_analyses(const Database &database,
 void append_suffix_semantics(
     const Database &database, const SurfaceForm &surface,
     const CandidateIR &candidate,
-    const SuffixRule &suffix, const std::span<const StemReference> stems,
+    const SuffixRule &suffix, const std::size_t suffix_size,
+    const std::span<const StemReference> stems,
     const std::optional<AddonId> prefix_id,
     const DerivationIR &initial_derivation, const bool surface_has_quantity,
     std::vector<AnalysisIR> &output,
@@ -955,8 +959,8 @@ void append_suffix_semantics(
             continue;
         }
         const auto derived_quantity_match = suffix_quantity_match(
-            database, surface, candidate, stem, suffix,
-            database.suffix_string(suffix.fix).size(), surface_has_quantity);
+            database, surface, candidate, stem, suffix, suffix_size,
+            surface_has_quantity);
         if (!derived_quantity_match) {
             continue;
         }
@@ -1177,7 +1181,8 @@ void append_suffix_analyses(
                 for (const auto rule_id : group.rules) {
                     append_suffix_semantics(database, surface,
                                             group.candidate(rule_id),
-                                            suffix, base_stems, std::nullopt,
+                                            suffix, suffix_size, base_stems,
+                                            std::nullopt,
                                             initial_derivation, surface_has_quantity,
                                             output, state);
                 }
@@ -1228,7 +1233,8 @@ void append_suffix_analyses(
                         static_cast<std::uint32_t>(prefix_size);
                     append_suffix_semantics(database, surface,
                                             projected_candidate,
-                                            suffix, base_stems, prefix_id,
+                                            suffix, suffix_size, base_stems,
+                                            prefix_id,
                                             initial_derivation, surface_has_quantity,
                                             output, state);
                 }

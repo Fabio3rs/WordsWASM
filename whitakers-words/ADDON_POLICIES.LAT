@@ -1,3 +1,4 @@
 -- Allow the productive adjective-to-adverb suffix to coexist with a regular
--- homograph. Signature: ID, fix, source POS/key, target POS/key/degree, connector.
-SUFFIX 156 e ADJ 2 ADV 1 POS - COEXIST_REGULAR
+-- homograph. Signature: ID, fix, source POS/key, target POS/key/degree,
+-- connector, source declension/variant, coexistence policy.
+SUFFIX 156 e ADJ 2 ADV 1 POS - 1 1 COEXIST_REGULAR
