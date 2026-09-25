@@ -403,17 +403,20 @@ def main() -> None:
         json.loads(document) for document in batch_lines.stdout.splitlines()
     ]
     if len(batch_documents) != 2:
-        raise AssertionError("batch mode must emit one document per input line")
-    if batch_documents[0]["query"]["text"] != "amo amare":
-        raise AssertionError("batch mode lost the first input query")
-    if batch_documents[0]["status"] != "error":
-        raise AssertionError("a general phrase must remain one batch query")
+        raise AssertionError("batch mode must emit one JSON value per input line")
+    if not isinstance(batch_documents[0], list) or [
+        document["query"]["text"] for document in batch_documents[0]
+    ] != ["amo", "amare"]:
+        raise AssertionError("batch mode did not analyze both independent words")
+    if any(document["status"] != "analyzed" for document in batch_documents[0]):
+        raise AssertionError("batch mode lost an independent analysis")
+    for document in batch_documents[0]:
+        search_validator.validate(document)
     if batch_documents[1]["query"]["text"] != "amatus sum":
         raise AssertionError("batch mode lost the compound query")
     if batch_documents[1]["status"] != "analyzed":
         raise AssertionError("a recognized compound must work in batch mode")
-    for document in batch_documents:
-        search_validator.validate(document)
+    search_validator.validate(batch_documents[1])
 
     with tempfile.NamedTemporaryFile("w", encoding="utf-8") as input_file:
         input_file.write("amo amare\namatus sum\n\n")
@@ -432,10 +435,8 @@ def main() -> None:
             )
             file_documents = [json.loads(document)
                               for document in file_lines.stdout.splitlines()]
-            if [document["query"]["text"] for document in file_documents] != [
-                "amo amare", "amatus sum",
-            ]:
-                raise AssertionError("--input did not preserve file query lines")
+            if file_documents != batch_documents:
+                raise AssertionError("--input differs from stdin line analysis")
 
     invalid_stream = subprocess.run(
         [*native_base, "--format", "search", "--input", "-", "amo"],

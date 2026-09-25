@@ -32,7 +32,7 @@ Options:
   --human-style STYLE         normal (default) or compact (tab-separated rows).
   --detailed                  Show full meanings, editorial notes, and quantity evidence.
   --color MODE                auto (TTY), always, or never; human display only.
-  -i FILE, --input FILE       Read one query per line; use - for standard input.
+  -i FILE, --input FILE       Analyze each input line; use - for standard input.
                               With no text and no --input, read from standard input.
   --batch-json-lines, --batch Legacy aliases for --input -.
   --dataset-id ID             Verify the database dataset identifier.
@@ -55,6 +55,8 @@ needs one compact JSON value per line. The native command exits 2 for invalid in
 database/engine/input errors, and 4 for unexpected failures.
 Human output, including compact TSV, may change in minor releases.
 Select an explicit versioned format for a stable machine contract.
+Streamed JSON emits one value per input line: an object for one result or an
+array when the line produces multiple results.
 `);
 }
 

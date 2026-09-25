@@ -107,8 +107,10 @@ printf 'amo\npuella\n' | wordswasm --format analysis-v4 > analyses.jsonl
 wordswasm --input corpus.txt --human-style compact > readings.tsv
 ```
 
-For JSON, each non-empty input line emits compact JSONL. Human output uses
-readable blocks or tabular rows instead. Blank input lines are skipped.
+Each non-empty input line is tokenized completely. JSONL emits one compact
+value per input line: an object for one result or an array for multiple
+results. Human output uses readable blocks or tabular rows
+for each result. Blank input lines are skipped.
 Do not pass positional text together with `--input`. The legacy
 `--batch-json-lines` and `--batch` options remain silent aliases for `--input -`;
 the npm wrapper also selects `analysis-v4` for them when `--format` is omitted.

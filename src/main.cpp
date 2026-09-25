@@ -324,7 +324,7 @@ Options:
   --human-style STYLE         normal (default) or compact (tab-separated rows).
   --detailed                  Show full meanings, editorial notes, and quantity evidence.
   --color MODE                auto (TTY), always, or never; human display only.
-  -i FILE, --input FILE       Read one query per line; use - for standard input.
+  -i FILE, --input FILE       Analyze each input line; use - for standard input.
                               With no text and no --input, read from standard input.
   --batch-json-lines, --batch Legacy aliases for --input -.
   --filter-trim MOTIVES       Comma-separated Whitaker trim reasons to hide (v3/v4/human).
@@ -350,6 +350,8 @@ Formats:
 
 Human output, including compact TSV, is presentation and may change in minor releases.
 Select an explicit versioned format for a stable machine contract.
+Streamed JSON emits one value per input line: an object for one result or an
+array when the line produces multiple results.
 
 Exit status: 0 success; 2 invalid command; 3 database or engine failure;
 4 unexpected failure. Results are written to stdout; CLI errors to stderr.
@@ -417,33 +419,23 @@ void write_result(const words::Engine &engine, const words::QueryResult &result,
     std::print(stdout, "{}\n", document.dump(pretty ? 2 : -1));
 }
 
-void write_text_result(const words::Engine &engine,
-                       const std::string_view query,
-                       const std::string_view format,
-                       const words::AnalysisOptions options,
-                       const bool pretty,
-                       const words::client::ResultFilters &filters,
-                       const words::client::HumanOptions human,
-                       std::size_t &result_number) {
-    write_result(engine, engine.analyze_text(query, options), format, pretty,
-                 filters, human, result_number);
-}
-
 void write_line_results(const words::Engine &engine,
                         const std::string_view query,
                         const std::string_view format,
                         const words::AnalysisOptions options,
                         const bool pretty,
+                        const bool one_json_value_per_line,
                         const words::client::ResultFilters &filters,
                         const words::client::HumanOptions human,
                         std::size_t &result_number) {
     const auto results = engine.analyze_line(query, options);
-    if (pretty && results.size() > 1U) {
+    if (format != "human" && (pretty || one_json_value_per_line) &&
+        results.size() > 1U) {
         auto document = words::JsonDocument::array();
         for (const auto &result : results) {
             document.push_back(result_document(engine, result, format, filters));
         }
-        std::print(stdout, "{}\n", document.dump(2));
+        std::print(stdout, "{}\n", document.dump(pretty ? 2 : -1));
         return;
     }
     for (const auto &result : results) {
@@ -544,9 +536,9 @@ int main(const int argc, char *argv[]) try {
                 query.pop_back();
             }
             if (!query.empty()) {
-                write_text_result(**engine, query, options->format,
-                                  analysis_options, false, options->filters,
-                                  human, result_number);
+                write_line_results(**engine, query, options->format,
+                                   analysis_options, false, true,
+                                   options->filters, human, result_number);
             }
         }
         if (input->bad()) {
@@ -559,8 +551,8 @@ int main(const int argc, char *argv[]) try {
         }
     } else {
         write_line_results(**engine, options->word, options->format,
-                           analysis_options, options->pretty, options->filters,
-                           human, result_number);
+                           analysis_options, options->pretty, false,
+                           options->filters, human, result_number);
     }
     return 0;
 } catch (const std::bad_alloc &) {

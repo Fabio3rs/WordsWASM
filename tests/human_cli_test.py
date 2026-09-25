@@ -163,6 +163,25 @@ assert all("enclitic -que" not in row["note"] for row in enclitic_rows
 
 stream = rows("--input", "-", input_text="amo\npuella\n")
 assert {row["result"] for row in stream} == {"1", "2"}
+verse = rows("--input", "-", input_text="arma virumque cano\n")
+assert {row["input"] for row in verse} == {"arma", "virumque", "cano"}
+assert {row["result"] for row in verse} == {"1", "2", "3"}
+assert "too many tokens" not in run(
+    "--format", "human", input_text="arma virumque cano\n")
+verse_jsonl = run("--format", "analysis-v4", input_text="arma virumque cano\n")
+assert len(verse_jsonl.splitlines()) == 1
+verse_documents = json.loads(verse_jsonl)
+assert [item["query"]["text"] for item in verse_documents] == [
+    "arma", "virumque", "cano",
+]
+assert all(item["schemaVersion"] == 4 for item in verse_documents)
+assert json.loads(run("--format", "analysis-v4", input_text="amo\n"))[
+    "schemaVersion"] == 4
+compound_line = json.loads(run(
+    "--format", "analysis-v4", input_text="amatus sum cano\n"))
+assert [item["query"]["text"] for item in compound_line] == [
+    "amatus sum", "cano",
+]
 
 assert "\x1b[" not in run("--format", "human", "amo")
 assert "\x1b[" not in run("--format", "human", "--color=never", "amo")

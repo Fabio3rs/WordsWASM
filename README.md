@@ -186,7 +186,8 @@ printf 'amo\npuella\nmālum\n' | ./words_cli \
 `--pretty` indents JSON for terminal reading while keeping it valid JSON. If a
 query produces multiple independent results, it emits one JSON array.
 It is available only for a single command-line query; stream input always emits
-one compact JSON value per non-empty input line. `-i` is an alias for
+one compact JSON value per non-empty input line: an object for one result or
+an array for multiple results. `-i` is an alias for
 `--input`, `--db` and `-f` remain aliases for `--database` and `--format`, and
 `--batch-json-lines`/`--batch` remain legacy aliases for `--input -`. Run
 `words_cli --help` (or `-h`) for the full reference, and `words_cli --version`
