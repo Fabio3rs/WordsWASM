@@ -12,7 +12,10 @@ template <std::size_t Size>
 [[nodiscard]] constexpr std::string_view
 token(const std::uint8_t ordinal,
       const std::array<std::string_view, Size> &values) noexcept {
-    return ordinal < values.size() ? values.at(ordinal) : std::string_view{};
+    if (ordinal < values.size()) {
+        return values.at(ordinal);
+    }
+    return std::string_view{};
 }
 
 template <class Enum, std::size_t Size>

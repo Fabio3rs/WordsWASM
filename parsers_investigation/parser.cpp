@@ -4094,7 +4094,8 @@ struct SlrTable final {
                     continue;
                 }
                 auto reduced = stack;
-                reduced.resize(reduced.size() - production.rhs.size());
+                auto to_reserve = std::min(reduced.size() - production.rhs.size(), reduced.size());
+                reduced.resize(to_reserve);
                 const auto target =
                     table.gotos.find({reduced.back(), production.lhs});
                 if (target == table.gotos.end()) {
