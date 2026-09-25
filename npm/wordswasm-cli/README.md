@@ -37,20 +37,21 @@ download the appropriate standalone archive from [Releases] instead.
 ## Use
 
 The wrapper uses its bundled full database and human-readable output by
-default, including when stdout is redirected. Select `--format analysis-v3`
-or `--format search-v3` for JSON automation. Results go to standard output and
-CLI errors to standard error.
+default, including when stdout is redirected. Select `--format analysis-v4`
+or `--format search-v4` for JSON automation with suffix quantity evidence.
+Version 3 remains available for consumers of its existing document shape.
+Results go to standard output and CLI errors to standard error.
 
 ```sh
 wordswasm mālum
 wordswasm --pretty "amo puellam"
-wordswasm --format analysis-v3 amo
+wordswasm --format analysis-v4 amo
 wordswasm --human-style compact amo | rg 'verb'
 wordswasm --version
 wordswasm --help
 ```
 
-`--pretty` selects `analysis-v3` when `--format` is absent; it is still valid
+`--pretty` selects `analysis-v4` when `--format` is absent; it is still valid
 JSON, only indented for terminal reading. A query
 with multiple independent results is emitted as one JSON array. It is available
 only for a single command-line query; stream input always emits compact JSONL.
@@ -92,7 +93,7 @@ The actual separators are tabs. There is one row per reading, and one row with
 `suggestion:N` parts. Embedded
 tabs, newlines, backslashes, and control characters are escaped within fields.
 Both human styles are presentation formats; the TSV columns and their order may
-change in minor releases. Use `analysis-v3` or `search-v3` for a stable machine
+change in minor releases. Use an explicit versioned format for a stable machine
 contract.
 Compact output never contains color codes. In normal human output,
 `--color=auto` uses color only when stdout is a terminal; `always` and `never`
@@ -102,7 +103,7 @@ With no positional text, stdin is read as one query per line. `--input FILE`
 selects a file, and `--input -` selects stdin explicitly:
 
 ```sh
-printf 'amo\npuella\n' | wordswasm --format analysis-v3 > analyses.jsonl
+printf 'amo\npuella\n' | wordswasm --format analysis-v4 > analyses.jsonl
 wordswasm --input corpus.txt --human-style compact > readings.tsv
 ```
 
@@ -110,21 +111,22 @@ For JSON, each non-empty input line emits compact JSONL. Human output uses
 readable blocks or tabular rows instead. Blank input lines are skipped.
 Do not pass positional text together with `--input`. The legacy
 `--batch-json-lines` and `--batch` options remain silent aliases for `--input -`;
-the npm wrapper also selects `analysis-v3` for them when `--format` is omitted.
+the npm wrapper also selects `analysis-v4` for them when `--format` is omitted.
 
 ### Database and output choices
 
 ```sh
-wordswasm --db /path/to/words-search.wwdb --format search-v3 mālum
-wordswasm -f search-v3 mālum
+wordswasm --db /path/to/words-search.wwdb --format search-v4 mālum
+wordswasm -f search-v4 mālum
 ```
 
 `--db` is an alias for `--database`, and `-f` is an alias for `--format`.
-`analysis-v3` and `human` require a full database; `search-v3` accepts a full or
-search-only database. The v3 formats are the stable CLI JSON contracts from 1.0 onward.
-The binary may accept older development selectors, but those are unsupported
-migration paths; new integrations should use v3. See [Versioning] for the
-compatibility policy.
+`analysis-v3`, `analysis-v4`, and `human` require a full database;
+`search-v3` and `search-v4` accept a full or search-only database. Both v3 and
+v4 are versioned CLI JSON contracts for 1.0. The binary may accept older
+development selectors, but those are unsupported migration paths; new
+integrations needing suffix quantity evidence should use v4. See [Versioning]
+for the compatibility policy.
 
 ### Optional result filters
 
@@ -137,7 +139,8 @@ wordswasm --filter-trim=none rēs
 No filtering is enabled by default. `--filter-trim` accepts the six existing
 Whitaker trim reasons listed in `--help`, separated by commas, or `none`.
 Specify the option once; duplicate reasons are ignored. Active filters require
-`analysis-v3`, `search-v3`, or `human` and work with JSONL, `--pretty`, and human output.
+`analysis-v3`, `search-v3`, `analysis-v4`, `search-v4`, or `human` and work with
+JSONL, `--pretty`, and human output.
 
 These filters select presentation results; they do not change generation or
 assert that hidden forms are historically invalid. Notices do not override

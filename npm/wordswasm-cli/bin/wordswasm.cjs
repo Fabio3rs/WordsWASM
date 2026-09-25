@@ -17,17 +17,17 @@ Usage:
 
 Examples:
   wordswasm mālum
-  wordswasm --format analysis-v3 --pretty "amo puellam"
+  wordswasm --format analysis-v4 --pretty "amo puellam"
   wordswasm --human-style compact amo | rg 'verb'
   printf 'amo\\npuella\\n' | wordswasm
-  wordswasm --db /path/to/words-search.wwdb --format search-v3 mālum
+  wordswasm --db /path/to/words-search.wwdb --format search-v4 mālum
 
 Defaults:
   Uses the bundled full database and human-readable output.
 
 Options:
   --database FILE, --db FILE  Use another WWDB database.
-  --format FORMAT, -f FORMAT  human (default), analysis-v3, or search-v3.
+  --format FORMAT, -f FORMAT  human (default), analysis-v3/v4, or search-v3/v4.
   --pretty                    Indent JSON for terminal reading; emit an array for multiple results.
   --human-style STYLE         normal (default) or compact (tab-separated rows).
   --detailed                  Show full meanings, editorial notes, and quantity evidence.
@@ -36,7 +36,7 @@ Options:
                               With no text and no --input, read from standard input.
   --batch-json-lines, --batch Legacy aliases for --input -.
   --dataset-id ID             Verify the database dataset identifier.
-  --filter-trim MOTIVES       Hide comma-separated trim reasons (v3/human); none disables.
+  --filter-trim MOTIVES       Hide comma-separated trim reasons (v3/v4/human); none disables.
                               unsupported-short-imperative, invalid-imperative-person,
                               impersonal-non-third-person, deponent-active-form,
                               semideponent-passive-present-system,
@@ -49,12 +49,12 @@ Options:
   --help, -h                  Show this help.
   --version                   Show the wrapper package version.
 
-Results are written to stdout; CLI errors to stderr. --pretty selects JSON
+Results are written to stdout; CLI errors to stderr. --pretty selects analysis-v4
 when --format is omitted, but cannot be used with stream input because JSONL
 needs one compact JSON value per line. The native command exits 2 for invalid input, 3 for
 database/engine/input errors, and 4 for unexpected failures.
 Human output, including compact TSV, may change in minor releases.
-Select analysis-v3 or search-v3 for a stable machine contract.
+Select an explicit versioned format for a stable machine contract.
 `);
 }
 
@@ -116,7 +116,7 @@ if (!hasOption("--database", "--db")) {
 if (!hasOption("--format", "-f")) {
   const jsonRequested = ["--pretty", "--batch-json-lines", "--batch"]
     .some((option) => args.includes(option));
-  args.unshift("--format", jsonRequested ? "analysis-v3" : "human");
+  args.unshift("--format", jsonRequested ? "analysis-v4" : "human");
 }
 
 const result = spawnSync(binary, args, {stdio: "inherit"});

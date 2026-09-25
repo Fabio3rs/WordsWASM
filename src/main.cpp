@@ -327,7 +327,7 @@ Options:
   -i FILE, --input FILE       Read one query per line; use - for standard input.
                               With no text and no --input, read from standard input.
   --batch-json-lines, --batch Legacy aliases for --input -.
-  --filter-trim MOTIVES       Comma-separated Whitaker trim reasons to hide (v3/human).
+  --filter-trim MOTIVES       Comma-separated Whitaker trim reasons to hide (v3/v4/human).
                               Use none to explicitly disable filtering (default).
                               unsupported-short-imperative, invalid-imperative-person,
                               impersonal-non-third-person, deponent-active-form,
@@ -344,10 +344,12 @@ Options:
 Formats:
   analysis-v3  Full morphological analysis; requires a full WWDB.
   search-v3    Search-oriented result; works with full and search WWDBs.
+  analysis-v4  Analysis with suffix quantity evidence; requires a full WWDB.
+  search-v4    Search with suffix quantity evidence; works with both WWDBs.
   human        Readable analyses; requires a full WWDB.
 
 Human output, including compact TSV, is presentation and may change in minor releases.
-Select analysis-v3 or search-v3 for a stable machine contract.
+Select an explicit versioned format for a stable machine contract.
 
 Exit status: 0 success; 2 invalid command; 3 database or engine failure;
 4 unexpected failure. Results are written to stdout; CLI errors to stderr.

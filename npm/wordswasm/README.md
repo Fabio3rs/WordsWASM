@@ -116,7 +116,7 @@ wordswasm/assets/words_wasm.mjs
 wordswasm/assets/words_wasm.wasm
 ```
 
-The stable browser contract is schema 5. It is independent of the npm version,
+The stable 1.0 browser contract is schema 6. It is independent of the npm version,
 WWDB format, and `datasetId`; see [Versioning] before mixing downloaded data
 with a package from another release.
 

@@ -90,7 +90,8 @@ wordswasm mālum
 ```
 
 It uses its bundled full database and human-readable output by default. Pass
-`--format analysis-v3` or `--format search-v3` for JSON automation.
+`--format analysis-v4` or `--format search-v4` for JSON automation with suffix
+quantity evidence. Version 3 remains available for its existing document shape.
 
 Maintainers can follow the [npm publishing guide](docs/npm-publishing.md) for
 the local bootstrap and GitHub OIDC release process.
@@ -152,11 +153,14 @@ The native CLI requires an explicit database and format. Its output formats are:
 | --- | --- | --- |
 | `analysis-v3` | `words-full` | Complete analyses and quantity-resolved forms, lexical metadata, and meanings. |
 | `search-v3` | `words-full` or `words-search` | Compact hits with quantity-resolved forms and no meanings. |
+| `analysis-v4` | `words-full` | Analyses with suffix quantity evidence and database-supported display forms. |
+| `search-v4` | `words-full` or `words-search` | Search hits with suffix quantity evidence and database-supported display forms. |
 | `human` | `words-full` | Readable analyses or tab-separated rows (`--human-style compact`). |
 
 The binary may still accept older format selectors from development releases,
-but they are not part of the stable 1.x API. New integrations should select
-v3 explicitly. Quote a phrase or line containing spaces; compounds recognized
+but they are not part of the stable 1.x API. New integrations needing suffix
+quantity evidence should select v4 explicitly. Quote a phrase or line
+containing spaces; compounds recognized
 by the grammar are returned as one unit, while independent words produce
 separate JSON lines:
 
@@ -189,7 +193,7 @@ one compact JSON value per non-empty input line. `-i` is an alias for
 for the build version.
 The npm wrapper provides the same `wordswasm --help` and `wordswasm --version`
 commands before resolving its optional platform package. Its default output is
-`human`; `--pretty` without an explicit format selects `analysis-v3`.
+`human`; `--pretty` without an explicit format selects `analysis-v4`.
 Human output displays quantity coverage (`none`, `partial`, or `complete`) per
 reading. A displayed macron may come from the input where database evidence is
 absent, so coverage does not claim a fully marked word.

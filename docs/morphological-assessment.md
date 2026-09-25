@@ -6,11 +6,11 @@ a form rejected by Whitaker's `Trim_Output` policy is not thereby impossible.
 
 Native `AnalysisIR` carries a `MorphologicalAssessmentIR`. Native JSON first
 exposed it in schema v2; the stable CLI contracts expose it through
-`analysis-v3` and `search-v3`. The WebAssembly API exposes the same
-information as typed Embind objects in browser schema v5; JSON parsing and
-serialization remain outside the WASM binary. The browser contracts are
-documented by `schemas/browser-search-v5.schema.json` and
-`schemas/browser-analysis-v5.schema.json`. Earlier schemas remain historical
+`analysis-v3`, `search-v3`, `analysis-v4`, and `search-v4`. The WebAssembly API
+exposes the same information as typed Embind objects in browser schema v6;
+JSON parsing and serialization remain outside the WASM binary. The browser contracts are
+documented by `schemas/browser-search-v6.schema.json` and
+`schemas/browser-analysis-v6.schema.json`. Earlier schemas remain historical
 development records; see [versioning and compatibility](versioning.md).
 The Pages demo maps the typed reason/notice codes to explanatory English,
 Brazilian Portuguese, and Latin strings in `web/app.js`; those presentation
@@ -38,8 +38,9 @@ not a claim that the client has disabled presentation filters.
 ## Optional client filters
 
 The native CLI accepts `--filter-trim REASONS` (or `--filter-trim=REASONS`)
-with `analysis-v3` and `search-v3`. Supply comma-separated names from the six
-reasons above, without spaces, or `none` to explicitly disable filtering.
+with `analysis-v3`, `search-v3`, `analysis-v4`, and `search-v4`. Supply
+comma-separated names from the six reasons above, without spaces, or `none`
+to explicitly disable filtering.
 Specify the option once; duplicate reasons are harmless. Unknown names,
 empty items and active filters with legacy formats are argument errors.
 

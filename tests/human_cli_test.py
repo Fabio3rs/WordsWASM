@@ -239,8 +239,12 @@ if sys.platform == "linux" and platform.machine() == "x86_64" and shutil.which("
         assert "quantity evidence" in wrapper_run("malum")
         assert json.loads(wrapper_run("--format", "analysis-v3", "amo"))[
             "schemaVersion"] == 3
-        assert json.loads(wrapper_run("--pretty", "amo"))["schemaVersion"] == 3
-        assert len(wrapper_run("--batch-json-lines", input_text="amo\npuella\n")
-                   .splitlines()) == 2
+        assert json.loads(wrapper_run("--format", "analysis-v4", "amo"))[
+            "schemaVersion"] == 4
+        assert json.loads(wrapper_run("--pretty", "amo"))["schemaVersion"] == 4
+        batch = [json.loads(line) for line in wrapper_run(
+            "--batch-json-lines", input_text="amo\npuella\n").splitlines()]
+        assert len(batch) == 2
+        assert all(document["schemaVersion"] == 4 for document in batch)
 
 print("human CLI projection checks passed")
