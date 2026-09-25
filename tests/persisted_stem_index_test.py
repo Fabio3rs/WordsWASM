@@ -24,7 +24,8 @@ DIRECTORY_COUNT_OFFSET = 24
 DIRECTORY_STRIDE_OFFSET = 28
 STEM_REFERENCES_SECTION = 5
 LEGACY_MINOR = 9
-PERSISTED_STEM_INDEX_MINOR = 10
+PERSISTED_STEM_INDEX_MINOR = 11
+ADDON_ATTRIBUTE_SECTION_BYTES = DIRECTORY_ENTRY_SIZE + 8
 
 
 def pack(
@@ -189,41 +190,43 @@ def main() -> None:
             None,
         )
 
-        if len(legacy) != len(production):
-            raise AssertionError("persisted stem index changed the WWDB size")
+        if len(production) - len(legacy) != ADDON_ATTRIBUTE_SECTION_BYTES:
+            raise AssertionError("unexpected addon attributes section size")
         if production != repeated:
             raise AssertionError("persisted stem index output is nondeterministic")
         if (
             struct.unpack_from("<H", production, HEADER_MINOR_OFFSET)[0]
             != PERSISTED_STEM_INDEX_MINOR
         ):
-            raise AssertionError("production packer did not select WWDB 1.10")
+            raise AssertionError("production packer did not select WWDB 1.11")
         if struct.unpack_from("<H", legacy, HEADER_MINOR_OFFSET)[0] != LEGACY_MINOR:
             raise AssertionError("legacy option did not select WWDB 1.9")
         if legacy == production:
             raise AssertionError("A/B databases unexpectedly have identical bytes")
-        if len(legacy_search) != len(production_search):
-            raise AssertionError("persisted index changed search-only WWDB size")
+        if len(production_search) - len(legacy_search) != ADDON_ATTRIBUTE_SECTION_BYTES:
+            raise AssertionError("unexpected search-only addon attributes section size")
         if (
             struct.unpack_from("<H", production_search, HEADER_MINOR_OFFSET)[0]
             != PERSISTED_STEM_INDEX_MINOR
         ):
-            raise AssertionError("production search packer did not select WWDB 1.10")
+            raise AssertionError("production search packer did not select WWDB 1.11")
 
-        legacy_output = batch(arguments.cli, legacy_path, words)
+        # The engine cannot analyze with a bank that lacks addon attributes.
+        for old_path in (legacy_path, legacy_search_path):
+            rejected_old = subprocess.run(
+                [str(arguments.cli), "--database", str(old_path),
+                 "--format", "search-v3", "amo"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            if rejected_old.returncode != 3 or "unsupported-version" not in rejected_old.stderr:
+                raise AssertionError("engine accepted old WWDB without addon attributes")
+
         production_output = batch(arguments.cli, production_path, words)
-        if legacy_output != production_output:
-            raise AssertionError("persisted stem index changed corpus results")
-        legacy_search_output = batch(
-            arguments.cli, legacy_search_path, words
-        )
         production_search_output = batch(
             arguments.cli, production_search_path, words
         )
-        if legacy_search_output != production_search_output:
-            raise AssertionError(
-                "persisted stem index changed search-only corpus results"
-            )
         if production_output != production_search_output:
             raise AssertionError("full and search-only profiles disagree")
 
@@ -252,9 +255,9 @@ def main() -> None:
 
         print(
             "production persisted stem index: "
-            f"{len(words)} corpus forms byte-identical in both profiles; "
+            f"{len(words)} corpus forms agree across production profiles; "
             f"dense/search bytes={len(production)}/{len(production_search)}; "
-            "legacy 1.9 compatible; corrupt production order rejected"
+            "legacy 1.9 rejected; corrupt production order rejected"
         )
 
 

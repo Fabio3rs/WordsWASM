@@ -58,13 +58,23 @@ let expectedSearchLine;
 try {
   const macron = engine.analyze("mālum");
   assert.equal(macron.schema, "whitakers-words.browser-analysis");
-  assert.equal(macron.schemaVersion, 5);
+  assert.equal(macron.schemaVersion, 6);
   assert.equal(macron.query.normalized, "mālum");
   assert.ok(macron.hits.some((hit) => typeof hit.meaning === "string"));
 
+  const sancte = engine.analyze("sancte");
+  assert.ok(sancte.hits.some((hit) =>
+    hit.partOfSpeech === "adverb" && hit.form.display === "sanctē" &&
+    hit.form.quantity.positions.some((position) =>
+      position.origin === "suffix" && position.quantity === "long"),
+  ));
+  assert.ok(sancte.hits.some((hit) =>
+    hit.partOfSpeech === "adjective" && hit.form.display !== "sanctē",
+  ));
+
   const diminutive = engine.search("anaticulus");
   assert.equal(diminutive.schema, "whitakers-words.browser-search");
-  assert.equal(diminutive.schemaVersion, 5);
+  assert.equal(diminutive.schemaVersion, 6);
   assert.equal(diminutive.status, "analyzed");
   assert.ok(diminutive.hits.every((hit) => hit.meaning === undefined));
   assert.ok(diminutive.hits.some((hit) =>

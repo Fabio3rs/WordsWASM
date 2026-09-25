@@ -53,13 +53,26 @@ class Target:
     kind: str
     target_id: int
     slot: int | None
+    fix: str = ""
+    root_pos: str = ""
+    target_pos: str = ""
+    root_key: int = 0
+    target_key: int = 0
+    root_declension: int = 0
+    root_variant: int = 0
 
     def sort_key(self) -> tuple[int, int, int]:
-        return (0 if self.kind == "inflection" else 1, self.target_id, self.slot or 0)
+        return ({"inflection": 0, "stem": 1, "suffix": 2}[self.kind], self.target_id, self.slot or 0)
 
     def report(self) -> dict[str, Any]:
         if self.kind == "inflection":
             return {"kind": self.kind, "rule_id": self.target_id}
+        if self.kind == "suffix":
+            return {"kind": self.kind, "addon_id": self.target_id, "fix": self.fix,
+                    "root_pos": self.root_pos, "target_pos": self.target_pos,
+                    "root_key": self.root_key, "target_key": self.target_key,
+                    "root_declension": self.root_declension,
+                    "root_variant": self.root_variant}
         return {"kind": self.kind, "dictionary_entry": self.target_id, "slot": self.slot}
 
 
@@ -148,6 +161,27 @@ def parse_target(value: Any, context: str) -> Target:
         if slot > 4:
             raise QuantityImportError(f"{context}: stem slot must be in 1..4")
         return Target(kind, entry, slot)
+    if kind == "suffix":
+        addon_id = require_nonnegative_int(value, "addon_id", context)
+        if addon_id > 0xFFFF:
+            raise QuantityImportError(f"{context}: addon_id exceeds u16")
+        fix = require_string(value, "fix", context)
+        if ASCII_FORM.fullmatch(fix) is None or len(fix) > 8:
+            raise QuantityImportError(f"{context}: invalid suffix spelling")
+        root_pos = require_string(value, "root_pos", context)
+        target_pos = require_string(value, "target_pos", context)
+        if root_pos not in {"N", "ADJ", "ADV", "V", "NUM", "PRON", "X"} or target_pos not in {"N", "ADJ", "ADV", "V", "NUM", "PRON", "X"}:
+            raise QuantityImportError(f"{context}: invalid suffix part of speech")
+        root_key = require_nonnegative_int(value, "root_key", context)
+        target_key = require_nonnegative_int(value, "target_key", context)
+        if root_key > 4 or target_key > 4:
+            raise QuantityImportError(f"{context}: suffix stem key exceeds 0..4")
+        declension = require_nonnegative_int(value, "root_declension", context)
+        variant = require_nonnegative_int(value, "root_variant", context)
+        if declension > 9 or variant > 9:
+            raise QuantityImportError(f"{context}: suffix root paradigm exceeds 0..9")
+        return Target(kind, addon_id, None, fix, root_pos, target_pos,
+                      root_key, target_key, declension, variant)
     raise QuantityImportError(f"{context}: unsupported target kind {kind!r}")
 
 
@@ -234,7 +268,9 @@ def parse_records(records: Iterable[dict[str, Any]]) -> tuple[dict[str, Source],
         target = parse_target(record.get("target"), context)
         base = require_string(record, "base", context)
         marked = require_string(record, "marked", context)
-        maximum_length = 7 if target.kind == "inflection" else 18
+        maximum_length = {"inflection": 7, "stem": 18, "suffix": 8}[target.kind]
+        if target.kind == "suffix" and base != target.fix:
+            raise QuantityImportError(f"{context}: suffix evidence differs from target fix")
         if len(base) > maximum_length:
             raise QuantityImportError(
                 f"{context}: base exceeds the {maximum_length}-letter WWDB mask"
@@ -332,9 +368,17 @@ def render_microdata(promoted: Iterable[PromotedQuantity]) -> str:
             lines.append(
                 f"INFLECTION {item.target.target_id} {item.known} {item.long_vowel}"
             )
-        else:
+        elif item.target.kind == "stem":
             lines.append(
                 f"STEM {item.target.target_id} {item.target.slot} "
+                f"{item.known} {item.long_vowel}"
+            )
+        else:
+            target = item.target
+            lines.append(
+                f"SUFFIX {target.target_id} {target.fix} {target.root_pos} "
+                f"{target.root_key} {target.target_pos} {target.target_key} "
+                f"{target.root_declension} {target.root_variant} "
                 f"{item.known} {item.long_vowel}"
             )
     return "\n".join(lines) + "\n"

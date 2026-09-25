@@ -343,6 +343,10 @@ TEST(DatabaseTest, DenseAndSearchProfilesAgreeOnWireSemantics) {
     const auto &search_suffix = (*search)->suffix(suffix_id);
     EXPECT_EQ(search_suffix.root, dense_suffix.root);
     EXPECT_EQ(search_suffix.root_key, dense_suffix.root_key);
+    EXPECT_EQ(search_suffix.root_declension, dense_suffix.root_declension);
+    EXPECT_EQ(search_suffix.root_variant, dense_suffix.root_variant);
+    EXPECT_EQ(search_suffix.quantity.known, dense_suffix.quantity.known);
+    EXPECT_EQ(search_suffix.quantity.long_vowel, dense_suffix.quantity.long_vowel);
     EXPECT_EQ(search_suffix.target, dense_suffix.target);
     EXPECT_EQ(search_suffix.target_key, dense_suffix.target_key);
     EXPECT_EQ(search_suffix.target_declension, dense_suffix.target_declension);
@@ -1010,6 +1014,16 @@ TEST(DatabaseTest, LoadsAndIndexesSuffixRules) {
                suffix.target == PartOfSpeech::noun &&
                (*database)->suffix_string(suffix.fix) == "icul";
     }));
+    const auto &adverbial_e = (*database)->suffix(AddonId{156U});
+    EXPECT_EQ((*database)->suffix_string(adverbial_e.fix), "e");
+    EXPECT_EQ(adverbial_e.root, PartOfSpeech::adjective);
+    EXPECT_EQ(adverbial_e.target, PartOfSpeech::adverb);
+    EXPECT_EQ(adverbial_e.root_declension, 1U);
+    EXPECT_EQ(adverbial_e.root_variant, 1U);
+    EXPECT_EQ(adverbial_e.quantity.known, 1U);
+    EXPECT_EQ(adverbial_e.quantity.long_vowel, 1U);
+    EXPECT_TRUE(adverbial_e.coexists_with_regular);
+    EXPECT_FALSE((*database)->suffix(suffixes.front()).coexists_with_regular);
 }
 
 TEST(DatabaseTest, LoadsAndIndexesPrefixRules) {
@@ -1095,7 +1109,7 @@ TEST(DatabaseTest, RejectsUnsupportedProfile) {
 }
 
 TEST(DatabaseTest, RejectsUnsupportedVersionAndHeaderSize) {
-    for (const auto minor : {std::uint16_t{5U}, std::uint16_t{11U}}) {
+    for (const auto minor : {std::uint16_t{5U}, std::uint16_t{12U}}) {
         SCOPED_TRACE(minor);
         auto bytes = test::read_database();
         write_u16_le(bytes, test_header_minor_offset, minor);
@@ -1117,13 +1131,13 @@ TEST(DatabaseTest, RejectsUnsupportedVersionAndHeaderSize) {
     EXPECT_EQ(header_result.error().code, "unsupported-version");
 }
 
-TEST(DatabaseTest, AcceptsProductionStemOrderThroughLegacyCompatibilityPath) {
+TEST(DatabaseTest, RejectsRetaggedNewImageAsLegacyVersion) {
     auto bytes = test::read_database();
     write_u16_le(bytes, test_header_minor_offset,
                  detail::wwdb::morphological_notices_minor_version);
     const auto database = Database::load_poc(std::move(bytes));
-    ASSERT_TRUE(database) << database.error().message;
-    EXPECT_FALSE((*database)->lookup_stem("puell").empty());
+    ASSERT_FALSE(database);
+    EXPECT_EQ(database.error().code, "unknown-section");
 }
 
 TEST(DatabaseTest, RejectsUnsafeSectionCountsAndTypes) {
@@ -1136,7 +1150,7 @@ TEST(DatabaseTest, RejectsUnsafeSectionCountsAndTypes) {
         EXPECT_EQ(database.error().code, "invalid-directory");
     }
 
-    for (const auto type : {std::uint32_t{0U}, std::uint32_t{25U}}) {
+    for (const auto type : {std::uint32_t{0U}, std::uint32_t{26U}}) {
         SCOPED_TRACE(type);
         auto bytes = test::read_database();
         write_u32_le(bytes, test_directory_offset, type);

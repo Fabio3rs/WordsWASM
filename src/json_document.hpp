@@ -22,5 +22,9 @@ using JsonDocument = nlohmann::ordered_json;
                                                       const QueryResult &result);
 [[nodiscard]] JsonDocument search_json_v3_document(const Engine &engine,
                                                     const QueryResult &result);
+[[nodiscard]] JsonDocument analysis_json_v4_document(const Engine &engine,
+                                                      const QueryResult &result);
+[[nodiscard]] JsonDocument search_json_v4_document(const Engine &engine,
+                                                    const QueryResult &result);
 
 } // namespace words

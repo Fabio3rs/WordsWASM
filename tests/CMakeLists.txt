@@ -2,6 +2,7 @@ add_executable(words_tests
     artificial_test.cpp
     database_test.cpp
     engine_test.cpp
+    json_projection_test.cpp
     lexer_test.cpp
     result_filters_test.cpp
     ../src/result_filters.cpp

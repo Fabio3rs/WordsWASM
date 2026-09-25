@@ -1147,8 +1147,17 @@ TEST(EngineTest, AdverbialEQuantityControlFormsStayIndependent) {
     for (const auto word : {"sancte", "improbe", "perfide"}) {
         EXPECT_TRUE(has_derived_adverb(word)) << word;
     }
-    for (const auto word : {"sanctē", "improbē", "perfidē"}) {
+    for (const auto word : {"sanctē", "improbē", "perfidē", "sanctēque"}) {
         EXPECT_TRUE(has_derived_adverb(word)) << word;
+        const auto result = test::engine().analyze(word);
+        EXPECT_TRUE(std::ranges::any_of(result.analyses, [&](const AnalysisIR &analysis) {
+            return std::holds_alternative<AdverbMorphology>(analysis.morphology) &&
+                   analysis.quantity_match == QuantityMatch::exact &&
+                   std::ranges::any_of(analysis.derivation.steps(), [&](const AddonId id) {
+                       return database.addon_kind(id) == AddonKind::suffix &&
+                              database.suffix_string(database.suffix(id).fix) == "e";
+                   });
+        })) << word;
     }
 
     // Stored adverbs and a third-declension case form have no productive
@@ -1170,11 +1179,9 @@ TEST(EngineTest, AdverbialEQuantityControlFormsStayIndependent) {
     }));
 }
 
-// Pending QUANTITIES.LAT support for suffix targets. The current importer,
-// packer and engine accept quantity evidence only for stems and inflections.
-TEST(EngineTest, DISABLED_AdverbialLongESuffixRejectsBriefE) {
+TEST(EngineTest, AdverbialLongESuffixRejectsBriefE) {
     const auto &database = test::engine().database();
-    for (const auto word : {"sanctĕ", "improbĕ", "perfidĕ"}) {
+    for (const auto word : {"sanctĕ", "improbĕ", "perfidĕ", "sanctĕque"}) {
         const auto result = test::engine().analyze(word);
         EXPECT_TRUE(std::ranges::none_of(result.analyses, [&](const AnalysisIR &analysis) {
             return std::holds_alternative<AdverbMorphology>(analysis.morphology) &&
@@ -1185,6 +1192,7 @@ TEST(EngineTest, DISABLED_AdverbialLongESuffixRejectsBriefE) {
         })) << word;
     }
 }
+
 
 TEST(EngineTest, EmitsRomanNumeralsWithoutSyntheticLexemeIds) {
     const auto result = test::engine().analyze("IV");

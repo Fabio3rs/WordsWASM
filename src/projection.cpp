@@ -274,7 +274,8 @@ ResolvedForm unquantified_form(std::string stem, const std::uint8_t stem_key,
 }
 
 ResolvedForm resolved_form(const Database &database, const SurfaceForm &surface,
-                           const AnalysisIR &analysis) {
+                           const AnalysisIR &analysis,
+                           const bool include_suffix_quantity) {
     auto form =
         unquantified_form(analysis.derivation.rewritten_form
                               ? analysis.derivation.rewritten_form->stem
@@ -306,13 +307,39 @@ ResolvedForm resolved_form(const Database &database, const SurfaceForm &surface,
 
     std::vector<VowelQuantity> database_quantities(
         recognized->quantities.size(), VowelQuantity::unknown);
-    if (!stem->lookup_ascii.empty()) {
+    std::size_t lexical_stem_size = stem->quantities.size();
+    const SuffixRule *quantity_suffix = nullptr;
+    for (const auto addon_id : analysis.derivation.steps()) {
+        if (!include_suffix_quantity) {
+            break;
+        }
+        if (database.addon_kind(addon_id) != AddonKind::suffix) {
+            continue;
+        }
+        const auto &suffix = database.suffix(addon_id);
+        const auto fix = database.suffix_string(suffix.fix);
+        if (fix.size() <= stem->lookup_ascii.size() &&
+            lookup_prefix_matches(
+                fix, std::string_view{stem->lookup_ascii}.substr(
+                         stem->lookup_ascii.size() - fix.size()))) {
+            quantity_suffix = &suffix;
+            lexical_stem_size -= fix.size();
+        }
+        break;
+    }
+    if (lexical_stem_size != 0U) {
         if (const auto mask = consensus_stem_quantity(database, analysis,
-                                                      stem->lookup_ascii)) {
-            apply_mask(*mask, stem->quantities.size(), 0U, QuantityOrigin::stem,
+                                                      std::string_view{stem->lookup_ascii}.substr(0U, lexical_stem_size))) {
+            apply_mask(*mask, lexical_stem_size, 0U, QuantityOrigin::stem,
                        *recognized, database_quantities,
                        form.quantity.positions);
         }
+    }
+    if (quantity_suffix != nullptr) {
+        apply_mask(quantity_suffix->quantity,
+                   stem->quantities.size() - lexical_stem_size,
+                   lexical_stem_size, QuantityOrigin::suffix, *recognized,
+                   database_quantities, form.quantity.positions);
     }
 
     const auto stored_ending =

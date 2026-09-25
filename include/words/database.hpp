@@ -64,6 +64,7 @@ struct UniqueReference final {
 
 struct InflectionRule final {
     RuleId id;
+    QuantityMask quantity;
     PartOfSpeech part_of_speech{PartOfSpeech::unknown};
     std::uint8_t declension{};
     std::uint8_t variant{};
@@ -88,6 +89,10 @@ struct SuffixRule final {
     SuffixMeaningId meaning;
     PartOfSpeech root{PartOfSpeech::unknown};
     std::uint8_t root_key{};
+    std::uint8_t root_declension{};
+    std::uint8_t root_variant{};
+    QuantityMask quantity;
+    bool coexists_with_regular{};
     PartOfSpeech target{PartOfSpeech::unknown};
     std::uint8_t target_key{};
     std::uint8_t target_declension{};
@@ -163,6 +168,10 @@ class Database final {
     Database(Database &&) = delete;
     Database &operator=(Database &&) = delete;
     ~Database() = default;
+
+    [[nodiscard]] std::uint16_t format_minor_version() const noexcept {
+        return format_minor_version_;
+    }
 
     // Lookup keys are lowercase Latin ASCII with j/i and v/u already folded.
     // The empty key is valid where it exists in the indexed domain.
@@ -308,13 +317,16 @@ class Database final {
     [[nodiscard]] static std::size_t
     rewrite_route_index(RewriteKind kind, RewriteStage stage) noexcept;
 
-    explicit Database(std::vector<std::byte> image, DatabaseContent content)
-        : image_{std::move(image)}, content_{content} {}
+    explicit Database(std::vector<std::byte> image, DatabaseContent content,
+                      std::uint16_t format_minor_version)
+        : image_{std::move(image)}, content_{content},
+          format_minor_version_{format_minor_version} {}
 
     void canonicalize_lookup_group_keys();
 
     std::vector<std::byte> image_;
     DatabaseContent content_{DatabaseContent::full};
+    std::uint16_t format_minor_version_{};
     std::vector<std::string_view> stem_strings_;
     std::vector<std::string_view> meaning_strings_;
     std::vector<std::string_view> ending_strings_;
@@ -328,7 +340,6 @@ class Database final {
     std::vector<std::string_view> rewrite_meanings_;
     std::vector<LexemeRecord> lexemes_;
     std::vector<InflectionRule> rules_;
-    std::vector<QuantityMask> inflection_quantities_;
     std::vector<StemQuantityRecord> stem_quantities_;
     std::vector<MorphologicalNoticeRecord> morphological_notices_;
     std::vector<SuffixRule> suffixes_;

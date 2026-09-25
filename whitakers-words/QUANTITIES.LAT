@@ -421,3 +421,6 @@ STEM 37920 1 2 0
 STEM 37922 1 2 2
 -- vĕtus; evidence: review-ls-n50773-vetus-e38798-s1
 STEM 38798 1 2 0
+
+-- first/second-declension adjective adverbial -ē; evidence: grammar-adverbial-e-suffix
+SUFFIX 156 e ADJ 2 ADV 1 1 1 1 1

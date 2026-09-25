@@ -298,6 +298,9 @@ find_optional_section(const std::vector<SectionView> &sections,
 
 [[nodiscard]] constexpr std::uint32_t
 maximum_section_type(const std::uint16_t minor_version) noexcept {
+    if (minor_version >= wwdb::addon_attributes_minor_version) {
+        return wwdb::addon_attributes_maximum_section_type;
+    }
     if (minor_version >= wwdb::morphological_notices_minor_version) {
         return wwdb::morphological_notices_maximum_section_type;
     }
@@ -561,6 +564,13 @@ void validate_section_shapes(const std::vector<SectionView> &sections,
         fail("missing-section",
              "WWDB 1.9 requires the morphological notices section");
     }
+    if (const auto *section = find_optional_section(
+            sections, SectionType::addon_attributes)) {
+        require_shape(*section, wwdb::section_flag_row_major,
+                      wwdb::addon_attribute_stride);
+    } else if (minor_version >= wwdb::addon_attributes_minor_version) {
+        fail("missing-section", "WWDB 1.11 requires addon attributes");
+    }
 
     const auto &stem_boundaries =
         find_section(sections, SectionType::stem_prefix_boundaries);
@@ -659,10 +669,11 @@ Database::load_poc(std::vector<std::byte> image) try {
          minor != wwdb::quantity_minor_version &&
          minor != wwdb::typed_packon_minor_version &&
          minor != wwdb::morphological_notices_minor_version &&
-         minor != wwdb::persisted_stem_index_minor_version) ||
+         minor != wwdb::persisted_stem_index_minor_version &&
+         minor != wwdb::addon_attributes_minor_version) ||
         header_size != wwdb::fixed_header_size) {
         fail("unsupported-version",
-             "only PoC WWDB versions 1.6 through 1.10 are supported");
+             "only PoC WWDB versions 1.6 through 1.11 are supported");
     }
     if (profile != std::to_underlying(wwdb::Profile::dense) &&
         profile != std::to_underlying(wwdb::Profile::search_only)) {
@@ -790,6 +801,8 @@ Database::load_poc(std::vector<std::byte> image) try {
         find_optional_section(sections, SectionType::inflection_quantities);
     const auto *stem_quantity_section =
         find_optional_section(sections, SectionType::stem_quantities);
+    const auto *addon_attribute_section =
+        find_optional_section(sections, SectionType::addon_attributes);
     const auto *morphological_notice_section =
         find_optional_section(sections, SectionType::morphological_notices);
     if (minor >= wwdb::quantity_minor_version &&
@@ -803,7 +816,7 @@ Database::load_poc(std::vector<std::byte> image) try {
     validate_section_shapes(sections, content, minor);
 
     auto database =
-        std::unique_ptr<Database>{new Database{std::move(image), content}};
+        std::unique_ptr<Database>{new Database{std::move(image), content, minor}};
     const auto owned_bytes = std::span<const std::byte>{database->image_};
     parse_string_pool(section_bytes(owned_bytes, stem_pool_section),
                       stem_pool_section.count, database->stem_strings_);
@@ -1520,9 +1533,12 @@ Database::load_poc(std::vector<std::byte> image) try {
     }
 
     if (inflection_quantity_section != nullptr) {
-        database->inflection_quantities_ = parse_inflection_quantities(
+        const auto quantities = parse_inflection_quantities(
             owned_bytes, *inflection_quantity_section, database->rules_,
             database->ending_strings_);
+        for (std::size_t index = 0; index < quantities.size(); ++index) {
+            database->rules_[index].quantity = quantities[index];
+        }
     }
 
     if (stem_quantity_section != nullptr) {
@@ -1880,6 +1896,51 @@ Database::load_poc(std::vector<std::byte> image) try {
             std::max(database->maximum_suffix_size_,
                      database->suffix_string(suffix.fix).size());
         database->suffixes_.push_back(suffix);
+    }
+
+    if (addon_attribute_section != nullptr) {
+        const auto attribute_bytes =
+            section_bytes(owned_bytes, *addon_attribute_section);
+        std::optional<std::uint16_t> previous_id;
+        for (std::uint32_t ordinal = 0; ordinal < addon_attribute_section->count;
+             ++ordinal) {
+            const auto offset = static_cast<std::size_t>(ordinal) *
+                                wwdb::addon_attribute_stride;
+            const auto id = read_u16_le(attribute_bytes, offset);
+            const auto kind = byte_at(attribute_bytes,
+                                      offset + wwdb::addon_attribute_kind_offset);
+            const auto paradigm = byte_at(
+                attribute_bytes, offset + wwdb::addon_attribute_paradigm_offset);
+            const auto known = read_u16_le(
+                attribute_bytes, offset + wwdb::addon_attribute_known_offset);
+            const auto long_vowel = read_u16_le(
+                attribute_bytes, offset + wwdb::addon_attribute_long_offset);
+            const auto suffix = std::ranges::find(database->suffixes_, AddonId{id},
+                                                  &SuffixRule::id);
+            if ((kind & wwdb::addon_attribute_kind_mask) !=
+                    std::to_underlying(AddonKind::suffix) ||
+                (kind & wwdb::addon_attribute_reserved_mask) != 0U ||
+                suffix == database->suffixes_.end() ||
+                (previous_id && id <= *previous_id) ||
+                (long_vowel & ~known) != 0U ||
+                (static_cast<std::uint32_t>(known) >>
+                 database->suffix_string(suffix->fix).size()) != 0U ||
+                !quantity_positions_are_vowels(
+                    database->suffix_string(suffix->fix), known)) {
+                fail("invalid-addon-attributes",
+                     "addon attributes do not match a suffix rule");
+            }
+            suffix->root_declension = checked_nibble(
+                static_cast<std::uint8_t>(paradigm >> wwdb::paradigm_shift),
+                "suffix root declension");
+            suffix->root_variant = checked_nibble(
+                static_cast<std::uint8_t>(paradigm & wwdb::nibble_mask),
+                "suffix root variant");
+            suffix->quantity = {.known = known, .long_vowel = long_vowel};
+            suffix->coexists_with_regular =
+                (kind & wwdb::addon_attribute_coexists_with_regular) != 0U;
+            previous_id = id;
+        }
     }
 
     struct IndexedSuffix final {
@@ -2347,8 +2408,8 @@ const InflectionRule &Database::rule(const RuleId id) const {
 
 QuantityMask Database::inflection_quantity(const RuleId id) const noexcept {
     const auto ordinal = static_cast<std::size_t>(id.value());
-    return ordinal < inflection_quantities_.size()
-               ? inflection_quantities_[ordinal]
+    return ordinal < rules_.size()
+               ? rules_[ordinal].quantity
                : QuantityMask{};
 }
 

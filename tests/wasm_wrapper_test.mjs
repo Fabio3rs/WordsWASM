@@ -16,7 +16,7 @@ function fakeResult(schema, text, twoWords) {
     : [];
   return {
     schema,
-    schemaVersion: 5,
+    schemaVersion: 6,
     datasetId,
     query: {text, normalized: text, mode: "latin"},
     status: "analyzed",
@@ -344,7 +344,7 @@ test("copies typed morphology assessments and concrete rewrite provenance", asyn
       search() {
         return {
           schema: "whitakers-words.browser-search",
-          schemaVersion: 5,
+          schemaVersion: 6,
           datasetId,
           query: {text: "teologia", normalized: "teologia", mode: "latin"},
           status: "analyzed",
@@ -403,7 +403,7 @@ test("releases every direct result handle when hit copying throws", async () => 
       search() {
         return {
           schema: "whitakers-words.browser-search",
-          schemaVersion: 5,
+          schemaVersion: 6,
           datasetId,
           query: {text: "x", normalized: "x", mode: "latin"},
           status: "analyzed",
@@ -441,7 +441,7 @@ test("releases the line and nested handles when result copying throws", async ()
       searchLine() {
         const result = {
           schema: "whitakers-words.browser-search",
-          schemaVersion: 5,
+          schemaVersion: 6,
           datasetId,
           query: {text: "x", normalized: "x", mode: "latin"},
           status: "analyzed",
@@ -493,7 +493,7 @@ test("releases nested derivation handles when their copy throws", async () => {
       search() {
         return {
           schema: "whitakers-words.browser-search",
-          schemaVersion: 5,
+          schemaVersion: 6,
           datasetId,
           query: {text: "x", normalized: "x", mode: "latin"},
           status: "analyzed",

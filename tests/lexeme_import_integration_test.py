@@ -22,6 +22,7 @@ LEGACY_INPUTS = (
     "STEMFILE.GEN",
     "INFLECTS.SEC",
     "ADDONS.LAT",
+    "ADDON_POLICIES.LAT",
     "PACKON_REQUIREMENTS.LAT",
     "UNIQUES.LAT",
     "REWRITES.LAT",
@@ -223,6 +224,54 @@ def main() -> None:
         )
         if failed.returncode == 0 or "u16 lexeme/reference capacity" not in failed.stderr:
             raise AssertionError("packer did not reject overflowing u16 references")
+
+        # A source reorder or changed morphological signature must not attach
+        # reviewed suffix quantity to a different ADDONS.LAT rule silently.
+        (root / "LEXEMES.LAT").write_text(
+            COMPILE.render_jsonl([COMPILE.compile_decision(accepted)]),
+            encoding="utf-8",
+        )
+        quantity_path = root / "QUANTITIES.LAT"
+        original_quantities = quantity_path.read_text(encoding="utf-8")
+        signature = "SUFFIX 156 e ADJ 2 ADV 1 1 1 1 1"
+        if signature not in original_quantities:
+            raise AssertionError("expected reviewed suffix signature is absent")
+        quantity_path.unlink()
+        quantity_path.write_text(
+            original_quantities.replace(
+                signature,
+                "SUFFIX 156 e ADJ 1 ADV 1 1 1 1 1",
+            ),
+            encoding="utf-8",
+        )
+        invalid_rule = subprocess.run(
+            [str(arguments.packer), str(root), str(root / "invalid-rule.wwdb"), "dense"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if invalid_rule.returncode == 0 or "inconsistent with ADDONS.LAT" not in invalid_rule.stderr:
+            raise AssertionError("packer accepted quantity linked to a changed suffix rule")
+
+        quantity_path.write_text(original_quantities, encoding="utf-8")
+        policy_path = root / "ADDON_POLICIES.LAT"
+        original_policy = policy_path.read_text(encoding="utf-8")
+        policy_signature = "SUFFIX 156 e ADJ 2 ADV 1 POS - COEXIST_REGULAR"
+        if policy_signature not in original_policy:
+            raise AssertionError("expected reviewed suffix policy is absent")
+        policy_path.unlink()
+        policy_path.write_text(
+            original_policy.replace(policy_signature,
+                                    "SUFFIX 156 e ADJ 1 ADV 1 POS - COEXIST_REGULAR"),
+            encoding="utf-8",
+        )
+        invalid_policy = subprocess.run(
+            [str(arguments.packer), str(root), str(root / "invalid-policy.wwdb"), "dense"],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        if (invalid_policy.returncode == 0 or
+                "suffix policy is inconsistent with ADDONS.LAT" not in invalid_policy.stderr):
+            raise AssertionError("packer accepted policy linked to a changed suffix rule")
 
 
 if __name__ == "__main__":

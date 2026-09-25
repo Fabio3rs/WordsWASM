@@ -72,7 +72,7 @@ class QuantityImportTest(unittest.TestCase):
             (ROOT / "whitakers-words/QUANTITIES.LAT").read_text(encoding="utf-8"),
         )
         report = json.loads(result.report)
-        self.assertEqual(report["counts"]["promoted_targets"], 209)
+        self.assertEqual(report["counts"]["promoted_targets"], 210)
         self.assertEqual(report["counts"]["deferred_evidence"], 2)
 
     def test_confirmed_evidence_merges_disjoint_positions(self) -> None:

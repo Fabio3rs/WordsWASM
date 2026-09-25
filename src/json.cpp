@@ -743,10 +743,12 @@ void enrich_full_form(Json &analysis, const ResolvedForm &form) {
 
 [[nodiscard]] Json full_analysis_v3(const Engine &engine,
                                     const SurfaceForm &surface,
-                                    const AnalysisIR &analysis) {
+                                    const AnalysisIR &analysis,
+                                    const bool include_suffix_quantity) {
     auto output = full_analysis(engine, surface, analysis, true);
     enrich_full_form(output,
-                     resolved_form(engine.database(), surface, analysis));
+                     resolved_form(engine.database(), surface, analysis,
+                                   include_suffix_quantity));
     output["quantityMatch"] = quantity_match_name(analysis.quantity_match);
     return output;
 }
@@ -914,7 +916,8 @@ search_two_word_suggestion(const TwoWordSuggestionIR &suggestion,
 
 [[nodiscard]] Json compact_lexical_v3(const Database &database,
                                       const SurfaceForm &surface,
-                                      const AnalysisIR &analysis) {
+                                      const AnalysisIR &analysis,
+                                      const bool include_suffix_quantity) {
     Json addon_ids = Json::array();
     for (const auto id : analysis.derivation.steps()) {
         addon_ids.push_back(id.value());
@@ -927,7 +930,8 @@ search_two_word_suggestion(const TwoWordSuggestionIR &suggestion,
         {"scoreFlags", 0},
         {"quantityMatch", quantity_match_name(analysis.quantity_match)},
         {"form",
-         resolved_form_json(resolved_form(database, surface, analysis))},
+         resolved_form_json(resolved_form(database, surface, analysis,
+                                          include_suffix_quantity))},
         {"assessment", morphological_assessment_json(analysis.assessment)},
     };
     if (analysis.derivation.rewritten_form) {
@@ -1309,7 +1313,10 @@ Json search_json_v2_document(const Engine &engine, const QueryResult &result) {
     return output;
 }
 
-Json analysis_json_v3_document(const Engine &engine, const QueryResult &result) {
+static Json analysis_json_resolved_document(const Engine &engine,
+                                     const QueryResult &result,
+                                     const int schema_version,
+                                     const bool include_suffix_quantity) {
     if (!engine.owns(result)) {
         throw std::logic_error{
             "analysis result belongs to a different dataset"};
@@ -1330,7 +1337,8 @@ Json analysis_json_v3_document(const Engine &engine, const QueryResult &result) 
                 ordered.emplace_back(
                     analysis_order_key(engine.database(), result.surface,
                                        analysis),
-                    full_analysis_v3(engine, result.surface, analysis));
+                    full_analysis_v3(engine, result.surface, analysis,
+                                     include_suffix_quantity));
             } else if constexpr (std::is_same_v<Analysis, CompoundAnalysisIR>) {
                 ordered.emplace_back(
                     analysis_order_key(engine.database(), analysis),
@@ -1358,7 +1366,7 @@ Json analysis_json_v3_document(const Engine &engine, const QueryResult &result) 
     }
     Json output{
         {"schema", "whitakers-words.analysis"},
-        {"schemaVersion", 3},
+        {"schemaVersion", schema_version},
         {"query", query_json(result)},
         {"options", analysis_options_json(result.options)},
         {"status", status_name(result.status)},
@@ -1373,7 +1381,8 @@ Json analysis_json_v3_document(const Engine &engine, const QueryResult &result) 
                 ordered.emplace_back(
                     analysis_order_key(engine.database(), segment.surface,
                                        analysis),
-                    full_analysis_v3(engine, segment.surface, analysis));
+                    full_analysis_v3(engine, segment.surface, analysis,
+                                     include_suffix_quantity));
             }
             std::ranges::sort(ordered, {},
                               &std::pair<AnalysisOrderKey, Json>::first);
@@ -1396,8 +1405,9 @@ Json analysis_json_v3_document(const Engine &engine, const QueryResult &result) 
     if (!result.independent_tokens.empty()) {
         Json tokens = Json::array();
         for (const auto &token : result.independent_tokens) {
-            const auto token_document = analysis_json_v3_document(
-                engine, independent_token_result(result, token));
+            const auto token_document = analysis_json_resolved_document(
+                engine, independent_token_result(result, token),
+                schema_version, include_suffix_quantity);
             tokens.push_back(Json{
                 {"query", token_document.at("query")},
                 {"status", token_document.at("status")},
@@ -1410,7 +1420,10 @@ Json analysis_json_v3_document(const Engine &engine, const QueryResult &result) 
     return output;
 }
 
-Json search_json_v3_document(const Engine &engine, const QueryResult &result) {
+static Json search_json_resolved_document(const Engine &engine,
+                                   const QueryResult &result,
+                                   const int schema_version,
+                                   const bool include_suffix_quantity) {
     if (!engine.owns(result)) {
         throw std::logic_error{
             "analysis result belongs to a different dataset"};
@@ -1431,7 +1444,8 @@ Json search_json_v3_document(const Engine &engine, const QueryResult &result) {
                           });
         for (const auto *analysis : ordered) {
             hits.push_back(compact_lexical_v3(engine.database(), result.surface,
-                                              *analysis));
+                                              *analysis,
+                                              include_suffix_quantity));
         }
         // Preserve search-v2's family ordering. V3 enriches the projected hit;
         // it does not make ordering another observable behavior change.
@@ -1453,7 +1467,7 @@ Json search_json_v3_document(const Engine &engine, const QueryResult &result) {
     }
     Json output{
         {"schema", "whitakers-words.search"},
-        {"schemaVersion", 3},
+        {"schemaVersion", schema_version},
         {"datasetId", engine.dataset_id()},
         {"query", query_json(result)},
         {"options", analysis_options_json(result.options)},
@@ -1470,7 +1484,7 @@ Json search_json_v3_document(const Engine &engine, const QueryResult &result) {
                     analysis_order_key(engine.database(), segment.surface,
                                        analysis),
                     compact_lexical_v3(engine.database(), segment.surface,
-                                       analysis));
+                                       analysis, include_suffix_quantity));
             }
             std::ranges::sort(ordered, {},
                               &std::pair<AnalysisOrderKey, Json>::first);
@@ -1493,8 +1507,9 @@ Json search_json_v3_document(const Engine &engine, const QueryResult &result) {
     if (!result.independent_tokens.empty()) {
         Json tokens = Json::array();
         for (const auto &token : result.independent_tokens) {
-            const auto token_document = search_json_v3_document(
-                engine, independent_token_result(result, token));
+            const auto token_document = search_json_resolved_document(
+                engine, independent_token_result(result, token),
+                schema_version, include_suffix_quantity);
             tokens.push_back(Json{
                 {"query", token_document.at("query")},
                 {"status", token_document.at("status")},
@@ -1505,6 +1520,22 @@ Json search_json_v3_document(const Engine &engine, const QueryResult &result) {
         output["tokens"] = std::move(tokens);
     }
     return output;
+}
+
+Json analysis_json_v3_document(const Engine &engine, const QueryResult &result) {
+    return analysis_json_resolved_document(engine, result, 3, false);
+}
+
+Json search_json_v3_document(const Engine &engine, const QueryResult &result) {
+    return search_json_resolved_document(engine, result, 3, false);
+}
+
+Json analysis_json_v4_document(const Engine &engine, const QueryResult &result) {
+    return analysis_json_resolved_document(engine, result, 4, true);
+}
+
+Json search_json_v4_document(const Engine &engine, const QueryResult &result) {
+    return search_json_resolved_document(engine, result, 4, true);
 }
 
 std::string analysis_json(const Engine &engine, const QueryResult &result) {
@@ -1529,6 +1560,14 @@ std::string analysis_json_v3(const Engine &engine, const QueryResult &result) {
 
 std::string search_json_v3(const Engine &engine, const QueryResult &result) {
     return search_json_v3_document(engine, result).dump();
+}
+
+std::string analysis_json_v4(const Engine &engine, const QueryResult &result) {
+    return analysis_json_v4_document(engine, result).dump();
+}
+
+std::string search_json_v4(const Engine &engine, const QueryResult &result) {
+    return search_json_v4_document(engine, result).dump();
 }
 
 } // namespace words

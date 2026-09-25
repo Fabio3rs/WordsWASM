@@ -81,7 +81,7 @@ try {
     assert.equal(assets.fullDatabase.protocol, "file:");
     const engine = await createBundledWordsAnalysisEngine();
     assert.equal(engine.databaseKind, "full");
-    assert.equal(engine.analyze("amo").schemaVersion, 5);
+    assert.equal(engine.analyze("amo").schemaVersion, 6);
     engine.dispose();
     await import("wordswasm/assets/manifest.json", {with: {type: "json"}});
   `);

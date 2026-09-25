@@ -41,6 +41,7 @@ inline constexpr std::uint16_t morphological_notices_minor_version = 9U;
 // the stem_references section a persisted exact lookup index.  References are
 // ordered by canonical stem spelling and then by their stable lexical tuple.
 inline constexpr std::uint16_t persisted_stem_index_minor_version = 10U;
+inline constexpr std::uint16_t addon_attributes_minor_version = 11U;
 
 enum class Profile : std::uint32_t {
     simple = 1U,
@@ -74,6 +75,7 @@ enum class SectionType : std::uint32_t {
     inflection_quantities = 22U,
     stem_quantities = 23U,
     morphological_notices = 24U,
+    addon_attributes = 25U,
 };
 
 inline constexpr std::uint32_t minimum_section_type =
@@ -84,6 +86,8 @@ inline constexpr std::uint32_t quantity_maximum_section_type =
     std::to_underlying(SectionType::stem_quantities);
 inline constexpr std::uint32_t morphological_notices_maximum_section_type =
     std::to_underlying(SectionType::morphological_notices);
+inline constexpr std::uint32_t addon_attributes_maximum_section_type =
+    std::to_underlying(SectionType::addon_attributes);
 
 inline constexpr std::size_t header_major_offset = magic.size();
 inline constexpr std::size_t header_minor_offset =
@@ -154,6 +158,19 @@ inline constexpr std::uint32_t stem_quantity_stride = u24_size * 3U;
 inline constexpr std::uint32_t stem_quantity_known_offset = u24_size;
 inline constexpr std::uint32_t stem_quantity_long_vowel_offset =
     stem_quantity_known_offset + u24_size;
+// Sparse rule attributes: global addon ID, kind, source paradigm, and two
+// 16-bit quantity masks. An 11-letter prefix/tackon fits without changing the
+// base addon records or allocating masks for rules without evidence.
+inline constexpr std::uint32_t addon_attribute_stride = u16_size + 2U +
+                                                       2U * u16_size;
+inline constexpr std::uint32_t addon_attribute_kind_offset = u16_size;
+inline constexpr std::uint8_t addon_attribute_kind_mask = 0x07U;
+inline constexpr std::uint8_t addon_attribute_coexists_with_regular = 0x08U;
+inline constexpr std::uint8_t addon_attribute_reserved_mask = 0xf0U;
+inline constexpr std::uint32_t addon_attribute_paradigm_offset = u16_size + 1U;
+inline constexpr std::uint32_t addon_attribute_known_offset = u16_size + 2U;
+inline constexpr std::uint32_t addon_attribute_long_offset =
+    addon_attribute_known_offset + u16_size;
 
 inline constexpr std::uint32_t morphological_notice_lexeme_offset = 0U;
 inline constexpr std::uint32_t morphological_notice_metadata_offset = u16_size;

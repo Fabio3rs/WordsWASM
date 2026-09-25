@@ -22,6 +22,7 @@ enum class QuantityCoverage : std::uint8_t {
 
 enum class QuantityOrigin : std::uint8_t {
     stem,
+    suffix,
     ending,
 };
 
@@ -57,7 +58,8 @@ struct ResolvedForm final {
 
 [[nodiscard]] ResolvedForm resolved_form(const Database &database,
                                          const SurfaceForm &surface,
-                                         const AnalysisIR &analysis);
+                                         const AnalysisIR &analysis,
+                                         bool include_suffix_quantity = true);
 
 [[nodiscard]] ResolvedForm unquantified_form(std::string stem,
                                              std::uint8_t stem_key,
@@ -77,7 +79,13 @@ quantity_coverage_name(const QuantityCoverage value) noexcept {
 
 [[nodiscard]] constexpr std::string_view
 quantity_origin_name(const QuantityOrigin value) noexcept {
-    return value == QuantityOrigin::ending ? "ending" : "stem";
+    if (value == QuantityOrigin::suffix) {
+        return "suffix";
+    }
+    if (value == QuantityOrigin::ending) {
+        return "ending";
+    }
+    return "stem";
 }
 
 // Stable semantic ordering for presentation backends. The key deliberately

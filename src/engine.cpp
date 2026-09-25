@@ -1,5 +1,6 @@
 #include "words/engine.hpp"
 #include "words/artificial.hpp"
+#include "words/detail/wwdb_schema.hpp"
 
 #include <algorithm>
 #include <array>
@@ -288,7 +289,64 @@ transformed_paradigm_matches(const SuffixRule &suffix,
           lexeme.part_of_speech == PartOfSpeech::adjective ||
           lexeme.part_of_speech == PartOfSpeech::verb) &&
          (suffix.root_key == 1U || suffix.root_key == 2U));
-    return part_matches && key_matches;
+    const auto paradigm_matches =
+        (suffix.root_declension == 0U ||
+         suffix.root_declension == lexeme.declension) &&
+        (suffix.root_variant == 0U || suffix.root_variant == lexeme.variant);
+    return part_matches && key_matches && paradigm_matches;
+}
+
+[[nodiscard]] std::optional<QuantityMatch> suffix_quantity_match(
+    const Database &database, const SurfaceForm &surface,
+    const CandidateIR &candidate, const StemReference &stem,
+    const SuffixRule &suffix, const std::size_t suffix_size,
+    const bool surface_has_quantity) noexcept {
+    if (suffix_size > candidate.stem.count) {
+        return std::nullopt;
+    }
+    if (!surface_has_quantity) {
+        return QuantityMatch::unspecified;
+    }
+    const auto suffix_begin =
+        candidate.stem.begin + candidate.stem.count - suffix_size;
+    const auto stem_quantity =
+        database.stem_quantity(stem.lexeme, stem.lexical_slot);
+    const auto ending_quantity = database.inflection_quantity(candidate.rule);
+    bool marked{};
+    bool unknown{};
+    for (std::size_t index = 0; index < surface.quantities.size(); ++index) {
+        const auto observed = surface.quantities[index];
+        if (observed == VowelQuantity::unknown) {
+            continue;
+        }
+        marked = true;
+        QuantityMask expected;
+        std::size_t relative = std::numeric_limits<std::size_t>::max();
+        if (index >= candidate.stem.begin && index < suffix_begin) {
+            expected = stem_quantity;
+            relative = index - candidate.stem.begin;
+        } else if (index >= suffix_begin &&
+                   index < suffix_begin + suffix_size) {
+            expected = suffix.quantity;
+            relative = index - suffix_begin;
+        } else if (index >= candidate.ending.begin &&
+                   index < candidate.ending.begin + candidate.ending.count) {
+            expected = ending_quantity;
+            relative = index - candidate.ending.begin;
+        }
+        if (relative >= std::numeric_limits<std::uint32_t>::digits ||
+            (expected.known & (std::uint32_t{1U} << relative)) == 0U) {
+            unknown = true;
+            continue;
+        }
+        const auto bit = std::uint32_t{1U} << relative;
+        if (((expected.long_vowel & bit) != 0U) !=
+            (observed == VowelQuantity::long_vowel)) {
+            return std::nullopt;
+        }
+    }
+    return !marked ? QuantityMatch::unspecified
+                   : unknown ? QuantityMatch::unknown : QuantityMatch::exact;
 }
 
 [[nodiscard]] bool has_quantity(const SurfaceForm &surface) noexcept {
@@ -871,10 +929,12 @@ void append_prefix_analyses(const Database &database,
 }
 
 void append_suffix_semantics(
-    const Database &database, const CandidateIR &candidate,
+    const Database &database, const SurfaceForm &surface,
+    const CandidateIR &candidate,
     const SuffixRule &suffix, const std::span<const StemReference> stems,
-    const std::optional<AddonId> prefix_id, const QuantityMatch quantity_match,
-    const DerivationIR &initial_derivation, std::vector<AnalysisIR> &output,
+    const std::optional<AddonId> prefix_id,
+    const DerivationIR &initial_derivation, const bool surface_has_quantity,
+    std::vector<AnalysisIR> &output,
     EnumerationState &state) {
     const auto &rule = database.rule(candidate.rule);
     if (!coarse_part_matches(suffix.target, rule.part_of_speech) ||
@@ -894,14 +954,10 @@ void append_suffix_semantics(
         if (!suffix_root_matches(lexeme, stem, suffix)) {
             continue;
         }
-        if (database.suffix_string(suffix.fix) == "e" &&
-            suffix.root == PartOfSpeech::adjective &&
-            suffix.target == PartOfSpeech::adverb &&
-            (lexeme.declension != 1U || lexeme.variant != 1U)) {
-            // WHY: -e forms adverbs from first/second-declension adjectives.
-            // Third-declension adjectives use the -iter family, while the
-            // pronominal variant has its own irregular behavior. Accepting
-            // key-zero compatibility stems here invents *forte and *sole.
+        const auto derived_quantity_match = suffix_quantity_match(
+            database, surface, candidate, stem, suffix,
+            database.suffix_string(suffix.fix).size(), surface_has_quantity);
+        if (!derived_quantity_match) {
             continue;
         }
         std::array<AddonId, 2> additions{};
@@ -933,7 +989,7 @@ void append_suffix_semantics(
                                    .grammatical_case = rule.grammatical_case,
                                    .number = rule.number,
                                    .gender = suffix.target_gender},
-                .quantity_match = quantity_match,
+                .quantity_match = *derived_quantity_match,
                 .derivation = *derivation,
                 .assessment = {},
             });
@@ -958,7 +1014,7 @@ void append_suffix_semantics(
                         .number = rule.number,
                         .gender = rule.gender,
                         .degree = transformed_adjective_degree(suffix)},
-                .quantity_match = quantity_match,
+                .quantity_match = *derived_quantity_match,
                 .derivation = *derivation,
                 .assessment = {},
             });
@@ -980,7 +1036,7 @@ void append_suffix_semantics(
                                       .gender = rule.gender,
                                       .numeral_type =
                                           transformed_numeral_type(suffix)},
-                .quantity_match = quantity_match,
+                .quantity_match = *derived_quantity_match,
                 .derivation = *derivation,
                 .assessment = {},
             });
@@ -999,7 +1055,7 @@ void append_suffix_semantics(
                 .ending = candidate.ending,
                 .morphology =
                     AdverbMorphology{transformed_adverb_degree(suffix)},
-                .quantity_match = quantity_match,
+                .quantity_match = *derived_quantity_match,
                 .derivation = *derivation,
                 .assessment = {},
             });
@@ -1022,7 +1078,7 @@ void append_suffix_semantics(
                                              .mood = rule.mood,
                                              .person = rule.person,
                                              .number = rule.number},
-                .quantity_match = quantity_match,
+                .quantity_match = *derived_quantity_match,
                 .derivation = *derivation,
                 .assessment = {},
             });
@@ -1045,7 +1101,7 @@ void append_suffix_semantics(
                         .gender = rule.gender,
                         .tense = rule.tense,
                         .voice = rule.voice},
-                .quantity_match = quantity_match,
+                .quantity_match = *derived_quantity_match,
                 .derivation = *derivation,
                 .assessment = {},
             });
@@ -1065,7 +1121,7 @@ void append_suffix_semantics(
                                      .grammatical_case = rule.grammatical_case,
                                      .number = rule.number,
                                      .gender = rule.gender},
-                .quantity_match = quantity_match,
+                .quantity_match = *derived_quantity_match,
                 .derivation = *derivation,
                 .assessment = {},
             });
@@ -1077,8 +1133,9 @@ void append_suffix_semantics(
 
 void append_suffix_analyses(
     const Database &database, const SurfaceForm &surface,
-    const CandidateRange &candidates, const QuantityMatch quantity_match,
+    const CandidateRange &candidates,
     const DerivationIR &initial_derivation, const bool allow_prefix_fallback,
+    const bool surface_has_quantity,
     std::vector<AnalysisIR> &output, EnumerationState &state) {
     std::vector<AddonId> suffix_ids;
     for (const auto &group : candidates.groups()) {
@@ -1089,14 +1146,10 @@ void append_suffix_analyses(
 
     for (const auto suffix_id : suffix_ids) {
         const auto &suffix = database.suffix(suffix_id);
-        if (!allow_prefix_fallback &&
-            (database.suffix_string(suffix.fix) != "e" ||
-             PartOfSpeech::adjective != suffix.root ||
-             PartOfSpeech::adverb != suffix.target)) {
-            // WHY: coexistence with a regular word is a narrow property of
-            // the productive adjective-to-adverb -e rule.  Treating every
-            // suffix as a concurrent grammar floods ordinary forms with
-            // unrelated nominal and adjectival derivations.
+        if (!allow_prefix_fallback && !suffix.coexists_with_regular) {
+            // WHY: coexistence is an explicit rule policy in the WWDB.
+            // Other suffixes remain fallback analyses to avoid flooding
+            // regular forms with unrelated derivations.
             continue;
         }
         const auto suffix_size = database.suffix_string(suffix.fix).size();
@@ -1122,9 +1175,10 @@ void append_suffix_analyses(
                 const auto base_stems = database.lookup_stem(
                     stem_text.substr(0, stem_text.size() - suffix_size));
                 for (const auto rule_id : group.rules) {
-                    append_suffix_semantics(database, group.candidate(rule_id),
+                    append_suffix_semantics(database, surface,
+                                            group.candidate(rule_id),
                                             suffix, base_stems, std::nullopt,
-                                            quantity_match, initial_derivation,
+                                            initial_derivation, surface_has_quantity,
                                             output, state);
                 }
             }
@@ -1172,9 +1226,10 @@ void append_suffix_analyses(
                         static_cast<std::uint32_t>(prefix_size);
                     projected_candidate.stem.count -=
                         static_cast<std::uint32_t>(prefix_size);
-                    append_suffix_semantics(database, projected_candidate,
+                    append_suffix_semantics(database, surface,
+                                            projected_candidate,
                                             suffix, base_stems, prefix_id,
-                                            quantity_match, initial_derivation,
+                                            initial_derivation, surface_has_quantity,
                                             output, state);
                 }
             }
@@ -1288,8 +1343,9 @@ void append_word_analyses(const Database &database, const SurfaceForm &surface,
         // A stored adverb, UNIQUES and dedicated pronoun paths remain
         // suppressors, while another regular part of speech disables only the
         // speculative prefix-plus-suffix path.
-        append_suffix_analyses(database, surface, candidates, quantity_match,
-                               initial_derivation, !regular_hit, output, state);
+        append_suffix_analyses(database, surface, candidates,
+                               initial_derivation, !regular_hit,
+                               surface_has_quantity, output, state);
     }
 }
 
@@ -2732,6 +2788,13 @@ Engine::create(std::vector<std::byte> database_image, EngineConfig config) {
     auto database = Database::load_poc(std::move(database_image));
     if (!database) {
         return std::unexpected(std::move(database.error()));
+    }
+    if ((*database)->format_minor_version() <
+        detail::wwdb::addon_attributes_minor_version) {
+        return std::unexpected(LoadError{
+            .code = "unsupported-version",
+            .message = "analysis engine requires WWDB addon attributes",
+        });
     }
     return std::unique_ptr<const Engine>{
         new Engine{std::move(*database), std::move(config)}};

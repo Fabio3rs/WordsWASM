@@ -314,7 +314,7 @@ struct BrowserIndependentToken final {
 
 struct BrowserSearchResult final {
     std::string schema{"whitakers-words.browser-search"};
-    std::uint32_t schema_version{5U};
+    std::uint32_t schema_version{6U};
     std::string dataset_id;
     BrowserQuery query;
     std::string status;

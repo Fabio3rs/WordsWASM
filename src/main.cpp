@@ -251,13 +251,15 @@ parse_options(const int argc, char *const argv[]) {
     if (options.format != "analysis" && options.format != "search" &&
         options.format != "analysis-v2" && options.format != "search-v2" &&
         options.format != "analysis-v3" && options.format != "search-v3" &&
+        options.format != "analysis-v4" && options.format != "search-v4" &&
         options.format != "human") {
         return std::unexpected(
             "format must be analysis, search, analysis-v2, search-v2, "
-            "analysis-v3, search-v3, or human");
+            "analysis-v3, search-v3, analysis-v4, search-v4, or human");
     }
     if (!options.filters.exclude_whitaker_trim_reasons.empty() &&
         options.format != "analysis-v3" && options.format != "search-v3" &&
+        options.format != "analysis-v4" && options.format != "search-v4" &&
         options.format != "human") {
         return std::unexpected("trim filters require a v3 or human format");
     }
@@ -317,7 +319,7 @@ Usage:
 Options:
   --database FILE, --db FILE  WWDB database to load.
   --dataset-id ID             Expected dataset identifier, when known.
-  --format FORMAT, -f FORMAT  human, analysis-v3, or search-v3.
+  --format FORMAT, -f FORMAT  human, analysis-v3/v4, or search-v3/v4.
   --pretty                    Indent JSON for terminal reading; emit an array for multiple results.
   --human-style STYLE         normal (default) or compact (tab-separated rows).
   --detailed                  Show full meanings, editorial notes, and quantity evidence.
@@ -383,10 +385,14 @@ result_document(const words::Engine &engine, const words::QueryResult &result,
         document = words::analysis_json_v2_document(engine, result);
     } else if (format == "analysis-v3") {
         document = words::analysis_json_v3_document(engine, result);
+    } else if (format == "analysis-v4") {
+        document = words::analysis_json_v4_document(engine, result);
     } else if (format == "search-v2") {
         document = words::search_json_v2_document(engine, result);
     } else if (format == "search-v3") {
         document = words::search_json_v3_document(engine, result);
+    } else if (format == "search-v4") {
+        document = words::search_json_v4_document(engine, result);
     } else {
         document = words::search_json_document(engine, result);
     }
@@ -495,7 +501,9 @@ int main(const int argc, char *argv[]) try {
         return 3;
     }
     if ((options->format == "analysis" || options->format == "analysis-v2" ||
-         options->format == "analysis-v3" || options->format == "human") &&
+         options->format == "analysis-v3" ||
+         options->format == "analysis-v4" ||
+         options->format == "human") &&
         !(*engine)->supports_full_analysis()) {
         std::print(stderr, "words_cli: unsupported-output: selected format "
                            "requires a full WWDB with meanings\n");

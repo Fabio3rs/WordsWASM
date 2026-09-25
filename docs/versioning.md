@@ -77,8 +77,8 @@ implementation and schema records, plus historical examples, remain in the
 repository as development records rather than a promise to preserve all
 prerelease interfaces.
 
-A future CLI JSON schema is additive only when it receives a new selector,
-such as `analysis-v4`; the v3 selectors remain intact throughout 1.x.
+The local prototype adds `analysis-v4` and `search-v4` selectors for suffix
+quantity evidence. The v3 selectors keep their existing document shape.
 
 `human` and `human --human-style compact` are presentation formats, not stable
 API or TSV schemas. Their wording, ordering, and compact column layout may
@@ -106,6 +106,21 @@ for 1.x. The loader may accept older development images, but that behavior is
 implementation compatibility rather than a release promise. A future
 incompatible wire format receives a new WWDB major version and requires a
 WordsWASM package major release.
+
+The local source tree currently builds an experimental WWDB 1.11 with sparse
+addon rule attributes for quantity, source paradigm, and coexistence policy.
+The local browser build emits schema 6, including suffix quantity origin. These
+changes have not been published.
+
+**Breaking change in the local prototype:** the new engine's adverbial `-ē`
+analysis depends on the source-paradigm and vowel-quantity attributes added in
+WWDB 1.11. WWDB 1.10 lacks those attributes. The development loader can read
+older images for inspection, but `Engine::create` rejects them with
+`unsupported-version`. Do not distribute a new engine with an old WWDB or
+replace only one file in an existing deployment. Before publication, the
+release version must follow the incompatible-format policy above. The `1.11`
+number identifies the local experiment; it is not a compatibility promise for
+a published 1.x release.
 
 Use the full and search-only files from one release together. They must have
 the same WWDB format and `datasetId`; a full database is required for

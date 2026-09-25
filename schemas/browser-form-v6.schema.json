@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WordsWASM quantity-resolved form v6",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["stem", "stemKey", "ending", "recognized", "display", "quantity"],
+  "properties": {
+    "stem": {"type": "string"},
+    "stemKey": {"$ref": "browser-search-v3.schema.json#/$defs/nullableNumber"},
+    "ending": {"type": "string"},
+    "recognized": {"type": "string"},
+    "display": {"type": "string"},
+    "quantity": {"$ref": "#/$defs/quantity"}
+  },
+  "$defs": {
+    "quantity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["annotated", "coverage", "positions"],
+      "properties": {
+        "annotated": {"type": ["string", "null"]},
+        "coverage": {"enum": ["none", "partial", "complete"]},
+        "positions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["index", "quantity", "origin"],
+            "properties": {
+              "index": {"type": "integer", "minimum": 0},
+              "quantity": {"enum": ["short", "long"]},
+              "origin": {"enum": ["stem", "suffix", "ending"]}
+            }
+          }
+        }
+      }
+    }
+  }
+}

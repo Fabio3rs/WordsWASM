@@ -170,7 +170,7 @@ export interface ResolvedForm {
     positions: Array<{
       index: number;
       quantity: "short" | "long";
-      origin: "stem" | "ending";
+      origin: "stem" | "suffix" | "ending";
     }>;
   };
 }
@@ -309,7 +309,7 @@ export interface SearchSuggestion<H extends SearchLexicalHit | AnalysisLexicalHi
 }
 
 interface DocumentBase {
-  schemaVersion: 5;
+  schemaVersion: 6;
   datasetId: string;
   query: QueryIdentity;
   status: QueryStatus;

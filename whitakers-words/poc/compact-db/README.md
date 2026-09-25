@@ -22,8 +22,8 @@ Este diretório materializa a aproximação descrita em
 
 No perfil colunar, IDs densos são posições nos vetores e cada coluna pode ser
 acessada diretamente; não é necessário reconstruir um array de structs. Ainda
-assim, este não é o formato final. A versão PoC 1.10 carrega 24 seções no
-perfil full e 19 no search. Nove
+assim, este não é o formato final. A versão local PoC 1.11 carrega 25 seções no
+perfil full e 20 no search. Nove
 delas representam todos os registros de formação de `ADDONS.LAT`: 135 prefixos
 (incluindo seis tickons), 179 sufixos e 29 tackons, dos quais 11 são packons.
 Cada família tem
@@ -31,6 +31,21 @@ pool de formas, pool de meanings e registros tipados. Prefixos ocupam 8 bytes,
 sufixos 14 e tackons/packons 10, incluindo o `AddonId` global. O perfil
 `search-only` omite os pools de meanings e usa, respectivamente, 6, 12 e 8
 bytes.
+
+A seção 25 carrega propriedades esparsas de regras de adendos, ligadas ao
+`AddonId` global. Cada registro de 8 bytes contém tipo, paradigma de origem e
+duas máscaras de quantidade e um bit de política de coexistência. O empacotador
+confere a identidade da regra contra `ADDONS.LAT`; o registro atual é o sufixo
+adverbial `-ē`. `QUANTITIES.LAT` fornece o paradigma e a quantidade;
+`ADDON_POLICIES.LAT` autoriza sua análise junto de uma leitura regular. A seção e sua
+entrada de diretório acrescentam 40 bytes aos perfis full e search. O arquivo
+editorial `QUANTITIES.LAT` continua separado para preservar a proveniência,
+mas o WWDB associa os atributos à regra antes de a engine analisar palavras.
+
+**Quebra de compatibilidade do protótipo:** o binário da engine que usa esses
+atributos exige WWDB 1.11. O loader pode inspecionar imagens antigas, mas
+`Engine::create` rejeita WWDB 1.10 e anteriores com `unsupported-version`.
+O identificador local 1.11 não define a versão pública final do formato.
 
 O 1.8 aproveita bits antes reservados do payload de lexemas `PACK` para gravar
 o seletor tipado do packon. O dado não aumenta o registro: ele substitui a
@@ -64,7 +79,8 @@ linha seguinte contém o meaning. Não são opcodes arbitrários. O packer valid
 os domínios e reduz o cabeçalho a payloads explícitos de 32 e 16 bits; a engine
 continua responsável por um conjunto fechado de operações latinas tipadas.
 
-As duas seções novas de quantidade são geradas de `QUANTITIES.LAT`. Esse
+As duas seções de quantidade de radicais e flexões, mais a seção esparsa de
+atributos de adendos do protótipo 1.11, são geradas de `QUANTITIES.LAT`. Esse
 arquivo denso, por sua vez, é uma projeção determinística de
 `QUANTITY_EVIDENCE.jsonl` feita por
 [`import_quantities.py`](import_quantities.py). A coluna
@@ -74,7 +90,9 @@ bytes identifica lexema/slot e guarda duas máscaras de 18 bits. O corte atual
 cura 130 regras nominais das cinco declinações, mais a regra participial de
 `-ŭs`, e 78 alvos lexicais: seis da
 família `malum`, 38 conferidos no primeiro lote LS/Gaffiot, 32 alvos do lote
-de homógrafos e os dois radicais `exercĭt-` (nome e particípio). Entradas ASCII
+de homógrafos e os dois radicais `exercĭt-` (nome e particípio). O alvo
+adicional é a regra 156 de `ADDONS.LAT`, com `-ē` e paradigma de origem 1/1.
+Entradas ASCII
 continuam ignorando essas restrições. A auditoria da fila está em
 [`docs/revisao-fila-quantidades.md`](../../docs/revisao-fila-quantidades.md).
 
@@ -387,7 +405,7 @@ python3 poc/compact-db/compile_lexemes.py \
 /tmp/wwdb_poc_pack . poc/compact-db/output/words-poc-columnar.wwdb columnar
 /tmp/wwdb_poc_pack . poc/compact-db/output/words-poc-search-only.wwdb search-only
 
-# Esses comandos geram WWDB 1.10 com o índice canônico de stems persistido.
+# Esses comandos geram WWDB 1.11 com o índice canônico de stems persistido.
 # Para um fixture de retrocompatibilidade 1.9, acrescente --legacy-stem-order.
 
 gzip -9 -n -c poc/compact-db/output/words-poc.wwdb \

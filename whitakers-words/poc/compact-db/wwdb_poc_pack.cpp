@@ -166,9 +166,34 @@ struct StemQuantitySource final {
     std::uint32_t long_vowel{};
 };
 
+struct SuffixAttributeSource final {
+    std::uint16_t addon_id{};
+    std::string fix;
+    std::uint8_t root{};
+    std::uint8_t root_key{};
+    std::uint8_t target{};
+    std::uint8_t target_key{};
+    std::uint8_t root_declension{};
+    std::uint8_t root_variant{};
+    std::uint32_t known{};
+    std::uint32_t long_vowel{};
+};
+
+struct SuffixPolicySource final {
+    std::uint16_t addon_id{};
+    std::string fix;
+    std::uint8_t root{};
+    std::uint8_t root_key{};
+    std::uint8_t target{};
+    std::uint8_t target_key{};
+    std::uint8_t target_degree{};
+    char connector{};
+};
+
 struct QuantitySources final {
     std::vector<InflectionQuantitySource> inflections;
     std::vector<StemQuantitySource> stems;
+    std::vector<SuffixAttributeSource> suffixes;
 };
 
 struct MorphologicalNoticeSource final {
@@ -1172,7 +1197,67 @@ QuantitySources read_quantities(const std::filesystem::path &path) {
             });
             continue;
         }
+        if (fields.front() == "SUFFIX" && fields.size() == 11U) {
+            const auto addon_id = parse_u32(fields[1], "addon ID", source);
+            if (addon_id > std::numeric_limits<std::uint16_t>::max()) {
+                fail("suffix addon ID exceeds u16 in QUANTITIES.LAT");
+            }
+            result.suffixes.push_back({
+                static_cast<std::uint16_t>(addon_id),
+                std::string{fields[2]},
+                part_of_speech(fields[3], source),
+                parse_u8(fields[4], "suffix root key", source),
+                part_of_speech(fields[5], source),
+                parse_u8(fields[6], "suffix target key", source),
+                parse_u8(fields[7], "suffix root declension", source),
+                parse_u8(fields[8], "suffix root variant", source),
+                parse_u32(fields[9], "known mask", source),
+                parse_u32(fields[10], "long mask", source),
+            });
+            continue;
+        }
         fail("invalid QUANTITIES.LAT record shape: " + line);
+    }
+    return result;
+}
+
+std::vector<SuffixPolicySource>
+read_suffix_policies(const std::filesystem::path &path) {
+    constexpr std::string_view source{"ADDON_POLICIES.LAT"};
+    std::ifstream input(path);
+    if (!input) {
+        fail("cannot open input: " + path.string());
+    }
+    std::vector<SuffixPolicySource> result;
+    std::string line;
+    while (std::getline(input, line)) {
+        if (const auto comment = line.find(ada_comment_marker);
+            comment != std::string::npos) {
+            line.erase(comment);
+        }
+        const auto fields = split_words(line);
+        if (fields.empty()) {
+            continue;
+        }
+        if (fields.size() != 10U || fields[0] != "SUFFIX" ||
+            fields[9] != "COEXIST_REGULAR") {
+            fail("invalid ADDON_POLICIES.LAT record shape: " + line);
+        }
+        const auto id = parse_u32(fields[1], "addon ID", source);
+        if (id > std::numeric_limits<std::uint16_t>::max() ||
+            (fields[8] != "-" && fields[8].size() != 1U)) {
+            fail("invalid suffix policy ID or connector");
+        }
+        result.push_back({
+            static_cast<std::uint16_t>(id), std::string{fields[2]},
+            part_of_speech(fields[3], source),
+            parse_u8(fields[4], "suffix root key", source),
+            part_of_speech(fields[5], source),
+            parse_u8(fields[6], "suffix target key", source),
+            enum_value(fields[7], {"X", "POS", "COMP", "SUPER"},
+                       "suffix target degree", source),
+            fields[8] == "-" ? '\0' : fields[8].front(),
+        });
     }
     return result;
 }
@@ -1497,6 +1582,8 @@ int main(int argc, char **argv) try {
     const auto uniques = read_uniques(root / "UNIQUES.LAT");
     const auto rewrites = read_rewrites(root / "REWRITES.LAT");
     const auto quantities = read_quantities(root / "QUANTITIES.LAT");
+    const auto suffix_policies =
+        read_suffix_policies(root / "ADDON_POLICIES.LAT");
     auto morphological_notices =
         read_morphological_notices(root / morphological_notices_file);
     const auto compiled_lexemes = read_compiled_lexemes(root / "LEXEMES.LAT");
@@ -2205,6 +2292,66 @@ int main(int argc, char **argv) try {
         append_u64_le(suffix_records, metadata);
     }
 
+    Bytes addon_attribute_records;
+    std::vector<SuffixAttributeSource> suffix_attributes = quantities.suffixes;
+    std::vector<std::uint16_t> policy_ids;
+    for (const auto &policy : suffix_policies) {
+        const auto found = std::ranges::find(addons.suffixes, policy.addon_id,
+                                              &SuffixSource::addon_id);
+        if (found == addons.suffixes.end() || found->fix != policy.fix ||
+            found->root != policy.root || found->root_key != policy.root_key ||
+            found->target != policy.target ||
+            found->target_key != policy.target_key ||
+            found->attribute_0 != policy.target_degree ||
+            found->connect != static_cast<std::uint8_t>(policy.connector) ||
+            std::ranges::find(policy_ids, policy.addon_id) != policy_ids.end()) {
+            fail("suffix policy is inconsistent with ADDONS.LAT");
+        }
+        policy_ids.push_back(policy.addon_id);
+        if (std::ranges::none_of(suffix_attributes, [&](const auto &item) {
+                return item.addon_id == policy.addon_id;
+            })) {
+            suffix_attributes.push_back({policy.addon_id, policy.fix,
+                                         policy.root, policy.root_key,
+                                         policy.target, policy.target_key});
+        }
+    }
+    std::ranges::sort(suffix_attributes, {}, &SuffixAttributeSource::addon_id);
+    std::optional<std::uint16_t> previous_addon_id;
+    for (const auto &attribute : suffix_attributes) {
+        const auto found = std::ranges::find(addons.suffixes, attribute.addon_id,
+                                              &SuffixSource::addon_id);
+        if (found == addons.suffixes.end() ||
+            (previous_addon_id && *previous_addon_id == attribute.addon_id) ||
+            found->fix != attribute.fix || found->root != attribute.root ||
+            found->root_key != attribute.root_key ||
+            found->target != attribute.target ||
+            found->target_key != attribute.target_key ||
+            attribute.root_declension > 9U || attribute.root_variant > 9U ||
+            attribute.known > 0xffffU ||
+            attribute.long_vowel > 0xffffU ||
+            (attribute.long_vowel & ~attribute.known) != 0U ||
+            (attribute.known >> found->fix.size()) != 0U ||
+            !quantity_positions_are_vowels(found->fix, attribute.known)) {
+            fail("suffix attribute is inconsistent with ADDONS.LAT");
+        }
+        append_u16_le(addon_attribute_records, attribute.addon_id);
+        const auto policy_flags =
+            std::ranges::find(policy_ids, attribute.addon_id) != policy_ids.end()
+                ? wwdb::addon_attribute_coexists_with_regular
+                : 0U;
+        append_u8(addon_attribute_records, static_cast<std::uint8_t>(
+            std::to_underlying(words::AddonKind::suffix) | policy_flags));
+        append_u8(addon_attribute_records,
+                  pack_paradigm(attribute.root_declension,
+                                attribute.root_variant));
+        append_u16_le(addon_attribute_records,
+                      static_cast<std::uint16_t>(attribute.known));
+        append_u16_le(addon_attribute_records,
+                      static_cast<std::uint16_t>(attribute.long_vowel));
+        previous_addon_id = attribute.addon_id;
+    }
+
     Bytes prefix_records;
     const std::uint32_t prefix_stride = include_meanings
                                             ? wwdb::full_prefix_stride
@@ -2404,6 +2551,13 @@ int main(int argc, char **argv) try {
     sections.push_back({SectionType::suffixes, wwdb::section_flag_row_major,
                         static_cast<std::uint32_t>(addons.suffixes.size()),
                         suffix_stride, std::move(suffix_records)});
+    if (persist_stem_index) {
+        sections.push_back({SectionType::addon_attributes,
+                            wwdb::section_flag_row_major,
+                            static_cast<std::uint32_t>(suffix_attributes.size()),
+                            wwdb::addon_attribute_stride,
+                            std::move(addon_attribute_records)});
+    }
     sections.push_back({SectionType::prefix_strings, wwdb::section_flag_pool,
                         prefix_string_pool.size(), wwdb::variable_stride,
                         prefix_string_pool.encode()});
@@ -2445,7 +2599,7 @@ int main(int argc, char **argv) try {
                         rewrite_stride, std::move(rewrite_records)});
 
     const auto minor_version = persist_stem_index
-                                   ? wwdb::persisted_stem_index_minor_version
+                                   ? wwdb::addon_attributes_minor_version
                                    : wwdb::morphological_notices_minor_version;
     const auto image = make_image(std::move(sections), profile, minor_version);
     std::filesystem::create_directories(output_path.parent_path());
