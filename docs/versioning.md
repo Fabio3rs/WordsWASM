@@ -54,6 +54,18 @@ commitments and should be pinned exactly when used outside evaluation.
 
 ## Stable API and data contracts
 
+### Native C++ API stability
+
+The native C++ interfaces exposed by `words_core`, including its headers and
+libraries, are experimental. WordsWASM 1.x does not guarantee source or binary
+compatibility for them; C++ interfaces may change between minor releases.
+
+The stable 1.x compatibility commitments in this document apply to the
+documented CLI contracts, versioned JSON schemas, JavaScript/WebAssembly API,
+WWDB format, and release/package interfaces. A stable C++ source API may be
+defined separately in a future release. Binary ABI compatibility is not
+currently guaranteed.
+
 ### Native CLI JSON
 
 The stable JSON contracts are selected explicitly:

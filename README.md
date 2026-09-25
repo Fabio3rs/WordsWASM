@@ -103,7 +103,9 @@ builds should name an exact version. The package READMEs describe
 [the native CLI](npm/wordswasm-cli/README.md) in more detail.
 The [versioning and compatibility policy](docs/versioning.md) defines the
 stable 1.0 baseline and the relationship between package versions, JSON
-schemas, WWDB, and `datasetId`.
+schemas, WWDB, and `datasetId`. The native `words_core` C++ headers and
+libraries remain experimental; 1.x does not promise C++ source or binary
+compatibility between minor releases.
 
 ### Unicode behavior
 
@@ -248,10 +250,10 @@ Use `manifest.databases.search.file` with `engine.search()` or
 `analyzeLine()` require the full database. For the complete API, deployment
 headers, and ownership rules, see the
 [browser integration guide](whitakers-words/docs/webassembly-browser.md).
-Browser schema v5 returns presentation-ready `form.display` and structured
+Browser schema v6 returns presentation-ready `form.display` and structured
 quantity evidence through typed Embind structures; it does not serialize JSON
 inside WASM. See [quantity-resolved returned forms](docs/quantity-resolved-forms.md).
-Schema v5, WWDB 1.10, and the dataset provenance rules are defined by the
+Schema v6, WWDB 1.11, and the dataset provenance rules are defined by the
 [versioning and compatibility policy](docs/versioning.md).
 
 ## Relationship to vanilla Whitaker's WORDS
@@ -291,7 +293,7 @@ to hide a candidate. See
 | Data layout | Human-edited sources are compiled by `makedict`, `makestem`, and `makeinfl` into `DICTFILE`, `STEMFILE`, `INDXFILE`, and `INFLECTS.SEC`; `ADDONS.LAT` and `UNIQUES.LAT` are also loaded at runtime. Some binary layouts depend on the historical Ada representation. | The packer converts the inherited lexical, inflection, addon, unique, rewrite, and quantity data into a versioned WWDB image. The loader validates its header, sections, IDs, enums, bounds, ordering, and checksum before publishing the snapshot. Full and search-only profiles keep the same dataset-local IDs. |
 | Input model | The historical interface and data formats are ASCII/DOS-oriented and apply the traditional `i/j` and `u/v` lookup conventions. | A strict UTF-8 lexer validates and normalizes NFC/NFD input, preserves a presentation spelling, derives a separate ASCII lookup key, and carries macron/breve quantity per logical letter. |
 | Analysis pipeline | Enumerate endings, derive candidate stems, search indexed stems, cross-check morphology, try bounded addons and spelling tricks, then filter and print. Intermediate meaning is distributed across `Parse_Record`, global arrays, addon markers, and presentation packages. | The same observable pipeline and its intentional derivational limits are preserved, but candidates, morphology, lexical identities, rewrites, derivation steps, quantities, and provenance are represented in a typed IR with strong IDs. |
-| Public result | Primarily formatted terminal/file output controlled by mutable user and developer parameters. | A typed `QueryResult` is the core contract. Native JSON and browser structs are separate, schema-tested projections; the WebAssembly boundary exposes neither JSON parsing nor raw allocator pointers. |
+| Result representation | Primarily formatted terminal/file output controlled by mutable user and developer parameters. | The engine uses a typed `QueryResult` internally. Native JSON and browser structs are separate, schema-tested projections; the WebAssembly boundary exposes neither JSON parsing nor raw allocator pointers. |
 | Deployment | Native Ada executables built with GNAT/GPRbuild and accompanied by several runtime data files. | Native CMake targets or a modular ES/WebAssembly artifact for browser, Worker, and Node, initialized from one WWDB byte image. |
 | Verification | Historical text fixtures exercise the Ada executable. | C++ unit tests, schema and browser-contract tests, data-pipeline tests, and corpus-level differential tests run the Ada implementation as an oracle. Deliberate differences are classified instead of silently changing compatibility. |
 
@@ -403,7 +405,8 @@ the Windows MinGW job rejects older GCC versions explicitly.
 used by `words_core`. `AUTO` keeps the complete vendored utf8proc backend in
 native builds and selects the finite compact backend under Emscripten. `FULL`
 and `COMPACT` force either implementation on both targets, which keeps release
-selection separate from A/B verification. The public lexer API is unchanged.
+selection separate from A/B verification. Both backends implement the same
+accepted input behavior.
 
 ### Sanitizer builds
 
@@ -449,7 +452,7 @@ cmake --build build/native \
   -j"$(nproc)"
 
 # 3. Generate both database profiles expected by the tests.
-# The packer emits the stable public WWDB 1.10 format.
+# The packer emits the WWDB 1.11 format planned for stable 1.0.
 mkdir -p whitakers-words/poc/compact-db/output
 build/native/wwdb_poc_pack \
   whitakers-words \
