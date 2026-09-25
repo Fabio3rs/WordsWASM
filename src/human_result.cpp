@@ -51,29 +51,34 @@ struct SuggestedEnclitic final {
 
 [[nodiscard]] std::optional<SuggestedEnclitic>
 suggested_enclitic(const Database &database, const WordSegmentIR &segment) {
-    if (segment.analyses.empty())
+    if (segment.analyses.empty()) {
         return std::nullopt;
+    }
 
     std::string_view shared_suffix;
     for (const auto &analysis : segment.analyses) {
         std::string_view suffix;
         for (const auto addon_id : analysis.derivation.steps()) {
-            if (database.addon_kind(addon_id) != AddonKind::tackon)
+            if (database.addon_kind(addon_id) != AddonKind::tackon) {
                 continue;
+            }
             const auto &tackon = database.tackon(addon_id);
-            if (tackon.enclitic)
+            if (tackon.enclitic) {
                 suffix = database.tackon_string(tackon.fix);
+            }
         }
         if (suffix.empty() ||
-            (!shared_suffix.empty() && suffix != shared_suffix))
+            (!shared_suffix.empty() && suffix != shared_suffix)) {
             return std::nullopt;
+        }
         shared_suffix = suffix;
     }
     if (shared_suffix.empty() ||
         !std::string_view{segment.surface.lookup_ascii}.ends_with(
             shared_suffix) ||
-        segment.surface.normalized_nfc.size() <= shared_suffix.size())
+        segment.surface.normalized_nfc.size() <= shared_suffix.size()) {
         return std::nullopt;
+    }
 
     return SuggestedEnclitic{
         .base = segment.surface.normalized_nfc.substr(
@@ -82,25 +87,30 @@ suggested_enclitic(const Database &database, const WordSegmentIR &segment) {
 }
 
 void add(std::string &target, const std::string_view value) {
-    if (value.empty())
+    if (value.empty()) {
         return;
-    if (!target.empty())
+    }
+    if (!target.empty()) {
         target.append(" · ");
+    }
     target.append(value);
 }
 
 void add_word(std::string &target, const std::string_view value) {
-    if (value.empty())
+    if (value.empty()) {
         return;
-    if (!target.empty())
+    }
+    if (!target.empty()) {
         target.push_back(' ');
+    }
     target.append(value);
 }
 
 void add_ordinal(std::string &target, const unsigned value,
                  const std::string_view label) {
-    if (value == 0U)
+    if (value == 0U) {
         return;
+    }
     const auto suffix = value % 100U >= 11U && value % 100U <= 13U ? "th"
                         : value % 10U == 1U                        ? "st"
                         : value % 10U == 2U                        ? "nd"
@@ -115,20 +125,21 @@ void add_ordinal(std::string &target, const unsigned value,
     constexpr char hex[] = "0123456789ABCDEF";
     for (const char character : value) {
         const auto byte = static_cast<unsigned char>(character);
-        if (byte == '\\')
+        if (byte == '\\') {
             output.append("\\\\");
-        else if (byte == '\t')
+        } else if (byte == '\t') {
             output.append("\\t");
-        else if (byte == '\n')
+        } else if (byte == '\n') {
             output.append("\\n");
-        else if (byte == '\r')
+        } else if (byte == '\r') {
             output.append("\\r");
-        else if (byte < 0x20U || byte == 0x7FU) {
+        } else if (byte < 0x20U || byte == 0x7FU) {
             output.append("\\x");
             output.push_back(hex[byte >> 4U]);
             output.push_back(hex[byte & 0xFU]);
-        } else
+        } else {
             output.push_back(static_cast<char>(byte));
+        }
     }
     return output;
 }
@@ -145,8 +156,9 @@ void add_ordinal(std::string &target, const unsigned value,
             output.push_back(static_cast<char>(
                 std::toupper(static_cast<unsigned char>(character))));
             capitalize = false;
-        } else
+        } else {
             output.push_back(character);
+        }
     }
     return output;
 }
@@ -157,10 +169,12 @@ void add_ordinal(std::string &target, const unsigned value,
     const auto append = [&](const std::string_view name,
                             const std::string_view value,
                             const bool title = false) {
-        if (value.empty())
+        if (value.empty()) {
             return;
-        if (!result.empty())
+        }
+        if (!result.empty()) {
             result.append("; ");
+        }
         result.append(name);
         result.append(": ");
         result.append(readable_name(value, title));
@@ -171,17 +185,20 @@ void add_ordinal(std::string &target, const unsigned value,
     append("lexical frequency", lexical_frequency_name(lexeme.frequency));
     const auto source = source_name(lexeme.source);
     if (source != "source-a" && source != "source-u" && source != "temporary" &&
-        source != "user-submitted")
+        source != "user-submitted") {
         append("dictionary source", source, true);
-    if (rule != nullptr)
+    }
+    if (rule != nullptr) {
         append("inflection frequency", rule_frequency_name(rule->frequency));
+    }
     return result;
 }
 
 [[nodiscard]] std::string person_number(const Person person,
                                         const GrammaticalNumber number) {
-    if (person == Person::unknown)
+    if (person == Person::unknown) {
         return {};
+    }
     std::string result;
     add_ordinal(result, static_cast<unsigned>(person), "person");
     add_word(result, number_name(number));
@@ -200,12 +217,15 @@ void add_ordinal(std::string &target, const unsigned value,
                           std::is_same_v<T, PronounMorphology> ||
                           std::is_same_v<T, AdjectiveMorphology> ||
                           std::is_same_v<T, NumeralMorphology>) {
-                if (value.declension <= 5U)
+                if (value.declension <= 5U) {
                     add_ordinal(result, value.declension, "declension");
-                if constexpr (std::is_same_v<T, NumeralMorphology>)
+                }
+                if constexpr (std::is_same_v<T, NumeralMorphology>) {
                     add(result, numeral_type_name(value.numeral_type));
-                if constexpr (std::is_same_v<T, AdjectiveMorphology>)
+                }
+                if constexpr (std::is_same_v<T, AdjectiveMorphology>) {
                     add(result, degree_name(value.degree));
+                }
                 std::string inflection;
                 add_word(inflection, case_name(value.grammatical_case));
                 add_word(inflection, number_name(value.number));
@@ -214,25 +234,29 @@ void add_ordinal(std::string &target, const unsigned value,
             } else if constexpr (std::is_same_v<T, AdverbMorphology>) {
                 add(result, degree_name(value.degree));
             } else if constexpr (std::is_same_v<T, VerbMorphology>) {
-                if (value.conjugation <= 4U)
+                if (value.conjugation <= 4U) {
                     add_ordinal(result, value.conjugation, "conjugation");
+                }
                 std::string grammar;
                 add_word(grammar, tense_name(value.tense));
                 add_word(grammar, mood_name(value.mood));
-                if (!deponent)
+                if (!deponent) {
                     add_word(grammar, voice_name(value.voice));
+                }
                 add(result, grammar);
                 add(result, person_number(value.person, value.number));
             } else if constexpr (std::is_same_v<T, ParticipleMorphology>) {
-                if (value.conjugation <= 4U)
+                if (value.conjugation <= 4U) {
                     add_ordinal(result, value.conjugation, "conjugation");
+                }
                 std::string grammar;
                 add_word(grammar, tense_name(value.tense));
                 if (value.tense == Tense::future &&
-                    value.voice == Voice::passive)
+                    value.voice == Voice::passive) {
                     add_word(grammar, "gerundive");
-                else if (!deponent)
+                } else if (!deponent) {
                     add_word(grammar, voice_name(value.voice));
+                }
                 add(result, grammar);
                 std::string inflection;
                 add_word(inflection, case_name(value.grammatical_case));
@@ -244,9 +268,10 @@ void add_ordinal(std::string &target, const unsigned value,
                 add(result, number_name(value.number));
                 add(result, gender_name(value.gender));
             } else if constexpr (std::is_same_v<T, PrepositionMorphology>) {
-                if (value.governs != GrammaticalCase::unknown)
+                if (value.governs != GrammaticalCase::unknown) {
                     add(result, std::string{"governs "} +
                                     std::string{case_name(value.governs)});
+                }
             }
         },
         morphology);
@@ -335,8 +360,9 @@ assessment_note(const MorphologicalAssessmentIR &assessment,
         }
     }
     if (!assessment.notice_values().empty()) {
-        if (!result.empty())
+        if (!result.empty()) {
             result.append("; ");
+        }
         result.append("editorial note");
         if (detailed) {
             for (const auto notice : assessment.notice_values()) {
@@ -353,19 +379,23 @@ assessment_note(const MorphologicalAssessmentIR &assessment,
     std::string output;
     std::size_t clauses{};
     for (const char character : meaning) {
-        if (character == '[' || character == '\n' || character == '\r')
+        if (character == '[' || character == '\n' || character == '\r') {
             break;
+        }
         if (character == ';') {
             ++clauses;
-            if (clauses == 2U)
+            if (clauses == 2U) {
                 break;
+            }
         }
         output.push_back(character);
     }
-    while (!output.empty() && output.back() == ' ')
+    while (!output.empty() && output.back() == ' ') {
         output.pop_back();
-    while (!output.empty() && output.back() == ';')
+    }
+    while (!output.empty() && output.back() == ';') {
         output.pop_back();
+    }
     return output;
 }
 
@@ -446,30 +476,34 @@ assessment_note(const MorphologicalAssessmentIR &assessment,
         analysis.source_voice == Voice::passive;
     const bool ordinary_verb = lexeme.verb_kind != VerbKind::deponent &&
                                lexeme.verb_kind != VerbKind::semideponent;
-    if (active_periphrastic || passive_periphrastic)
+    if (active_periphrastic || passive_periphrastic) {
         morphology.voice = Voice::unknown;
+    }
     reading.features = features(Morphology{morphology}, lexeme.verb_kind);
-    if (ordinary_verb && active_periphrastic)
+    if (ordinary_verb && active_periphrastic) {
         add(reading.features, "active periphrastic with " + analysis.auxiliary);
-    else if (ordinary_verb && passive_periphrastic)
+    } else if (ordinary_verb && passive_periphrastic) {
         add(reading.features,
             "passive periphrastic with " + analysis.auxiliary);
-    else
+    } else {
         add(reading.features, "compound with " + analysis.auxiliary);
+    }
     const auto meaning = database.meaning(lexeme.meaning);
     reading.meaning =
         options.detailed ? normalized_meaning(meaning) : short_meaning(meaning);
     reading.note = assessment_note(analysis.assessment, options.detailed);
-    if (options.detailed)
+    if (options.detailed) {
         reading.metadata = lexical_metadata(
             lexeme, analysis.source_rule ? &database.rule(*analysis.source_rule)
                                          : nullptr);
-    if (options.detailed && active_periphrastic)
+    }
+    if (options.detailed && active_periphrastic) {
         reading.explanation = "A future active participle combines with a form "
                               "of sum to express an action about to happen.";
-    else if (options.detailed && passive_periphrastic)
+    } else if (options.detailed && passive_periphrastic) {
         reading.explanation = "A gerundive combines with a form of sum to "
                               "express necessity or obligation.";
+    }
     return reading;
 }
 
@@ -485,8 +519,9 @@ assessment_note(const MorphologicalAssessmentIR &assessment,
     reading.meaning = std::to_string(analysis.value);
     reading.note = assessment_note(analysis.assessment, options.detailed);
     if (!analysis.well_formed) {
-        if (!reading.note.empty())
+        if (!reading.note.empty()) {
             reading.note.append("; ");
+        }
         reading.note.append("unusual Roman numeral spelling");
     }
     return reading;
@@ -501,9 +536,10 @@ void append_lexical(Unit &unit, const Database &database,
                     const ResultFilters &filters, const HumanOptions options) {
     std::vector<std::pair<AnalysisOrderKey, const AnalysisIR *>> ordered;
     for (const auto &analysis : analyses) {
-        if (!excludes(analysis.assessment, filters))
+        if (!excludes(analysis.assessment, filters)) {
             ordered.emplace_back(
                 analysis_order_key(database, surface, analysis), &analysis);
+        }
     }
     std::ranges::sort(ordered, {}, &decltype(ordered)::value_type::first);
     for (const auto &[key, analysis] : ordered) {
@@ -518,28 +554,33 @@ void append_main(Unit &unit, const Engine &engine, const QueryResult &result,
                  const ResultFilters &filters, const HumanOptions options) {
     const auto &database = engine.database();
     std::vector<std::pair<AnalysisOrderKey, Candidate>> ordered;
-    if (unit.name != "construction")
+    if (unit.name != "construction") {
         for (const auto &analysis : result.analyses) {
-            if (!excludes(analysis.assessment, filters))
+            if (!excludes(analysis.assessment, filters)) {
                 ordered.emplace_back(
                     analysis_order_key(database, result.surface, analysis),
                     &analysis);
+            }
         }
+    }
     for (const auto &analysis : result.compound_analyses) {
-        if (!excludes(analysis.assessment, filters))
+        if (!excludes(analysis.assessment, filters)) {
             ordered.emplace_back(analysis_order_key(database, analysis),
                                  &analysis);
+        }
     }
-    if (unit.name != "construction")
+    if (unit.name != "construction") {
         for (const auto &artificial : result.artificial_analyses) {
             std::visit(
                 [&](const auto &analysis) {
-                    if (!excludes(analysis.assessment, filters))
+                    if (!excludes(analysis.assessment, filters)) {
                         ordered.emplace_back(analysis_order_key(analysis),
                                              &analysis);
+                    }
                 },
                 artificial);
         }
+    }
     std::ranges::sort(ordered, {}, &decltype(ordered)::value_type::first);
     for (const auto &[key, candidate] : ordered) {
         static_cast<void>(key);
@@ -547,15 +588,16 @@ void append_main(Unit &unit, const Engine &engine, const QueryResult &result,
             [&](const auto *analysis) {
                 using T =
                     std::remove_cv_t<std::remove_pointer_t<decltype(analysis)>>;
-                if constexpr (std::is_same_v<T, AnalysisIR>)
+                if constexpr (std::is_same_v<T, AnalysisIR>) {
                     unit.readings.push_back(lexical_reading(
                         database, result.surface, *analysis, options));
-                else if constexpr (std::is_same_v<T, CompoundAnalysisIR>)
+                } else if constexpr (std::is_same_v<T, CompoundAnalysisIR>) {
                     unit.readings.push_back(
                         compound_reading(database, result, *analysis, options));
-                else
+                } else {
                     unit.readings.push_back(
                         roman_reading(result.surface, *analysis, options));
+                }
             },
             candidate);
     }
@@ -572,17 +614,19 @@ void append_token(Unit &unit, const Database &database,
                   const ResultFilters &filters, const HumanOptions options) {
     std::vector<std::pair<AnalysisOrderKey, Candidate>> ordered;
     for (const auto &analysis : token.analyses) {
-        if (!excludes(analysis.assessment, filters))
+        if (!excludes(analysis.assessment, filters)) {
             ordered.emplace_back(
                 analysis_order_key(database, token.surface, analysis),
                 &analysis);
+        }
     }
     for (const auto &artificial : token.artificial_analyses) {
         std::visit(
             [&](const auto &analysis) {
-                if (!excludes(analysis.assessment, filters))
+                if (!excludes(analysis.assessment, filters)) {
                     ordered.emplace_back(analysis_order_key(analysis),
                                          &analysis);
+                }
             },
             artificial);
     }
@@ -593,12 +637,13 @@ void append_token(Unit &unit, const Database &database,
             [&](const auto *analysis) {
                 using T =
                     std::remove_cv_t<std::remove_pointer_t<decltype(analysis)>>;
-                if constexpr (std::is_same_v<T, AnalysisIR>)
+                if constexpr (std::is_same_v<T, AnalysisIR>) {
                     unit.readings.push_back(lexical_reading(
                         database, token.surface, *analysis, options));
-                else if constexpr (std::is_same_v<T, RomanNumeralIR>)
+                } else if constexpr (std::is_same_v<T, RomanNumeralIR>) {
                     unit.readings.push_back(
                         roman_reading(token.surface, *analysis, options));
+                }
             },
             candidate);
     }
@@ -620,8 +665,9 @@ void append_token(Unit &unit, const Database &database,
                      ? result.multi_token_query->original_utf8
                      : result.surface.original_utf8;
     main.status = status_name(result.status);
-    if (!result.diagnostics.empty())
+    if (!result.diagnostics.empty()) {
         main.diagnostic = diagnostic_text(result.diagnostics.back().code);
+    }
     append_main(main, engine, result, filters, options);
     output.push_back(std::move(main));
     for (std::size_t index{}; index < result.independent_tokens.size();
@@ -631,8 +677,9 @@ void append_token(Unit &unit, const Database &database,
         unit.name = "token:" + std::to_string(index + 1U);
         unit.input = token.surface.original_utf8;
         unit.status = status_name(token.status);
-        if (!token.diagnostics.empty())
+        if (!token.diagnostics.empty()) {
             unit.diagnostic = diagnostic_text(token.diagnostics.back().code);
+        }
         append_token(unit, engine.database(), token, filters, options);
         output.push_back(std::move(unit));
     }
@@ -654,25 +701,29 @@ void append_token(Unit &unit, const Database &database,
                     enclitic->base + " + -" + enclitic->suffix;
                 unit.enclitic = "enclitic -" + enclitic->suffix;
             }
-            if (!split.empty())
+            if (!split.empty()) {
                 split.append(" + ");
+            }
             split.append(unit.split_component);
             append_lexical(unit, engine.database(), segment.surface,
                            segment.analyses, filters, options);
-            if (!unit.enclitic.empty())
+            if (!unit.enclitic.empty()) {
                 for (auto &reading : unit.readings) {
-                    if (!reading.note.empty())
+                    if (!reading.note.empty()) {
                         reading.note.append("; ");
+                    }
                     reading.note.append(unit.enclitic);
                 }
+            }
             all_have_readings &= !unit.readings.empty();
             suggestion.push_back(std::move(unit));
         }
         if (all_have_readings) {
             output.front().diagnostic =
                 "no confirmed reading; possible split: " + split;
-            for (auto &unit : suggestion)
+            for (auto &unit : suggestion) {
                 output.push_back(std::move(unit));
+            }
         }
     }
     return output;
@@ -684,14 +735,18 @@ void field(std::string &output, const std::string_view value) {
 }
 
 [[nodiscard]] std::string status_note(const Unit &unit) {
-    if (unit.filtered_all)
+    if (unit.filtered_all) {
         return "all readings hidden by filters";
-    if (!unit.diagnostic.empty())
+    }
+    if (!unit.diagnostic.empty()) {
         return unit.diagnostic;
-    if (unit.status == "unknown")
+    }
+    if (unit.status == "unknown") {
         return "no reading found";
-    if (unit.status == "error")
+    }
+    if (unit.status == "error") {
         return "analysis failed";
+    }
     return "no readings";
 }
 
@@ -713,10 +768,12 @@ std::string render_human(const Engine &engine, const QueryResult &result,
                          const ResultFilters &filters,
                          const HumanOptions options,
                          const std::size_t result_number) {
-    if (!engine.owns(result))
+    if (!engine.owns(result)) {
         throw std::logic_error{"analysis result belongs to another dataset"};
-    if (!engine.supports_full_analysis())
+    }
+    if (!engine.supports_full_analysis()) {
         throw std::logic_error{"human output requires a full WWDB"};
+    }
     const auto values = units(engine, result, filters, options);
     std::string output;
     if (options.compact) {
@@ -739,13 +796,15 @@ std::string render_human(const Engine &engine, const QueryResult &result,
                 field(output, reading ? reading->meaning : "");
                 auto note = reading ? reading->note : status_note(unit);
                 if (reading && !reading->explanation.empty()) {
-                    if (!note.empty())
+                    if (!note.empty()) {
                         note.append("; ");
+                    }
                     note.append(reading->explanation);
                 }
                 if (reading && !reading->metadata.empty()) {
-                    if (!note.empty())
+                    if (!note.empty()) {
                         note.append("; ");
+                    }
                     note.append(reading->metadata);
                 }
                 field(output, note);
@@ -757,8 +816,9 @@ std::string render_human(const Engine &engine, const QueryResult &result,
 
     for (std::size_t unit_index{}; unit_index < values.size(); ++unit_index) {
         const auto &unit = values[unit_index];
-        if (unit_index != 0U)
+        if (unit_index != 0U) {
             output.push_back('\n');
+        }
         const auto heading =
             unit.name == "main" ? safe_text(unit.input)
             : unit.name == "construction"
@@ -823,8 +883,9 @@ std::string render_human(const Engine &engine, const QueryResult &result,
                 output.append(safe_text(reading.metadata));
                 output.push_back('\n');
             }
-            if (index + 1U < unit.readings.size())
+            if (index + 1U < unit.readings.size()) {
                 output.push_back('\n');
+            }
         }
     }
     return output;
