@@ -983,6 +983,15 @@ TEST(EngineTest, PreservesHistoricalFinalTokensAndIssue70Split) {
         ASSERT_NE(roman, nullptr) << numeral;
         EXPECT_EQ(roman->value, expected_value) << numeral;
         EXPECT_TRUE(roman->well_formed) << numeral;
+        const auto search =
+            Json::parse(search_json(test::engine(), result.front()));
+        const auto &hits = search.at("hits");
+        const auto artificial =
+            std::ranges::find_if(hits, [](const Json &hit) {
+                return hit.contains("artificial");
+            });
+        ASSERT_NE(artificial, hits.end()) << numeral;
+        EXPECT_EQ(artificial->at("lexemeId"), nullptr) << numeral;
     }
 
     const auto direct = test::engine().analyze("bestiasviginti");
@@ -1075,13 +1084,14 @@ TEST(EngineTest, PreservesSancteHomographsAndVidesneEnclitic) {
                 return false;
             }
             return adjective->number == GrammaticalNumber::singular &&
-                   adjective->gender == Gender::masculine;
+                   adjective->gender == Gender::masculine &&
+                   adjective->degree == Degree::positive;
         }));
     EXPECT_TRUE(
         std::ranges::any_of(sancte.analyses, [&](const AnalysisIR &analysis) {
             const auto *const adverb =
                 std::get_if<AdverbMorphology>(&analysis.morphology);
-            if (adverb == nullptr ||
+            if (adverb == nullptr || adverb->degree != Degree::positive ||
                 citation_lemma(database, database.lexeme(analysis.lexeme)) !=
                     "sanctus") {
                 return false;
@@ -1093,21 +1103,6 @@ TEST(EngineTest, PreservesSancteHomographsAndVidesneEnclitic) {
                                "e";
                 });
         }));
-    /* Keep the weaker category checks below as diagnostics for future
-       datasets that may add a second vocative or adverbial homograph. */
-    EXPECT_TRUE(
-        std::ranges::any_of(sancte.analyses, [](const AnalysisIR &analysis) {
-            return std::holds_alternative<AdverbMorphology>(
-                analysis.morphology);
-        }));
-    EXPECT_TRUE(
-        std::ranges::any_of(sancte.analyses, [](const AnalysisIR &analysis) {
-            const auto *adjective =
-                std::get_if<AdjectiveMorphology>(&analysis.morphology);
-            return adjective != nullptr &&
-                   adjective->grammatical_case == GrammaticalCase::vocative;
-        }));
-
     const auto videsne = test::engine().analyze("videsne");
     ASSERT_EQ(videsne.status, QueryStatus::analyzed);
     ASSERT_FALSE(videsne.analyses.empty());
@@ -1115,7 +1110,10 @@ TEST(EngineTest, PreservesSancteHomographsAndVidesneEnclitic) {
         std::ranges::any_of(videsne.analyses, [&](const AnalysisIR &analysis) {
             const auto *verb =
                 std::get_if<VerbMorphology>(&analysis.morphology);
-            if (verb == nullptr || verb->person != Person::second ||
+            if (verb == nullptr || verb->tense != Tense::present ||
+                verb->voice != Voice::active ||
+                verb->mood != Mood::indicative ||
+                verb->person != Person::second ||
                 verb->number != GrammaticalNumber::singular) {
                 return false;
             }
@@ -1130,6 +1128,62 @@ TEST(EngineTest, PreservesSancteHomographsAndVidesneEnclitic) {
                                "ne";
                 });
         }));
+}
+
+TEST(EngineTest, AdverbialEQuantityControlFormsStayIndependent) {
+    const auto &database = test::engine().database();
+    const auto has_derived_adverb = [&](const std::string_view word) {
+        const auto result = test::engine().analyze(word);
+        return std::ranges::any_of(result.analyses, [&](const AnalysisIR &analysis) {
+            return std::holds_alternative<AdverbMorphology>(analysis.morphology) &&
+                   std::ranges::any_of(analysis.derivation.steps(), [&](const AddonId id) {
+                       return database.addon_kind(id) == AddonKind::suffix &&
+                              database.suffix_string(database.suffix(id).fix) == "e";
+                   });
+        });
+    };
+
+    // Allen & Greenough 214.a and D'Ooge 320: productive adjective -ē.
+    for (const auto word : {"sancte", "improbe", "perfide"}) {
+        EXPECT_TRUE(has_derived_adverb(word)) << word;
+    }
+    for (const auto word : {"sanctē", "improbē", "perfidē"}) {
+        EXPECT_TRUE(has_derived_adverb(word)) << word;
+    }
+
+    // Stored adverbs and a third-declension case form have no productive
+    // adjective-to-adverb -e step; they must not inherit its quantity.
+    for (const auto word : {"bene", "male", "facile", "care", "pulchre", "libere"}) {
+        const auto result = test::engine().analyze(word);
+        EXPECT_TRUE(std::ranges::any_of(result.analyses, [](const AnalysisIR &analysis) {
+            return std::holds_alternative<AdverbMorphology>(analysis.morphology) &&
+                   analysis.derivation.count == 0U;
+        })) << word;
+        EXPECT_FALSE(has_derived_adverb(word)) << word;
+    }
+
+    const auto short_sancte = test::engine().analyze("sanctĕ");
+    EXPECT_TRUE(std::ranges::any_of(short_sancte.analyses, [](const AnalysisIR &analysis) {
+        const auto *adjective = std::get_if<AdjectiveMorphology>(&analysis.morphology);
+        return adjective != nullptr &&
+               adjective->grammatical_case == GrammaticalCase::vocative;
+    }));
+}
+
+// Pending QUANTITIES.LAT support for suffix targets. The current importer,
+// packer and engine accept quantity evidence only for stems and inflections.
+TEST(EngineTest, DISABLED_AdverbialLongESuffixRejectsBriefE) {
+    const auto &database = test::engine().database();
+    for (const auto word : {"sanctĕ", "improbĕ", "perfidĕ"}) {
+        const auto result = test::engine().analyze(word);
+        EXPECT_TRUE(std::ranges::none_of(result.analyses, [&](const AnalysisIR &analysis) {
+            return std::holds_alternative<AdverbMorphology>(analysis.morphology) &&
+                   std::ranges::any_of(analysis.derivation.steps(), [&](const AddonId id) {
+                       return database.addon_kind(id) == AddonKind::suffix &&
+                              database.suffix_string(database.suffix(id).fix) == "e";
+                   });
+        })) << word;
+    }
 }
 
 TEST(EngineTest, EmitsRomanNumeralsWithoutSyntheticLexemeIds) {
@@ -2300,6 +2354,86 @@ TEST(EngineTest, SchedulesDirectWordsSuffixesAndEncliticsByStrength) {
                        analysis.morphology) &&
                    !analysis.derivation.rewritten_form.has_value();
         }));
+}
+
+TEST(EngineTest, AdverbialESuffixKeepsItsSourceParadigmAndLexemes) {
+    const auto &database = test::engine().database();
+    struct Fixture final {
+        std::string_view surface;
+        std::string_view lemma;
+    };
+    constexpr std::array fixtures{
+        Fixture{"sancte", "sanctus"},
+        Fixture{"improbe", "improbus"},
+        Fixture{"perfide", "perfidus"},
+        Fixture{"sancteque", "sanctus"},
+    };
+    for (const auto &fixture : fixtures) {
+        const auto result = test::engine().analyze(fixture.surface);
+        std::size_t matching{};
+        for (const auto &analysis : result.analyses) {
+            if (!std::holds_alternative<AdverbMorphology>(analysis.morphology)) {
+                continue;
+            }
+            for (const auto addon : analysis.derivation.steps()) {
+                if (database.addon_kind(addon) != AddonKind::suffix ||
+                    database.suffix_string(database.suffix(addon).fix) != "e") {
+                    continue;
+                }
+                ++matching;
+                const auto &lexeme = database.lexeme(analysis.lexeme);
+                const auto &suffix = database.suffix(addon);
+                EXPECT_EQ(citation_lemma(database, lexeme), fixture.lemma)
+                    << fixture.surface;
+                EXPECT_EQ(lexeme.declension, 1U) << fixture.surface;
+                EXPECT_EQ(lexeme.variant, 1U) << fixture.surface;
+                EXPECT_EQ(suffix.root, PartOfSpeech::adjective)
+                    << fixture.surface;
+                EXPECT_EQ(suffix.root_key, 2U) << fixture.surface;
+                EXPECT_EQ(suffix.target, PartOfSpeech::adverb)
+                    << fixture.surface;
+                EXPECT_EQ(suffix.target_degree, Degree::positive)
+                    << fixture.surface;
+            }
+        }
+        EXPECT_EQ(matching, 1U) << fixture.surface;
+    }
+}
+
+TEST(EngineTest, AdverbialESuffixKeepsRejectedRootsAndDirectReadings) {
+    const auto &database = test::engine().database();
+    const auto has_derived_e_adverb = [&](const QueryResult &result) {
+        return std::ranges::any_of(result.analyses, [&](const AnalysisIR &analysis) {
+            return std::holds_alternative<AdverbMorphology>(analysis.morphology) &&
+                   std::ranges::any_of(analysis.derivation.steps(), [&](const AddonId id) {
+                       return database.addon_kind(id) == AddonKind::suffix &&
+                              database.suffix_string(database.suffix(id).fix) == "e";
+                   });
+        });
+    };
+    for (const auto word : {"forte", "sole", "late", "adsidue", "male", "facile", "bene"}) {
+        const auto result = test::engine().analyze(word);
+        EXPECT_FALSE(has_derived_e_adverb(result)) << word;
+    }
+    const auto forte = test::engine().analyze("forte");
+    EXPECT_TRUE(std::ranges::any_of(forte.analyses, [&](const AnalysisIR &analysis) {
+        return std::holds_alternative<AdjectiveMorphology>(analysis.morphology) &&
+               citation_lemma(database, database.lexeme(analysis.lexeme)) == "fortis" &&
+               analysis.derivation.count == 0U;
+    }));
+    const auto sole = test::engine().analyze("sole");
+    EXPECT_TRUE(std::ranges::any_of(sole.analyses, [&](const AnalysisIR &analysis) {
+        return std::holds_alternative<VerbMorphology>(analysis.morphology) &&
+               citation_lemma(database, database.lexeme(analysis.lexeme)) == "soleo" &&
+               analysis.derivation.count == 0U;
+    }));
+    for (const auto word : {"fortiter", "acriter", "facile", "bene", "male"}) {
+        const auto result = test::engine().analyze(word);
+        EXPECT_TRUE(std::ranges::any_of(result.analyses, [](const AnalysisIR &analysis) {
+            return std::holds_alternative<AdverbMorphology>(analysis.morphology) &&
+                   analysis.derivation.count == 0U;
+        })) << word;
+    }
 }
 
 TEST(EngineTest, KeepsCanonicalQuocumqueReadingsWithoutDuplicatePaths) {
