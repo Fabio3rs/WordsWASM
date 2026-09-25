@@ -41,13 +41,166 @@ namespace wwdb = words::detail::wwdb;
 using PackingProfile = wwdb::Profile;
 using SectionType = wwdb::SectionType;
 
-constexpr std::size_t dictionary_record_size = 180;
+// Offsets in the GNAT/x86-64 source files. These are source layouts, not WWDB
+// offsets; keep their bounds checked against the source record sizes.
+constexpr std::size_t dictionary_record_size = 180U;
+constexpr std::size_t dictionary_stem_width = wwdb::maximum_stem_size;
 constexpr std::size_t dictionary_part_of_speech_offset = 72U;
+constexpr std::size_t dictionary_paradigm_offset = 76U;
+constexpr std::size_t dictionary_variant_offset = 80U;
 constexpr std::size_t dictionary_class_attribute_offset = 84U;
-constexpr std::size_t stem_record_size = 56;
-constexpr std::size_t inflection_record_size = 40;
-constexpr std::size_t inflections_per_section = 570;
+constexpr std::size_t dictionary_second_attribute_offset = 85U;
+constexpr std::size_t dictionary_numeric_value_offset = 88U;
+constexpr std::size_t dictionary_age_offset = 92U;
+constexpr std::size_t dictionary_area_offset = 93U;
+constexpr std::size_t dictionary_geography_offset = 94U;
+constexpr std::size_t dictionary_frequency_offset = 95U;
+constexpr std::size_t dictionary_source_offset = 96U;
+constexpr std::size_t dictionary_meaning_offset = 97U;
+constexpr std::size_t legacy_meaning_width = 80U;
+constexpr std::size_t stem_record_size = 56U;
+constexpr std::size_t stem_key_offset = 40U;
+constexpr std::size_t stem_dictionary_entry_offset = 48U;
+constexpr std::size_t inflection_record_size = 40U;
+constexpr std::size_t inflection_part_of_speech_offset = 0U;
+constexpr std::size_t inflection_paradigm_offset = 4U;
+constexpr std::size_t inflection_adverb_case_offset = 4U;
+constexpr std::size_t inflection_variant_offset = 8U;
+constexpr std::size_t inflection_morphology_offset = 12U;
+constexpr std::size_t inflection_stem_key_offset = 20U;
+constexpr std::size_t inflection_ending_size_offset = 24U;
+constexpr std::size_t inflection_ending_offset = 28U;
+constexpr std::size_t inflection_age_offset = 36U;
+constexpr std::size_t inflection_frequency_offset = 37U;
+constexpr std::size_t inflections_per_section = 570U;
 constexpr std::size_t inflection_section_count = wwdb::inflection_section_count;
+constexpr std::uint8_t maximum_paradigm_component = 9U;
+constexpr std::uint16_t maximum_imported_numeral_value = 1000U;
+constexpr std::uint8_t maximum_legacy_source =
+    std::to_underlying(words::Source::user_submitted);
+constexpr std::uint8_t imported_lexeme_source =
+    std::to_underlying(words::Source::other_dictionaries);
+constexpr std::uint8_t maximum_lexical_age =
+    std::to_underlying(words::Age::modern);
+constexpr std::uint8_t maximum_subject_area =
+    std::to_underlying(words::SubjectArea::mythology);
+constexpr std::uint8_t maximum_geography =
+    std::to_underlying(words::Geography::eastern_europe);
+constexpr std::uint8_t maximum_lexical_frequency =
+    std::to_underlying(words::LexicalFrequency::pliny);
+constexpr std::uint8_t maximum_rule_frequency =
+    std::to_underlying(words::RuleFrequency::reserved_n);
+constexpr std::uint8_t maximum_noun_gender =
+    std::to_underlying(words::Gender::common);
+constexpr std::uint8_t maximum_numeral_type =
+    std::to_underlying(words::NumeralType::adverbial);
+constexpr std::uint8_t maximum_encoded_noun_kind =
+    wwdb::low_mask<std::uint8_t>(4U);
+constexpr std::uint8_t maximum_simple_class =
+    wwdb::low_mask<std::uint8_t>(wwdb::simple_class_used_bits);
+constexpr std::uint8_t maximum_adjective_degree =
+    std::to_underlying(words::Degree::superlative);
+constexpr std::uint16_t maximum_numeral_value = wwdb::numeral_value_mask;
+constexpr std::uint32_t legacy_simple_lexeme_stride = 19U;
+constexpr std::uint32_t legacy_simple_inflection_stride = 8U;
+constexpr std::size_t maximum_stem_key = wwdb::lexical_slot_count;
+constexpr std::uint8_t maximum_rewrite_context_size = wwdb::nibble_mask;
+constexpr std::size_t inflection_participle_mood_offset =
+    inflection_morphology_offset + 5U;
+static_assert(inflection_participle_mood_offset < inflection_stem_key_offset);
+constexpr int required_argument_count = 3;
+constexpr int maximum_argument_count = 5;
+namespace suffix_fields {
+constexpr std::size_t minimum_target_count = 5U;
+constexpr std::size_t noun_or_numeral_count = 8U;
+constexpr std::size_t adjective_or_verb_count = 7U;
+constexpr std::size_t attribute = 5U;
+constexpr std::size_t second_attribute = 6U;
+constexpr std::size_t key_after_two_attributes = 7U;
+constexpr std::size_t key_after_one_attribute = 6U;
+} // namespace suffix_fields
+constexpr std::size_t tackon_noun_target_count = 5U;
+namespace unique_fields {
+constexpr std::size_t nominal_count = 12U;
+constexpr std::size_t verb_count = 14U;
+constexpr std::size_t nominal_attribute = 6U;
+constexpr std::size_t gender = 5U;
+constexpr std::size_t nominal_translation = 7U;
+constexpr std::size_t verb_number = 7U;
+constexpr std::size_t verb_kind = 8U;
+constexpr std::size_t verb_person = 6U;
+constexpr std::size_t verb_translation = 9U;
+} // namespace unique_fields
+namespace rewrite_fields {
+constexpr std::size_t count = 15U;
+constexpr std::size_t direction = 5U;
+constexpr std::size_t before = 6U;
+constexpr std::size_t after = 7U;
+constexpr std::size_t required_part = 8U;
+constexpr std::size_t required_stem_key = 9U;
+constexpr std::size_t minimum_before = 10U;
+constexpr std::size_t minimum_after = 11U;
+constexpr std::size_t constraint = 12U;
+constexpr std::size_t era = 13U;
+constexpr std::size_t name = 14U;
+} // namespace rewrite_fields
+namespace quantity_fields {
+constexpr std::size_t stem_count = 5U;
+constexpr std::size_t suffix_count = 11U;
+constexpr std::size_t suffix_target_part = 5U;
+constexpr std::size_t suffix_target_key = 6U;
+constexpr std::size_t suffix_root_declension = 7U;
+constexpr std::size_t suffix_root_variant = 8U;
+constexpr std::size_t suffix_known = 9U;
+constexpr std::size_t suffix_long = 10U;
+} // namespace quantity_fields
+namespace policy_fields {
+constexpr std::size_t count = 12U;
+constexpr std::size_t terminator = 11U;
+constexpr std::size_t target_part = 5U;
+constexpr std::size_t target_key = 6U;
+constexpr std::size_t target_degree = 7U;
+constexpr std::size_t connector = 8U;
+constexpr std::size_t root_declension = 9U;
+constexpr std::size_t root_variant = 10U;
+} // namespace policy_fields
+constexpr std::uint8_t pos_noun = std::to_underlying(words::PartOfSpeech::noun);
+constexpr std::uint8_t pos_pronoun =
+    std::to_underlying(words::PartOfSpeech::pronoun);
+constexpr std::uint8_t pos_pack = std::to_underlying(words::PartOfSpeech::pack);
+constexpr std::uint8_t pos_adjective =
+    std::to_underlying(words::PartOfSpeech::adjective);
+constexpr std::uint8_t pos_numeral =
+    std::to_underlying(words::PartOfSpeech::numeral);
+constexpr std::uint8_t pos_adverb =
+    std::to_underlying(words::PartOfSpeech::adverb);
+constexpr std::uint8_t pos_verb = std::to_underlying(words::PartOfSpeech::verb);
+constexpr std::uint8_t pos_participle =
+    std::to_underlying(words::PartOfSpeech::participle);
+constexpr std::uint8_t pos_supine =
+    std::to_underlying(words::PartOfSpeech::supine);
+constexpr std::uint8_t pos_preposition =
+    std::to_underlying(words::PartOfSpeech::preposition);
+constexpr std::uint8_t pos_conjunction =
+    std::to_underlying(words::PartOfSpeech::conjunction);
+constexpr std::uint8_t pos_interjection =
+    std::to_underlying(words::PartOfSpeech::interjection);
+static_assert(dictionary_stem_width * wwdb::lexical_slot_count ==
+              dictionary_part_of_speech_offset);
+static_assert(dictionary_meaning_offset + legacy_meaning_width <=
+              dictionary_record_size);
+static_assert(dictionary_numeric_value_offset + wwdb::u32_size <=
+              dictionary_age_offset);
+static_assert(stem_dictionary_entry_offset + wwdb::u64_size ==
+              stem_record_size);
+static_assert(stem_key_offset + wwdb::u32_size <= stem_dictionary_entry_offset);
+static_assert(inflection_frequency_offset < inflection_record_size);
+static_assert(inflection_ending_offset + wwdb::maximum_ending_size <=
+              inflection_age_offset);
+static_assert(inflection_stem_key_offset + wwdb::u32_size ==
+              inflection_ending_size_offset);
+static_assert(inflection_ending_size_offset + wwdb::u32_size ==
+              inflection_ending_offset);
 constexpr std::uint8_t legacy_pack_part_of_speech = 3U;
 constexpr auto legacy_verb_part_of_speech =
     static_cast<std::uint8_t>(std::to_underlying(words::PartOfSpeech::verb));
@@ -319,7 +472,8 @@ read_compiled_lexemes(const std::filesystem::path &path) {
         if (!decisions.emplace(lexeme.decision_id, line_number).second) {
             fail(context + ": duplicate decision_id " + lexeme.decision_id);
         }
-        if (!record["stems"].is_array() || record["stems"].size() != 4U) {
+        if (!record["stems"].is_array() ||
+            record["stems"].size() != wwdb::lexical_slot_count) {
             fail(context + ": stems must contain exactly four strings");
         }
         bool has_stem = false;
@@ -333,7 +487,7 @@ read_compiled_lexemes(const std::filesystem::path &path) {
                 lexeme.stems[slot], [](const char character) {
                     return character >= 'a' && character <= 'z';
                 });
-            if (lexeme.stems[slot].size() > 18U || !valid) {
+            if (lexeme.stems[slot].size() > dictionary_stem_width || !valid) {
                 fail(context +
                      ": stem must contain at most 18 lowercase ASCII letters");
             }
@@ -344,56 +498,82 @@ read_compiled_lexemes(const std::filesystem::path &path) {
         }
 
         lexeme.part_of_speech = static_cast<std::uint8_t>(
-            json_u32(record, "part_of_speech", 15U, context));
+            json_u32(record, "part_of_speech",
+                     std::to_underlying(words::PartOfSpeech::suffix), context));
         lexeme.paradigm = static_cast<std::uint8_t>(
-            json_u32(record, "paradigm", 0xffU, context));
-        lexeme.class_payload = static_cast<std::uint16_t>(
-            json_u32(record, "class_payload", 0x1fffU, context));
-        lexeme.numeric_value = static_cast<std::uint16_t>(
-            json_u32(record, "numeric_value", 1000U, context));
+            json_u32(record, "paradigm",
+                     std::numeric_limits<std::uint8_t>::max(), context));
+        lexeme.class_payload = static_cast<std::uint16_t>(json_u32(
+            record, "class_payload", wwdb::lexeme_class_payload_mask, context));
+        lexeme.numeric_value = static_cast<std::uint16_t>(json_u32(
+            record, "numeric_value", maximum_imported_numeral_value, context));
         lexeme.translation =
-            json_u32(record, "translation", 0x3f'ffffU, context);
-        if (lexeme.part_of_speech != 1U && lexeme.part_of_speech != 2U &&
-            lexeme.part_of_speech != 4U && lexeme.part_of_speech != 5U &&
-            lexeme.part_of_speech != 6U && lexeme.part_of_speech != 7U &&
-            lexeme.part_of_speech != 10U && lexeme.part_of_speech != 11U &&
-            lexeme.part_of_speech != 12U) {
+            json_u32(record, "translation", wwdb::translation_mask, context);
+        if (lexeme.part_of_speech != pos_noun &&
+            lexeme.part_of_speech != pos_pronoun &&
+            lexeme.part_of_speech != pos_adjective &&
+            lexeme.part_of_speech != pos_numeral &&
+            lexeme.part_of_speech != pos_adverb &&
+            lexeme.part_of_speech != pos_verb &&
+            lexeme.part_of_speech != pos_preposition &&
+            lexeme.part_of_speech != pos_conjunction &&
+            lexeme.part_of_speech != pos_interjection) {
             fail(context + ": part_of_speech is not importable");
         }
         const auto declension =
-            static_cast<std::uint8_t>(lexeme.paradigm >> 4U);
-        const auto variant = static_cast<std::uint8_t>(lexeme.paradigm & 0x0fU);
-        if (declension > 9U || variant > 9U) {
+            static_cast<std::uint8_t>(lexeme.paradigm >> wwdb::pos_width);
+        const auto variant = static_cast<std::uint8_t>(
+            lexeme.paradigm & wwdb::low_mask<std::uint8_t>(wwdb::pos_width));
+        if (declension > maximum_paradigm_component ||
+            variant > maximum_paradigm_component) {
             fail(context + ": paradigm component exceeds 0..9");
         }
-        const auto age = lexeme.translation & 0x0fU;
-        const auto subject = (lexeme.translation >> 4U) & 0x0fU;
-        const auto geography = (lexeme.translation >> 8U) & 0x1fU;
-        const auto frequency = (lexeme.translation >> 13U) & 0x0fU;
-        const auto source = (lexeme.translation >> 17U) & 0x1fU;
-        if (age > 8U || subject > 11U || geography > 17U || frequency > 9U ||
-            source != 17U) {
+        const auto age = lexeme.translation & wwdb::age_mask;
+        const auto subject =
+            (lexeme.translation >> wwdb::subject_shift) & wwdb::subject_mask;
+        const auto geography = (lexeme.translation >> wwdb::geography_shift) &
+                               wwdb::geography_mask;
+        const auto frequency = (lexeme.translation >> wwdb::frequency_shift) &
+                               wwdb::frequency_mask;
+        const auto source =
+            (lexeme.translation >> wwdb::source_shift) & wwdb::source_mask;
+        if (age > maximum_lexical_age || subject > maximum_subject_area ||
+            geography > maximum_geography ||
+            frequency > maximum_lexical_frequency ||
+            source != imported_lexeme_source) {
             fail(context +
                  ": translation metadata is outside the import policy");
         }
-        if ((lexeme.part_of_speech == 1U &&
-             ((lexeme.class_payload & 0x07U) > 4U ||
-              (lexeme.class_payload >> 3U) > 9U)) ||
-            (lexeme.part_of_speech == 2U && lexeme.class_payload > 7U) ||
-            ((lexeme.part_of_speech == 4U || lexeme.part_of_speech == 6U) &&
-             lexeme.class_payload > 3U) ||
-            (lexeme.part_of_speech == 7U && lexeme.class_payload > 11U) ||
-            (lexeme.part_of_speech == 10U && lexeme.class_payload > 7U) ||
-            (lexeme.part_of_speech == 5U &&
-             ((lexeme.class_payload & 0x07U) > 4U ||
-              (lexeme.class_payload >> 3U) > 1000U)) ||
-            ((lexeme.part_of_speech == 11U || lexeme.part_of_speech == 12U) &&
+        if ((lexeme.part_of_speech == pos_noun &&
+             ((lexeme.class_payload & wwdb::three_bit_mask) >
+                  maximum_noun_gender ||
+              (lexeme.class_payload >> wwdb::noun_kind_shift) >
+                  std::to_underlying(words::NounKind::place))) ||
+            (lexeme.part_of_speech == pos_pronoun &&
+             lexeme.class_payload > wwdb::three_bit_mask) ||
+            ((lexeme.part_of_speech == pos_adjective ||
+              lexeme.part_of_speech == pos_adverb) &&
+             lexeme.class_payload > maximum_adjective_degree) ||
+            (lexeme.part_of_speech == pos_verb &&
+             lexeme.class_payload >
+                 std::to_underlying(words::VerbKind::perfect_definite)) ||
+            (lexeme.part_of_speech == pos_preposition &&
+             lexeme.class_payload > wwdb::three_bit_mask) ||
+            (lexeme.part_of_speech == pos_numeral &&
+             ((lexeme.class_payload & wwdb::three_bit_mask) >
+                  maximum_numeral_type ||
+              (lexeme.class_payload >> wwdb::numeral_value_shift) >
+                  maximum_imported_numeral_value)) ||
+            ((lexeme.part_of_speech == pos_conjunction ||
+              lexeme.part_of_speech == pos_interjection) &&
              lexeme.class_payload != 0U)) {
             fail(context + ": class_payload is invalid for part_of_speech");
         }
-        if ((lexeme.part_of_speech == 5U &&
-             lexeme.numeric_value != (lexeme.class_payload >> 3U)) ||
-            (lexeme.part_of_speech != 5U && lexeme.numeric_value != 0U)) {
+        if ((lexeme.part_of_speech == pos_numeral &&
+             lexeme.numeric_value !=
+                 (lexeme.class_payload >> wwdb::numeral_value_shift)) ||
+            (lexeme.part_of_speech != pos_numeral &&
+             lexeme.numeric_value != 0U)) {
             fail(context + ": numeric_value disagrees with class_payload");
         }
         result.push_back(std::move(lexeme));
@@ -426,21 +606,25 @@ std::uint8_t byte_at(std::span<const std::byte> bytes, std::size_t offset) {
 
 std::uint32_t read_u32_le(std::span<const std::byte> bytes,
                           std::size_t offset) {
-    if (offset > bytes.size() || bytes.size() - offset < 4) {
+    if (offset > bytes.size() || bytes.size() - offset < wwdb::u32_size) {
         fail("legacy u32 read past end of buffer");
     }
     return static_cast<std::uint32_t>(byte_at(bytes, offset)) |
-           (static_cast<std::uint32_t>(byte_at(bytes, offset + 1)) << 8U) |
-           (static_cast<std::uint32_t>(byte_at(bytes, offset + 2)) << 16U) |
-           (static_cast<std::uint32_t>(byte_at(bytes, offset + 3)) << 24U);
+           (static_cast<std::uint32_t>(byte_at(bytes, offset + 1))
+            << wwdb::bits_per_byte) |
+           (static_cast<std::uint32_t>(byte_at(bytes, offset + 2))
+            << (2U * wwdb::bits_per_byte)) |
+           (static_cast<std::uint32_t>(byte_at(bytes, offset + 3))
+            << (3U * wwdb::bits_per_byte));
 }
 
 std::uint64_t read_u64_le(std::span<const std::byte> bytes,
                           std::size_t offset) {
     const auto low = read_u32_le(bytes, offset);
-    const auto high = read_u32_le(bytes, offset + 4);
+    const auto high = read_u32_le(bytes, offset + wwdb::u32_size);
     return static_cast<std::uint64_t>(low) |
-           (static_cast<std::uint64_t>(high) << 32U);
+           (static_cast<std::uint64_t>(high)
+            << (wwdb::u32_size * wwdb::bits_per_byte));
 }
 
 void append_u8(Bytes &output, std::uint8_t value) {
@@ -449,36 +633,43 @@ void append_u8(Bytes &output, std::uint8_t value) {
 
 void append_u16_le(Bytes &output, std::uint16_t value) {
     append_u8(output, static_cast<std::uint8_t>(value));
-    append_u8(output, static_cast<std::uint8_t>(value >> 8U));
+    append_u8(output, static_cast<std::uint8_t>(value >> wwdb::bits_per_byte));
 }
 
 void append_u24_le(Bytes &output, std::uint32_t value) {
-    if (value > 0x00ff'ffffU) {
+    if (value >
+        wwdb::low_mask<std::uint32_t>(wwdb::u24_size * wwdb::bits_per_byte)) {
         fail("u24 value is out of range");
     }
     append_u8(output, static_cast<std::uint8_t>(value));
-    append_u8(output, static_cast<std::uint8_t>(value >> 8U));
-    append_u8(output, static_cast<std::uint8_t>(value >> 16U));
+    append_u8(output, static_cast<std::uint8_t>(value >> wwdb::bits_per_byte));
+    append_u8(output,
+              static_cast<std::uint8_t>(value >> (2U * wwdb::bits_per_byte)));
 }
 
 void append_u32_le(Bytes &output, std::uint32_t value) {
     append_u8(output, static_cast<std::uint8_t>(value));
-    append_u8(output, static_cast<std::uint8_t>(value >> 8U));
-    append_u8(output, static_cast<std::uint8_t>(value >> 16U));
-    append_u8(output, static_cast<std::uint8_t>(value >> 24U));
+    append_u8(output, static_cast<std::uint8_t>(value >> wwdb::bits_per_byte));
+    append_u8(output,
+              static_cast<std::uint8_t>(value >> (2U * wwdb::bits_per_byte)));
+    append_u8(output,
+              static_cast<std::uint8_t>(value >> (3U * wwdb::bits_per_byte)));
 }
 
 void append_u48_le(Bytes &output, std::uint64_t value) {
-    if (value > 0x0000'ffff'ffff'ffffULL) {
+    if (value >
+        wwdb::low_mask<std::uint64_t>(wwdb::u48_size * wwdb::bits_per_byte)) {
         fail("u48 value is out of range");
     }
     append_u32_le(output, static_cast<std::uint32_t>(value));
-    append_u16_le(output, static_cast<std::uint16_t>(value >> 32U));
+    append_u16_le(output, static_cast<std::uint16_t>(
+                              value >> (wwdb::u32_size * wwdb::bits_per_byte)));
 }
 
 void append_u64_le(Bytes &output, std::uint64_t value) {
     append_u32_le(output, static_cast<std::uint32_t>(value));
-    append_u32_le(output, static_cast<std::uint32_t>(value >> 32U));
+    append_u32_le(output, static_cast<std::uint32_t>(
+                              value >> (wwdb::u32_size * wwdb::bits_per_byte)));
 }
 
 std::string fixed_string(std::span<const std::byte> bytes, std::size_t offset,
@@ -617,7 +808,8 @@ SuffixSource parse_suffix(const std::uint16_t addon_id,
                           const std::vector<std::string_view> &header,
                           const std::vector<std::string_view> &target,
                           std::string meaning) {
-    if (header.size() < 2 || header.size() > 3 || target.size() < 5) {
+    if (header.size() < 2 || header.size() > 3 ||
+        target.size() < suffix_fields::minimum_target_count) {
         fail("invalid SUFFIX record shape in ADDONS.LAT");
     }
 
@@ -641,52 +833,64 @@ SuffixSource parse_suffix(const std::uint16_t addon_id,
                              parse_u8(target.at(variant_index), "variant"));
     };
     switch (result.target) {
-    case 1: // noun
-        if (target.size() != 8) {
+    case pos_noun: // noun
+        if (target.size() != suffix_fields::noun_or_numeral_count) {
             fail("invalid noun suffix target in ADDONS.LAT");
         }
         result.paradigm = paradigm(3, 4);
-        result.attribute_0 =
-            enum_value(target[5], {"X", "M", "F", "N", "C"}, "gender");
+        result.attribute_0 = enum_value(target[suffix_fields::attribute],
+                                        {"X", "M", "F", "N", "C"}, "gender");
         result.attribute_1 = enum_value(
-            target[6], {"x", "s", "m", "a", "g", "n", "p", "t", "l", "w"},
-            "noun kind");
-        result.target_key = parse_u8(target[7], "suffix target key");
+            target[suffix_fields::second_attribute],
+            {"x", "s", "m", "a", "g", "n", "p", "t", "l", "w"}, "noun kind");
+        result.target_key =
+            parse_u8(target[suffix_fields::key_after_two_attributes],
+                     "suffix target key");
         break;
-    case 4: // adjective
-        if (target.size() != 7) {
+    case pos_adjective: // adjective
+        if (target.size() != suffix_fields::adjective_or_verb_count) {
             fail("invalid adjective suffix target in ADDONS.LAT");
         }
         result.paradigm = paradigm(3, 4);
         result.attribute_0 =
-            enum_value(target[5], {"X", "POS", "COMP", "SUPER"}, "degree");
-        result.target_key = parse_u8(target[6], "suffix target key");
+            enum_value(target[suffix_fields::attribute],
+                       {"X", "POS", "COMP", "SUPER"}, "degree");
+        result.target_key =
+            parse_u8(target[suffix_fields::key_after_one_attribute],
+                     "suffix target key");
         break;
-    case 5: // numeral
-        if (target.size() != 8) {
+    case pos_numeral: // numeral
+        if (target.size() != suffix_fields::noun_or_numeral_count) {
             fail("invalid numeral suffix target in ADDONS.LAT");
         }
         result.paradigm = paradigm(3, 4);
-        result.attribute_0 = enum_value(
-            target[5], {"X", "CARD", "ORD", "DIST", "ADVERB"}, "numeral sort");
-        result.numeric_value = parse_u8(target[6], "numeral value");
-        result.target_key = parse_u8(target[7], "suffix target key");
+        result.attribute_0 =
+            enum_value(target[suffix_fields::attribute],
+                       {"X", "CARD", "ORD", "DIST", "ADVERB"}, "numeral sort");
+        result.numeric_value =
+            parse_u8(target[suffix_fields::second_attribute], "numeral value");
+        result.target_key =
+            parse_u8(target[suffix_fields::key_after_two_attributes],
+                     "suffix target key");
         break;
-    case 6: // adverb
-        if (target.size() != 5) {
+    case pos_adverb: // adverb
+        if (target.size() != suffix_fields::minimum_target_count) {
             fail("invalid adverb suffix target in ADDONS.LAT");
         }
         result.attribute_0 =
             enum_value(target[3], {"X", "POS", "COMP", "SUPER"}, "degree");
         result.target_key = parse_u8(target[4], "suffix target key");
         break;
-    case 7: // verb
-        if (target.size() != 7) {
+    case pos_verb: // verb
+        if (target.size() != suffix_fields::adjective_or_verb_count) {
             fail("invalid verb suffix target in ADDONS.LAT");
         }
         result.paradigm = paradigm(3, 4);
-        result.attribute_0 = enum_value(target[5], {"X"}, "verb kind");
-        result.target_key = parse_u8(target[6], "suffix target key");
+        result.attribute_0 =
+            enum_value(target[suffix_fields::attribute], {"X"}, "verb kind");
+        result.target_key =
+            parse_u8(target[suffix_fields::key_after_one_attribute],
+                     "suffix target key");
         break;
     default:
         fail("unsupported suffix target in ADDONS.LAT");
@@ -750,8 +954,8 @@ TackonSource parse_tackon(const std::uint16_t addon_id,
             fail("invalid generic tackon target in ADDONS.LAT");
         }
         break;
-    case 1: // noun
-        if (target.size() != 5U) {
+    case pos_noun: // noun
+        if (target.size() != tackon_noun_target_count) {
             fail("invalid noun tackon target in ADDONS.LAT");
         }
         result.paradigm = paradigm();
@@ -761,8 +965,8 @@ TackonSource parse_tackon(const std::uint16_t addon_id,
             target[4], {"x", "s", "m", "a", "g", "n", "p", "t", "l", "w"},
             "noun kind");
         break;
-    case 2: // pronoun
-    case 3: // pack
+    case pos_pronoun: // pronoun
+    case pos_pack:    // pack
         if (target.size() != 4U) {
             fail("invalid pronoun tackon target in ADDONS.LAT");
         }
@@ -772,7 +976,7 @@ TackonSource parse_tackon(const std::uint16_t addon_id,
                                          "INTERR", "INDEF", "ADJECT"},
                                         "pronoun kind");
         break;
-    case 4: // adjective
+    case pos_adjective: // adjective
         if (target.size() != 4U) {
             fail("invalid adjective tackon target in ADDONS.LAT");
         }
@@ -866,8 +1070,8 @@ AddonSources read_addons(const std::filesystem::path &path) {
         }
         // Ada's Meaning_Type is fixed at 80 bytes. Preserve its observable
         // truncation rather than leaking longer source lines into JSON.
-        if (meaning_line.size() > 80U) {
-            meaning_line.resize(80U);
+        if (meaning_line.size() > legacy_meaning_width) {
+            meaning_line.resize(legacy_meaning_width);
         }
         if (const auto comment = header_line.find("--");
             comment != std::string::npos) {
@@ -906,13 +1110,13 @@ UniqueSource parse_unique(const std::string_view surface,
                           const std::vector<std::string_view> &fields,
                           std::string meaning) {
     constexpr std::string_view source{"UNIQUES.LAT"};
-    if (surface.empty() || surface.size() > 18U) {
+    if (surface.empty() || surface.size() > dictionary_stem_width) {
         fail("unique surface is empty or exceeds the legacy stem width");
     }
-    if (meaning.size() > 80U) {
+    if (meaning.size() > legacy_meaning_width) {
         // Meaning_Type is fixed-width in Ada, so retaining the truncation is
         // required for byte-for-byte canonical JSON compatibility.
-        meaning.resize(80U);
+        meaning.resize(legacy_meaning_width);
     }
 
     UniqueSource result;
@@ -936,53 +1140,57 @@ UniqueSource parse_unique(const std::string_view surface,
                        "unique case", source);
         const auto number =
             enum_value(fields.at(4), {"X", "S", "P"}, "unique number", source);
-        const auto gender = enum_value(fields.at(5), {"X", "M", "F", "N", "C"},
-                                       "unique gender", source);
+        const auto gender =
+            enum_value(fields.at(unique_fields::gender),
+                       {"X", "M", "F", "N", "C"}, "unique gender", source);
         return static_cast<std::uint16_t>(
             static_cast<std::uint16_t>(grammatical_case) |
             (static_cast<std::uint16_t>(number) << 3U) |
-            (static_cast<std::uint16_t>(gender) << 5U));
+            (static_cast<std::uint16_t>(gender) << wwdb::nominal_gender_shift));
     };
 
     std::size_t translation_offset = 0;
     switch (result.part_of_speech) {
-    case 1: // noun
-        if (fields.size() != 12U) {
+    case pos_noun: // noun
+        if (fields.size() != unique_fields::nominal_count) {
             fail("invalid noun record shape in UNIQUES.LAT");
         }
         result.paradigm = paradigm(1, 2);
         result.morphology = nominal_morphology();
-        static_cast<void>(enum_value(
-            fields[6], {"X", "S", "M", "A", "G", "N", "P", "T", "L", "W"},
-            "unique noun kind", source));
-        translation_offset = 7U;
+        static_cast<void>(
+            enum_value(fields[unique_fields::nominal_attribute],
+                       {"X", "S", "M", "A", "G", "N", "P", "T", "L", "W"},
+                       "unique noun kind", source));
+        translation_offset = unique_fields::nominal_translation;
         break;
-    case 2: // pronoun
-        if (fields.size() != 12U) {
+    case pos_pronoun: // pronoun
+        if (fields.size() != unique_fields::nominal_count) {
             fail("invalid pronoun record shape in UNIQUES.LAT");
         }
         result.paradigm = paradigm(1, 2);
         result.morphology = nominal_morphology();
-        static_cast<void>(enum_value(fields[6],
+        static_cast<void>(enum_value(fields[unique_fields::nominal_attribute],
                                      {"X", "PERS", "REL", "REFLEX", "DEMONS",
                                       "INTERR", "INDEF", "ADJECT"},
                                      "unique pronoun kind", source));
-        translation_offset = 7U;
+        translation_offset = unique_fields::nominal_translation;
         break;
-    case 4: { // adjective
-        if (fields.size() != 12U) {
+    case pos_adjective: { // adjective
+        if (fields.size() != unique_fields::nominal_count) {
             fail("invalid adjective record shape in UNIQUES.LAT");
         }
         result.paradigm = paradigm(1, 2);
-        const auto degree = enum_value(fields[6], {"X", "POS", "COMP", "SUPER"},
-                                       "unique degree", source);
+        const auto degree =
+            enum_value(fields[unique_fields::nominal_attribute],
+                       {"X", "POS", "COMP", "SUPER"}, "unique degree", source);
         result.morphology = static_cast<std::uint16_t>(
-            nominal_morphology() | (static_cast<std::uint16_t>(degree) << 8U));
-        translation_offset = 7U;
+            nominal_morphology() | (static_cast<std::uint16_t>(degree)
+                                    << wwdb::morphology_byte_shift));
+        translation_offset = unique_fields::nominal_translation;
         break;
     }
-    case 7: { // verb
-        if (fields.size() != 14U) {
+    case pos_verb: { // verb
+        if (fields.size() != unique_fields::verb_count) {
             fail("invalid verb record shape in UNIQUES.LAT");
         }
         result.paradigm = paradigm(1, 2);
@@ -994,24 +1202,27 @@ UniqueSource parse_unique(const std::string_view surface,
         const auto mood =
             enum_value(fields[5], {"X", "IND", "SUB", "IMP", "INF", "PPL"},
                        "unique mood", source);
-        const auto person = parse_u8(fields[6], "unique person", source);
+        const auto person = parse_u8(fields[unique_fields::verb_person],
+                                     "unique person", source);
         const auto number =
-            enum_value(fields[7], {"X", "S", "P"}, "unique number", source);
+            enum_value(fields[unique_fields::verb_number], {"X", "S", "P"},
+                       "unique number", source);
         if (person > 3U) {
             fail("unique verb person is outside 0..3");
         }
         static_cast<void>(
-            enum_value(fields[8],
+            enum_value(fields[unique_fields::verb_kind],
                        {"X", "TO_BE", "TO_BEING", "GEN", "DAT", "ABL", "TRANS",
                         "INTRANS", "IMPERS", "DEP", "SEMIDEP", "PERFDEF"},
                        "unique verb kind", source));
         result.morphology = static_cast<std::uint16_t>(
             static_cast<std::uint16_t>(tense) |
             (static_cast<std::uint16_t>(voice) << 3U) |
-            (static_cast<std::uint16_t>(mood) << 5U) |
-            (static_cast<std::uint16_t>(person) << 8U) |
-            (static_cast<std::uint16_t>(number) << 10U));
-        translation_offset = 9U;
+            (static_cast<std::uint16_t>(mood) << wwdb::nominal_gender_shift) |
+            (static_cast<std::uint16_t>(person)
+             << wwdb::morphology_byte_shift) |
+            (static_cast<std::uint16_t>(number) << wwdb::verb_number_shift));
+        translation_offset = unique_fields::verb_translation;
         break;
     }
     default:
@@ -1039,11 +1250,12 @@ UniqueSource parse_unique(const std::string_view surface,
         {"X", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L",
          "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "Y", "Z"},
         "unique source", source);
-    result.translation = static_cast<std::uint32_t>(age) |
-                         (static_cast<std::uint32_t>(area) << 4U) |
-                         (static_cast<std::uint32_t>(geography) << 8U) |
-                         (static_cast<std::uint32_t>(frequency) << 13U) |
-                         (static_cast<std::uint32_t>(dictionary_source) << 17U);
+    result.translation =
+        static_cast<std::uint32_t>(age) |
+        (static_cast<std::uint32_t>(area) << 4U) |
+        (static_cast<std::uint32_t>(geography) << wwdb::morphology_byte_shift) |
+        (static_cast<std::uint32_t>(frequency) << wwdb::frequency_shift) |
+        (static_cast<std::uint32_t>(dictionary_source) << wwdb::source_shift);
     return result;
 }
 
@@ -1100,11 +1312,11 @@ std::vector<RewriteSource> read_rewrites(const std::filesystem::path &path) {
             fail("incomplete REWRITES.LAT record");
         }
         const auto fields = split_words(header_line);
-        if (fields.size() != 15U) {
+        if (fields.size() != rewrite_fields::count) {
             fail("invalid REWRITES.LAT record shape");
         }
-        if (meaning.size() > 80U) {
-            meaning.resize(80U);
+        if (meaning.size() > legacy_meaning_width) {
+            meaning.resize(legacy_meaning_width);
         }
 
         RewriteSource rewrite;
@@ -1120,29 +1332,39 @@ std::vector<RewriteSource> read_rewrites(const std::filesystem::path &path) {
         rewrite.scope =
             enum_value(fields[4], {"X", "INITIAL", "INTERNAL", "FINAL"},
                        "rewrite scope", source);
-        rewrite.scan_reverse = enum_value(fields[5], {"FORWARD", "REVERSE"},
+        rewrite.scan_reverse = enum_value(fields[rewrite_fields::direction],
+                                          {"FORWARD", "REVERSE"},
                                           "rewrite direction", source) == 1U;
-        rewrite.before = fields[6] == "-" ? "" : std::string{fields[6]};
-        rewrite.after = fields[7] == "-" ? "" : std::string{fields[7]};
-        rewrite.required_part = part_of_speech(fields[8], source);
+        rewrite.before = fields[rewrite_fields::before] == "-"
+                             ? ""
+                             : std::string{fields[rewrite_fields::before]};
+        rewrite.after = fields[rewrite_fields::after] == "-"
+                            ? ""
+                            : std::string{fields[rewrite_fields::after]};
+        rewrite.required_part =
+            part_of_speech(fields[rewrite_fields::required_part], source);
         rewrite.required_stem_key =
-            parse_u8(fields[9], "required stem key", source);
+            parse_u8(fields[rewrite_fields::required_stem_key],
+                     "required stem key", source);
         rewrite.minimum_before =
-            parse_u8(fields[10], "minimum prefix size", source);
-        rewrite.minimum_after =
-            parse_u8(fields[11], "minimum suffix size", source);
-        rewrite.constraint =
-            enum_value(fields[12], {"ANY", "EO_VERB", "ADJECTIVE_IIS"},
-                       "rewrite constraint", source);
-        rewrite.medieval = enum_value(fields[13], {"CLASSICAL", "MEDIEVAL"},
-                                      "rewrite era", source) == 1U;
-        rewrite.name = fields[14];
+            parse_u8(fields[rewrite_fields::minimum_before],
+                     "minimum prefix size", source);
+        rewrite.minimum_after = parse_u8(fields[rewrite_fields::minimum_after],
+                                         "minimum suffix size", source);
+        rewrite.constraint = enum_value(fields[rewrite_fields::constraint],
+                                        {"ANY", "EO_VERB", "ADJECTIVE_IIS"},
+                                        "rewrite constraint", source);
+        rewrite.medieval =
+            enum_value(fields[rewrite_fields::era], {"CLASSICAL", "MEDIEVAL"},
+                       "rewrite era", source) == 1U;
+        rewrite.name = fields[rewrite_fields::name];
         rewrite.meaning = std::move(meaning);
         if (rewrite.kind == 0U || rewrite.scope == 0U ||
             rewrite.operation == 0U || rewrite.stage == 0U ||
             rewrite.required_stem_key > 4U || rewrite.name.empty() ||
             (rewrite.before.empty() && rewrite.operation != 3U) ||
-            rewrite.minimum_before > 15U || rewrite.minimum_after > 15U) {
+            rewrite.minimum_before > maximum_rewrite_context_size ||
+            rewrite.minimum_after > maximum_rewrite_context_size) {
             fail("invalid REWRITES.LAT rewrite constraints");
         }
         result.push_back(std::move(rewrite));
@@ -1180,7 +1402,8 @@ QuantitySources read_quantities(const std::filesystem::path &path) {
             });
             continue;
         }
-        if (fields.front() == "STEM" && fields.size() == 5U) {
+        if (fields.front() == "STEM" &&
+            fields.size() == quantity_fields::stem_count) {
             const auto entry = parse_u32(fields[1], "dictionary entry", source);
             if (entry == 0U ||
                 entry > std::numeric_limits<std::uint16_t>::max()) {
@@ -1199,7 +1422,8 @@ QuantitySources read_quantities(const std::filesystem::path &path) {
             });
             continue;
         }
-        if (fields.front() == "SUFFIX" && fields.size() == 11U) {
+        if (fields.front() == "SUFFIX" &&
+            fields.size() == quantity_fields::suffix_count) {
             const auto addon_id = parse_u32(fields[1], "addon ID", source);
             if (addon_id > std::numeric_limits<std::uint16_t>::max()) {
                 fail("suffix addon ID exceeds u16 in QUANTITIES.LAT");
@@ -1209,12 +1433,18 @@ QuantitySources read_quantities(const std::filesystem::path &path) {
                 std::string{fields[2]},
                 part_of_speech(fields[3], source),
                 parse_u8(fields[4], "suffix root key", source),
-                part_of_speech(fields[5], source),
-                parse_u8(fields[6], "suffix target key", source),
-                parse_u8(fields[7], "suffix root declension", source),
-                parse_u8(fields[8], "suffix root variant", source),
-                parse_u32(fields[9], "known mask", source),
-                parse_u32(fields[10], "long mask", source),
+                part_of_speech(fields[quantity_fields::suffix_target_part],
+                               source),
+                parse_u8(fields[quantity_fields::suffix_target_key],
+                         "suffix target key", source),
+                parse_u8(fields[quantity_fields::suffix_root_declension],
+                         "suffix root declension", source),
+                parse_u8(fields[quantity_fields::suffix_root_variant],
+                         "suffix root variant", source),
+                parse_u32(fields[quantity_fields::suffix_known], "known mask",
+                          source),
+                parse_u32(fields[quantity_fields::suffix_long], "long mask",
+                          source),
             });
             continue;
         }
@@ -1241,32 +1471,41 @@ read_suffix_policies(const std::filesystem::path &path) {
         if (fields.empty()) {
             continue;
         }
-        if (fields.size() != 12U || fields[0] != "SUFFIX" ||
-            fields[11] != "COEXIST_REGULAR") {
+        if (fields.size() != policy_fields::count || fields[0] != "SUFFIX" ||
+            fields[policy_fields::terminator] != "COEXIST_REGULAR") {
             fail("invalid ADDON_POLICIES.LAT record shape: " + line);
         }
         const auto id = parse_u32(fields[1], "addon ID", source);
         if (id > std::numeric_limits<std::uint16_t>::max() ||
-            (fields[8] != "-" && fields[8].size() != 1U)) {
+            (fields[policy_fields::connector] != "-" &&
+             fields[policy_fields::connector].size() != 1U)) {
             fail("invalid suffix policy ID or connector");
         }
         const auto root_declension =
-            parse_u8(fields[9], "suffix root declension", source);
-        const auto root_variant =
-            parse_u8(fields[10], "suffix root variant", source);
-        if (root_declension > 9U || root_variant > 9U) {
+            parse_u8(fields[policy_fields::root_declension],
+                     "suffix root declension", source);
+        const auto root_variant = parse_u8(fields[policy_fields::root_variant],
+                                           "suffix root variant", source);
+        if (root_declension > maximum_paradigm_component ||
+            root_variant > maximum_paradigm_component) {
             fail("suffix source paradigm exceeds 0..9 in ADDON_POLICIES.LAT");
         }
         result.push_back({
-            static_cast<std::uint16_t>(id), std::string{fields[2]},
+            static_cast<std::uint16_t>(id),
+            std::string{fields[2]},
             part_of_speech(fields[3], source),
             parse_u8(fields[4], "suffix root key", source),
-            part_of_speech(fields[5], source),
-            parse_u8(fields[6], "suffix target key", source),
-            enum_value(fields[7], {"X", "POS", "COMP", "SUPER"},
-                       "suffix target degree", source),
-            fields[8] == "-" ? '\0' : fields[8].front(),
-            root_declension, root_variant,
+            part_of_speech(fields[policy_fields::target_part], source),
+            parse_u8(fields[policy_fields::target_key], "suffix target key",
+                     source),
+            enum_value(fields[policy_fields::target_degree],
+                       {"X", "POS", "COMP", "SUPER"}, "suffix target degree",
+                       source),
+            fields[policy_fields::connector] == "-"
+                ? '\0'
+                : fields[policy_fields::connector].front(),
+            root_declension,
+            root_variant,
         });
     }
     return result;
@@ -1363,33 +1602,37 @@ class StringPool {
 };
 
 bool has_paradigm(std::uint8_t pofs) {
-    return pofs == 1 || pofs == 2 || pofs == 3 || pofs == 4 || pofs == 5 ||
-           pofs == 7 || pofs == 8 || pofs == 9;
+    return pofs == pos_noun || pofs == pos_pronoun || pofs == pos_pack ||
+           pofs == pos_adjective || pofs == pos_numeral || pofs == pos_verb ||
+           pofs == pos_participle || pofs == pos_supine;
 }
 
 std::uint8_t pack_paradigm(std::uint32_t which, std::uint32_t variant) {
-    if (which > 9 || variant > 9) {
+    if (which > maximum_paradigm_component ||
+        variant > maximum_paradigm_component) {
         fail("paradigm component outside 0..9");
     }
-    return static_cast<std::uint8_t>((which << 4U) | variant);
+    return static_cast<std::uint8_t>((which << wwdb::pos_width) | variant);
 }
 
 std::uint32_t pack_translation(std::span<const std::byte> record) {
-    const auto age = byte_at(record, 92);
-    const auto area = byte_at(record, 93);
-    const auto geo = byte_at(record, 94);
-    const auto frequency = byte_at(record, 95);
-    const auto source = byte_at(record, 96);
+    const auto age = byte_at(record, dictionary_age_offset);
+    const auto area = byte_at(record, dictionary_area_offset);
+    const auto geo = byte_at(record, dictionary_geography_offset);
+    const auto frequency = byte_at(record, dictionary_frequency_offset);
+    const auto source = byte_at(record, dictionary_source_offset);
 
-    if (age > 8 || area > 11 || geo > 17 || frequency > 9 || source > 25) {
+    if (age > maximum_lexical_age || area > maximum_subject_area ||
+        geo > maximum_geography || frequency > maximum_lexical_frequency ||
+        source > maximum_legacy_source) {
         fail("dictionary metadata enum outside legacy range");
     }
 
     return static_cast<std::uint32_t>(age) |
-           (static_cast<std::uint32_t>(area) << 4U) |
-           (static_cast<std::uint32_t>(geo) << 8U) |
-           (static_cast<std::uint32_t>(frequency) << 13U) |
-           (static_cast<std::uint32_t>(source) << 17U);
+           (static_cast<std::uint32_t>(area) << wwdb::subject_shift) |
+           (static_cast<std::uint32_t>(geo) << wwdb::geography_shift) |
+           (static_cast<std::uint32_t>(frequency) << wwdb::frequency_shift) |
+           (static_cast<std::uint32_t>(source) << wwdb::source_shift);
 }
 
 std::uint16_t pack_inflection_morphology(std::span<const std::byte> record,
@@ -1397,27 +1640,49 @@ std::uint16_t pack_inflection_morphology(std::span<const std::byte> record,
     auto at = [&](std::size_t offset) { return byte_at(record, offset); };
 
     switch (pofs) {
-    case 1: // noun
-    case 2: // pronoun
-    case 3: // pack
-    case 9: // supine
-        return static_cast<std::uint16_t>(at(12) | (at(13) << 3U) |
-                                          (at(14) << 5U));
-    case 4: // adjective
-    case 5: // numeral
-        return static_cast<std::uint16_t>(at(12) | (at(13) << 3U) |
-                                          (at(14) << 5U) | (at(15) << 8U));
-    case 6:  // adverb
-    case 10: // preposition
-        return at(4);
-    case 7: // finite verb
-        return static_cast<std::uint16_t>(at(12) | (at(13) << 3U) |
-                                          (at(14) << 5U) | (at(15) << 8U) |
-                                          (at(16) << 10U));
-    case 8: // participle
-        return static_cast<std::uint16_t>(at(12) | (at(13) << 3U) |
-                                          (at(14) << 5U) | (at(15) << 8U) |
-                                          (at(16) << 11U) | (at(17) << 13U));
+    case pos_noun:    // noun
+    case pos_pronoun: // pronoun
+    case pos_pack:    // pack
+    case pos_supine:  // supine
+        return static_cast<std::uint16_t>(at(inflection_morphology_offset) |
+                                          (at(inflection_morphology_offset + 1U)
+                                           << wwdb::nominal_number_shift) |
+                                          (at(inflection_morphology_offset + 2U)
+                                           << wwdb::nominal_gender_shift));
+    case pos_adjective: // adjective
+    case pos_numeral:   // numeral
+        return static_cast<std::uint16_t>(at(inflection_morphology_offset) |
+                                          (at(inflection_morphology_offset + 1U)
+                                           << wwdb::nominal_number_shift) |
+                                          (at(inflection_morphology_offset + 2U)
+                                           << wwdb::nominal_gender_shift) |
+                                          (at(inflection_morphology_offset + 3U)
+                                           << wwdb::morphology_byte_shift));
+    case pos_adverb:      // adverb
+    case pos_preposition: // preposition
+        return at(inflection_adverb_case_offset);
+    case pos_verb: // finite verb
+        return static_cast<std::uint16_t>(
+            at(inflection_morphology_offset) |
+            (at(inflection_morphology_offset + 1U)
+             << wwdb::nominal_number_shift) |
+            (at(inflection_morphology_offset + 2U)
+             << wwdb::nominal_gender_shift) |
+            (at(inflection_morphology_offset + 3U)
+             << wwdb::morphology_byte_shift) |
+            (at(inflection_morphology_offset + 4U) << wwdb::verb_number_shift));
+    case pos_participle: // participle
+        return static_cast<std::uint16_t>(at(inflection_morphology_offset) |
+                                          (at(inflection_morphology_offset + 1U)
+                                           << wwdb::nominal_number_shift) |
+                                          (at(inflection_morphology_offset + 2U)
+                                           << wwdb::nominal_gender_shift) |
+                                          (at(inflection_morphology_offset + 3U)
+                                           << wwdb::morphology_byte_shift) |
+                                          (at(inflection_morphology_offset + 4U)
+                                           << wwdb::participle_voice_shift) |
+                                          (at(inflection_participle_mood_offset)
+                                           << wwdb::participle_mood_shift));
     default:
         return 0;
     }
@@ -1551,7 +1816,7 @@ Bytes make_image(std::vector<Section> sections, PackingProfile profile,
 } // namespace
 
 int main(int argc, char **argv) try {
-    if (argc < 3 || argc > 5) {
+    if (argc < required_argument_count || argc > maximum_argument_count) {
         std::cerr << "usage: wwdb_poc_pack REPOSITORY_ROOT OUTPUT.wwdb "
                      "[simple|dense|columnar|search-only] "
                      "[--legacy-stem-order]\n";
@@ -1574,7 +1839,7 @@ int main(int argc, char **argv) try {
         }
     }
     bool persist_stem_index{true};
-    if (argc == 5) {
+    if (argc == maximum_argument_count) {
         const std::string_view option = argv[4];
         if (option == "--legacy-stem-order") {
             persist_stem_index = false;
@@ -1701,7 +1966,7 @@ int main(int argc, char **argv) try {
                                   profile == PackingProfile::search_only;
     const bool include_meanings = profile != PackingProfile::search_only;
     const std::size_t lexeme_stride =
-        !use_dense_records ? 19U
+        !use_dense_records ? legacy_simple_lexeme_stride
                            : (include_meanings ? wwdb::full_lexeme_stride
                                                : wwdb::search_lexeme_stride);
     lexeme_records.reserve(lexeme_count * lexeme_stride);
@@ -1732,49 +1997,58 @@ int main(int argc, char **argv) try {
         const auto record = std::span{dictionary}.subspan(
             index * dictionary_record_size, dictionary_record_size);
 
-        std::array<std::string, 4> stem_spellings;
-        std::array<std::uint16_t, 4> stem_ids{};
+        std::array<std::string, wwdb::lexical_slot_count> stem_spellings;
+        std::array<std::uint16_t, wwdb::lexical_slot_count> stem_ids{};
         for (std::size_t stem_index = 0; stem_index < stem_ids.size();
              ++stem_index) {
             stem_spellings[stem_index] =
-                fixed_string(record, stem_index * 18, 18);
+                fixed_string(record, stem_index * dictionary_stem_width,
+                             dictionary_stem_width);
             stem_ids[stem_index] = stem_pool.intern(stem_spellings[stem_index]);
         }
-        const auto meaning = fixed_string(record, 97, 80);
+        const auto meaning = fixed_string(record, dictionary_meaning_offset,
+                                          legacy_meaning_width);
         std::uint16_t meaning_id = 0;
         if (include_meanings) {
             meaning_id = meaning_pool.intern(meaning);
         }
 
-        const auto pofs = byte_at(record, 72);
-        if (pofs > 15) {
+        const auto pofs = byte_at(record, dictionary_part_of_speech_offset);
+        if (pofs > std::to_underlying(words::PartOfSpeech::suffix)) {
             fail("dictionary part-of-speech outside legacy range");
         }
-        const auto which = has_paradigm(pofs) ? read_u32_le(record, 76) : 0;
-        const auto variant = has_paradigm(pofs) ? read_u32_le(record, 80) : 0;
+        const auto which = has_paradigm(pofs)
+                               ? read_u32_le(record, dictionary_paradigm_offset)
+                               : 0;
+        const auto variant =
+            has_paradigm(pofs) ? read_u32_le(record, dictionary_variant_offset)
+                               : 0;
         const auto paradigm = pack_paradigm(which, variant);
 
         std::uint8_t attribute_0 = 0;
         std::uint8_t attribute_1 = 0;
         std::uint16_t numeric_value = 0;
         switch (pofs) {
-        case 1:                                // noun
-            attribute_0 = byte_at(record, 84); // gender
-            attribute_1 = byte_at(record, 85); // noun kind
+        case pos_noun: // noun
+            attribute_0 =
+                byte_at(record, dictionary_class_attribute_offset); // gender
+            attribute_1 = byte_at(
+                record, dictionary_second_attribute_offset); // noun kind
             break;
-        case 2: // pronoun
-        case 3: // pack
-        case 4: // adjective
-        case 7: // verb
-            attribute_0 = byte_at(record, 84);
+        case pos_pronoun:   // pronoun
+        case pos_pack:      // pack
+        case pos_adjective: // adjective
+        case pos_verb:      // verb
+            attribute_0 = byte_at(record, dictionary_class_attribute_offset);
             break;
-        case 5: // numeral
-            attribute_0 = byte_at(record, 84);
-            numeric_value = static_cast<std::uint16_t>(read_u32_le(record, 88));
+        case pos_numeral: // numeral
+            attribute_0 = byte_at(record, dictionary_class_attribute_offset);
+            numeric_value = static_cast<std::uint16_t>(
+                read_u32_le(record, dictionary_numeric_value_offset));
             break;
-        case 6:  // adverb
-        case 10: // preposition
-            attribute_0 = byte_at(record, 76);
+        case pos_adverb:      // adverb
+        case pos_preposition: // preposition
+            attribute_0 = byte_at(record, dictionary_paradigm_offset);
             break;
         default:
             break;
@@ -1807,24 +2081,25 @@ int main(int argc, char **argv) try {
 
             std::uint64_t class_payload = 0;
             switch (pofs) {
-            case 1: // noun: gender:3 | noun kind:4
-                if (attribute_0 > 7 || attribute_1 > 15) {
+            case pos_noun: // noun: gender:3 | noun kind:4
+                if (attribute_0 > wwdb::three_bit_mask ||
+                    attribute_1 > maximum_encoded_noun_kind) {
                     fail("noun attribute outside dense profile");
                 }
                 class_payload = static_cast<std::uint64_t>(attribute_0) |
                                 (static_cast<std::uint64_t>(attribute_1)
                                  << wwdb::noun_kind_shift);
                 break;
-            case 2: // pronoun kind
-            case 4: // adjective comparison
-            case 7: // verb kind
-                if (attribute_0 > 15) {
+            case pos_pronoun:   // pronoun kind
+            case pos_adjective: // adjective comparison
+            case pos_verb:      // verb kind
+                if (attribute_0 > maximum_simple_class) {
                     fail("lexeme attribute outside dense profile");
                 }
                 class_payload = attribute_0;
                 break;
-            case 3: { // pack kind + required packon addon
-                if (attribute_0 > 15) {
+            case pos_pack: { // pack kind + required packon addon
+                if (attribute_0 > maximum_simple_class) {
                     fail("pack attribute outside dense profile");
                 }
                 const auto requirement = packon_requirements.find(
@@ -1855,17 +2130,18 @@ int main(int argc, char **argv) try {
                                  << wwdb::pronoun_packon_plus_one_shift);
                 break;
             }
-            case 5: // numeral sort:3 | numeric value:10
-                if (attribute_0 > 7 || numeric_value > 1023) {
+            case pos_numeral: // numeral sort:3 | numeric value:10
+                if (attribute_0 > wwdb::three_bit_mask ||
+                    numeric_value > maximum_numeral_value) {
                     fail("numeral payload outside dense profile");
                 }
                 class_payload = static_cast<std::uint64_t>(attribute_0) |
                                 (static_cast<std::uint64_t>(numeric_value)
                                  << wwdb::numeral_value_shift);
                 break;
-            case 6:  // adverb comparison
-            case 10: // preposition case
-                if (attribute_0 > 15) {
+            case pos_adverb:      // adverb comparison
+            case pos_preposition: // preposition case
+                if (attribute_0 > maximum_simple_class) {
                     fail("lexeme attribute outside dense profile");
                 }
                 class_payload = attribute_0;
@@ -1889,16 +2165,19 @@ int main(int argc, char **argv) try {
         const auto &lexeme = compiled_lexemes[imported_index];
         std::uint8_t attribute_0 = 0;
         std::uint8_t attribute_1 = 0;
-        if (lexeme.part_of_speech == 1U) {
-            attribute_0 =
-                static_cast<std::uint8_t>(lexeme.class_payload & 0x07U);
-            attribute_1 = static_cast<std::uint8_t>(lexeme.class_payload >> 3U);
-        } else if (lexeme.part_of_speech == 5U) {
-            attribute_0 =
-                static_cast<std::uint8_t>(lexeme.class_payload & 0x07U);
-        } else if (lexeme.part_of_speech == 2U || lexeme.part_of_speech == 4U ||
-                   lexeme.part_of_speech == 6U || lexeme.part_of_speech == 7U ||
-                   lexeme.part_of_speech == 10U) {
+        if (lexeme.part_of_speech == pos_noun) {
+            attribute_0 = static_cast<std::uint8_t>(lexeme.class_payload &
+                                                    wwdb::three_bit_mask);
+            attribute_1 = static_cast<std::uint8_t>(lexeme.class_payload >>
+                                                    wwdb::noun_kind_shift);
+        } else if (lexeme.part_of_speech == pos_numeral) {
+            attribute_0 = static_cast<std::uint8_t>(lexeme.class_payload &
+                                                    wwdb::three_bit_mask);
+        } else if (lexeme.part_of_speech == pos_pronoun ||
+                   lexeme.part_of_speech == pos_adjective ||
+                   lexeme.part_of_speech == pos_adverb ||
+                   lexeme.part_of_speech == pos_verb ||
+                   lexeme.part_of_speech == pos_preposition) {
             attribute_0 = static_cast<std::uint8_t>(lexeme.class_payload);
         }
         const auto signature = structural_signature(
@@ -1965,7 +2244,7 @@ int main(int argc, char **argv) try {
     for (std::size_t index = 0; index < legacy_stem_reference_count; ++index) {
         const auto record = std::span{stems}.subspan(index * stem_record_size,
                                                      stem_record_size);
-        const auto stem = fixed_string(record, 0, 18);
+        const auto stem = fixed_string(record, 0, dictionary_stem_width);
         const auto bucket = stem_bucket(stem);
         if (index != 0 && bucket < previous_bucket) {
             fail("STEMFILE is not monotonic in the proposed prefix order at " +
@@ -1976,12 +2255,12 @@ int main(int argc, char **argv) try {
         previous_bucket = bucket;
         previous_stem = stem;
 
-        const auto mnpc = read_u64_le(record, 48);
+        const auto mnpc = read_u64_le(record, stem_dictionary_entry_offset);
         if (mnpc == 0 || mnpc > legacy_lexeme_count) {
             fail("STEMFILE MNPC outside dictionary range");
         }
-        const auto key = read_u32_le(record, 40);
-        if (key > 4) {
+        const auto key = read_u32_le(record, stem_key_offset);
+        if (key > maximum_stem_key) {
             fail("STEMFILE key outside observed 0..4 range");
         }
 
@@ -1989,22 +2268,25 @@ int main(int argc, char **argv) try {
         const auto dictionary_record = std::span{dictionary}.subspan(
             static_cast<std::size_t>(lexeme_id) * dictionary_record_size,
             dictionary_record_size);
-        std::size_t lexical_slot = 4;
-        if (key >= 1 && key <= 4 &&
-            fixed_string(dictionary_record,
-                         static_cast<std::size_t>((key - 1) * 18),
-                         18) == stem) {
+        std::size_t lexical_slot = wwdb::lexical_slot_count;
+        if (key >= 1 && key <= maximum_stem_key &&
+            fixed_string(
+                dictionary_record,
+                static_cast<std::size_t>((key - 1) * dictionary_stem_width),
+                dictionary_stem_width) == stem) {
             lexical_slot = key - 1;
         } else {
-            for (std::size_t candidate = 0; candidate < 4; ++candidate) {
-                if (fixed_string(dictionary_record, candidate * 18, 18) ==
-                    stem) {
+            for (std::size_t candidate = 0;
+                 candidate < wwdb::lexical_slot_count; ++candidate) {
+                if (fixed_string(dictionary_record,
+                                 candidate * dictionary_stem_width,
+                                 dictionary_stem_width) == stem) {
                     lexical_slot = candidate;
                     break;
                 }
             }
         }
-        if (lexical_slot == 4) {
+        if (lexical_slot == wwdb::lexical_slot_count) {
             fail("STEMFILE stem is absent from referenced lexeme: " + stem);
         }
         stem_buckets.at(bucket).push_back(PendingStemReference{
@@ -2105,32 +2387,42 @@ int main(int argc, char **argv) try {
                 (section * inflections_per_section + item) *
                     inflection_record_size,
                 inflection_record_size);
-            const auto pofs = byte_at(record, 0);
+            const auto pofs = byte_at(record, inflection_part_of_speech_offset);
             if (pofs == 0) {
                 continue;
             }
-            if (pofs > 15) {
+            if (pofs > std::to_underlying(words::PartOfSpeech::suffix)) {
                 fail("inflection part-of-speech outside legacy range");
             }
 
-            const auto which = has_paradigm(pofs) ? read_u32_le(record, 4) : 0;
+            const auto which =
+                has_paradigm(pofs)
+                    ? read_u32_le(record, inflection_paradigm_offset)
+                    : 0;
             const auto variant =
-                has_paradigm(pofs) ? read_u32_le(record, 8) : 0;
-            const auto stem_key = read_u32_le(record, 20);
-            const auto ending_size = read_u32_le(record, 24);
-            if (stem_key < 1 || stem_key > 4 || ending_size > 7) {
+                has_paradigm(pofs)
+                    ? read_u32_le(record, inflection_variant_offset)
+                    : 0;
+            const auto stem_key =
+                read_u32_le(record, inflection_stem_key_offset);
+            const auto ending_size =
+                read_u32_le(record, inflection_ending_size_offset);
+            if (stem_key < 1 || stem_key > maximum_stem_key ||
+                ending_size > wwdb::maximum_ending_size) {
                 fail("inflection key/ending size outside compact range");
             }
 
-            const auto ending = fixed_string(record, 28, ending_size);
+            const auto ending =
+                fixed_string(record, inflection_ending_offset, ending_size);
             const auto ending_id = ending_pool.intern(ending);
-            if (ending_id > 0x1ffU) {
+            if (ending_id > wwdb::ending_id_mask) {
                 fail("PoC 9-bit ending ID capacity exceeded");
             }
 
-            const auto age = byte_at(record, 36);
-            const auto frequency = byte_at(record, 37);
-            if (age > 8 || frequency > 9) {
+            const auto age = byte_at(record, inflection_age_offset);
+            const auto frequency = byte_at(record, inflection_frequency_offset);
+            if (age > maximum_lexical_age ||
+                frequency > maximum_rule_frequency) {
                 fail("inflection age/frequency outside legacy range");
             }
 
@@ -2307,26 +2599,26 @@ int main(int argc, char **argv) try {
     std::vector<std::uint16_t> policy_ids;
     for (const auto &policy : suffix_policies) {
         const auto found = std::ranges::find(addons.suffixes, policy.addon_id,
-                                              &SuffixSource::addon_id);
+                                             &SuffixSource::addon_id);
         if (found == addons.suffixes.end() || found->fix != policy.fix ||
             found->root != policy.root || found->root_key != policy.root_key ||
             found->target != policy.target ||
             found->target_key != policy.target_key ||
             found->attribute_0 != policy.target_degree ||
             found->connect != static_cast<std::uint8_t>(policy.connector) ||
-            std::ranges::find(policy_ids, policy.addon_id) != policy_ids.end()) {
+            std::ranges::find(policy_ids, policy.addon_id) !=
+                policy_ids.end()) {
             fail("suffix policy is inconsistent with ADDONS.LAT");
         }
         policy_ids.push_back(policy.addon_id);
-        const auto attribute = std::ranges::find(
-            suffix_attributes, policy.addon_id,
-            &SuffixAttributeSource::addon_id);
+        const auto attribute =
+            std::ranges::find(suffix_attributes, policy.addon_id,
+                              &SuffixAttributeSource::addon_id);
         if (attribute == suffix_attributes.end()) {
-            suffix_attributes.push_back({policy.addon_id, policy.fix,
-                                         policy.root, policy.root_key,
-                                         policy.target, policy.target_key,
-                                         policy.root_declension,
-                                         policy.root_variant});
+            suffix_attributes.push_back(
+                {policy.addon_id, policy.fix, policy.root, policy.root_key,
+                 policy.target, policy.target_key, policy.root_declension,
+                 policy.root_variant});
         } else if (attribute->root_declension != policy.root_declension ||
                    attribute->root_variant != policy.root_variant) {
             fail("suffix policy conflicts with quantity evidence");
@@ -2342,31 +2634,33 @@ int main(int argc, char **argv) try {
             (attribute.root_declension != 0U || attribute.root_variant != 0U)) {
             fail("suffix quantity requires an addon policy");
         }
-        const auto found = std::ranges::find(addons.suffixes, attribute.addon_id,
-                                              &SuffixSource::addon_id);
+        const auto found = std::ranges::find(
+            addons.suffixes, attribute.addon_id, &SuffixSource::addon_id);
         if (found == addons.suffixes.end() ||
             (previous_addon_id && *previous_addon_id == attribute.addon_id) ||
             found->fix != attribute.fix || found->root != attribute.root ||
             found->root_key != attribute.root_key ||
             found->target != attribute.target ||
             found->target_key != attribute.target_key ||
-            attribute.root_declension > 9U || attribute.root_variant > 9U ||
-            attribute.known > 0xffffU ||
-            attribute.long_vowel > 0xffffU ||
+            attribute.root_declension > maximum_paradigm_component ||
+            attribute.root_variant > maximum_paradigm_component ||
+            attribute.known > std::numeric_limits<std::uint16_t>::max() ||
+            attribute.long_vowel > std::numeric_limits<std::uint16_t>::max() ||
             (attribute.long_vowel & ~attribute.known) != 0U ||
             (attribute.known >> found->fix.size()) != 0U ||
             !quantity_positions_are_vowels(found->fix, attribute.known)) {
             fail("suffix attribute is inconsistent with ADDONS.LAT");
         }
         append_u16_le(addon_attribute_records, attribute.addon_id);
-        const auto policy_flags = has_policy
-                                      ? wwdb::addon_attribute_coexists_with_regular
-                                      : 0U;
-        append_u8(addon_attribute_records, static_cast<std::uint8_t>(
-            std::to_underlying(words::AddonKind::suffix) | policy_flags));
-        append_u8(addon_attribute_records,
-                  pack_paradigm(attribute.root_declension,
-                                attribute.root_variant));
+        const auto policy_flags =
+            has_policy ? wwdb::addon_attribute_coexists_with_regular : 0U;
+        append_u8(
+            addon_attribute_records,
+            static_cast<std::uint8_t>(
+                std::to_underlying(words::AddonKind::suffix) | policy_flags));
+        append_u8(
+            addon_attribute_records,
+            pack_paradigm(attribute.root_declension, attribute.root_variant));
         append_u16_le(addon_attribute_records,
                       static_cast<std::uint16_t>(attribute.known));
         append_u16_le(addon_attribute_records,
@@ -2537,7 +2831,8 @@ int main(int argc, char **argv) try {
                         wwdb::boundary_stride, std::move(stem_boundaries)});
     sections.push_back({SectionType::inflections, record_flags,
                         dense_inflection_count,
-                        use_dense_records ? wwdb::inflection_stride : 8U,
+                        use_dense_records ? wwdb::inflection_stride
+                                          : legacy_simple_inflection_stride,
                         std::move(inflection_records)});
     sections.push_back({SectionType::inflection_section_boundaries,
                         wwdb::section_flag_row_major,
@@ -2574,11 +2869,10 @@ int main(int argc, char **argv) try {
                         static_cast<std::uint32_t>(addons.suffixes.size()),
                         suffix_stride, std::move(suffix_records)});
     if (persist_stem_index) {
-        sections.push_back({SectionType::addon_attributes,
-                            wwdb::section_flag_row_major,
-                            static_cast<std::uint32_t>(suffix_attributes.size()),
-                            wwdb::addon_attribute_stride,
-                            std::move(addon_attribute_records)});
+        sections.push_back(
+            {SectionType::addon_attributes, wwdb::section_flag_row_major,
+             static_cast<std::uint32_t>(suffix_attributes.size()),
+             wwdb::addon_attribute_stride, std::move(addon_attribute_records)});
     }
     sections.push_back({SectionType::prefix_strings, wwdb::section_flag_pool,
                         prefix_string_pool.size(), wwdb::variable_stride,
