@@ -674,7 +674,13 @@ noscript {
 @media (max-width: 34rem) {
   .page {
     width: min(100% - 1rem, 52rem);
-    padding-top: 2.5rem;
+    padding-top: 1.25rem;
+  }
+
+  .language-switch {
+    position: static;
+    width: max-content;
+    margin: 0 0 1.25rem auto;
   }
 
   .shortcut {
