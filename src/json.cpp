@@ -741,36 +741,48 @@ void enrich_full_form(Json &analysis, const ResolvedForm &form) {
     return output;
 }
 
+[[nodiscard]] constexpr QuantityDisplayMode
+display_mode_for_schema_version(const int schema_version) noexcept {
+    return schema_version >= 4
+               ? QuantityDisplayMode::database_only
+               : QuantityDisplayMode::legacy_database_and_input;
+}
+
 [[nodiscard]] Json full_analysis_v3(const Engine &engine,
                                     const SurfaceForm &surface,
                                     const AnalysisIR &analysis,
-                                    const bool include_suffix_quantity) {
+                                    const bool include_suffix_quantity,
+                                    const QuantityDisplayMode display_mode) {
     auto output = full_analysis(engine, surface, analysis, true);
     enrich_full_form(output,
                      resolved_form(engine.database(), surface, analysis,
-                                   include_suffix_quantity));
+                                   include_suffix_quantity, display_mode));
     output["quantityMatch"] = quantity_match_name(analysis.quantity_match);
     return output;
 }
 
 [[nodiscard]] Json
 full_compound_analysis_v3(const Engine &engine, const QueryResult &result,
-                          const CompoundAnalysisIR &analysis) {
+                          const CompoundAnalysisIR &analysis,
+                          const QuantityDisplayMode display_mode) {
     auto output = full_compound_analysis(engine, result, analysis, true);
     auto stem = analysis.kind == CompoundKind::iri ? std::string{"SUPINE + "}
                                                    : std::string{"PPL+"};
     stem.append(analysis.auxiliary);
     enrich_full_form(output, unquantified_form(std::move(stem), 0U, {},
-                                               result.surface.normalized_nfc));
+                                               result.surface.normalized_nfc,
+                                               display_mode));
     return output;
 }
 
 [[nodiscard]] Json full_roman_analysis_v3(const Database &database,
                                           const QueryResult &result,
-                                          const RomanNumeralIR &analysis) {
+                                          const RomanNumeralIR &analysis,
+                                          const QuantityDisplayMode display_mode) {
     auto output = full_roman_analysis(database, result, analysis, true);
     auto stem = std::string{result.surface.slice(analysis.stem)};
-    enrich_full_form(output, unquantified_form(stem, 0U, {}, stem));
+    enrich_full_form(output, unquantified_form(stem, 0U, {}, stem,
+                                               display_mode));
     return output;
 }
 
@@ -917,7 +929,8 @@ search_two_word_suggestion(const TwoWordSuggestionIR &suggestion,
 [[nodiscard]] Json compact_lexical_v3(const Database &database,
                                       const SurfaceForm &surface,
                                       const AnalysisIR &analysis,
-                                      const bool include_suffix_quantity) {
+                                      const bool include_suffix_quantity,
+                                      const QuantityDisplayMode display_mode) {
     Json addon_ids = Json::array();
     for (const auto id : analysis.derivation.steps()) {
         addon_ids.push_back(id.value());
@@ -931,7 +944,8 @@ search_two_word_suggestion(const TwoWordSuggestionIR &suggestion,
         {"quantityMatch", quantity_match_name(analysis.quantity_match)},
         {"form",
          resolved_form_json(resolved_form(database, surface, analysis,
-                                          include_suffix_quantity))},
+                                          include_suffix_quantity,
+                                          display_mode))},
         {"assessment", morphological_assessment_json(analysis.assessment)},
     };
     if (analysis.derivation.rewritten_form) {
@@ -945,7 +959,8 @@ search_two_word_suggestion(const TwoWordSuggestionIR &suggestion,
 }
 
 [[nodiscard]] Json compact_compound_v3(const QueryResult &result,
-                                       const CompoundAnalysisIR &analysis) {
+                                       const CompoundAnalysisIR &analysis,
+                                       const QuantityDisplayMode display_mode) {
     Json addon_ids = Json::array();
     for (const auto id : analysis.source_derivation.steps()) {
         addon_ids.push_back(id.value());
@@ -960,7 +975,8 @@ search_two_word_suggestion(const TwoWordSuggestionIR &suggestion,
         {"addonIds", std::move(addon_ids)},
         {"scoreFlags", 0},
         {"form", resolved_form_json(unquantified_form(
-                     std::move(stem), 0U, {}, result.surface.normalized_nfc))},
+                     std::move(stem), 0U, {}, result.surface.normalized_nfc,
+                     display_mode))},
         {"compound", Json{{"construction", compound_kind_name(analysis.kind)},
                           {"auxiliary", analysis.auxiliary}}},
         {"assessment", morphological_assessment_json(analysis.assessment)},
@@ -968,7 +984,8 @@ search_two_word_suggestion(const TwoWordSuggestionIR &suggestion,
 }
 
 [[nodiscard]] Json compact_roman_v3(const QueryResult &result,
-                                    const RomanNumeralIR &analysis) {
+                                    const RomanNumeralIR &analysis,
+                                    const QuantityDisplayMode display_mode) {
     Json addon_ids = Json::array();
     for (const auto id : analysis.derivation.steps()) {
         addon_ids.push_back(id.value());
@@ -979,7 +996,8 @@ search_two_word_suggestion(const TwoWordSuggestionIR &suggestion,
         {"ruleId", nullptr},
         {"addonIds", std::move(addon_ids)},
         {"scoreFlags", 0},
-        {"form", resolved_form_json(unquantified_form(stem, 0U, {}, stem))},
+        {"form", resolved_form_json(unquantified_form(
+                     stem, 0U, {}, stem, display_mode))},
         {"artificial", Json{{"method", roman_dictionary_name},
                             {"value", analysis.value},
                             {"wellFormed", analysis.well_formed}}},
@@ -1325,6 +1343,7 @@ static Json analysis_json_resolved_document(const Engine &engine,
         throw std::logic_error{
             "analysis JSON requires a full WWDB with meanings"};
     }
+    const auto display_mode = display_mode_for_schema_version(schema_version);
     Json analyses = Json::array();
     if (result.status == QueryStatus::analyzed) {
         std::vector<std::pair<AnalysisOrderKey, Json>> ordered;
@@ -1338,15 +1357,17 @@ static Json analysis_json_resolved_document(const Engine &engine,
                     analysis_order_key(engine.database(), result.surface,
                                        analysis),
                     full_analysis_v3(engine, result.surface, analysis,
-                                     include_suffix_quantity));
+                                     include_suffix_quantity, display_mode));
             } else if constexpr (std::is_same_v<Analysis, CompoundAnalysisIR>) {
                 ordered.emplace_back(
                     analysis_order_key(engine.database(), analysis),
-                    full_compound_analysis_v3(engine, result, analysis));
+                    full_compound_analysis_v3(engine, result, analysis,
+                                              display_mode));
             } else if constexpr (std::is_same_v<Analysis, RomanNumeralIR>) {
                 ordered.emplace_back(analysis_order_key(analysis),
                                      full_roman_analysis_v3(engine.database(),
-                                                            result, analysis));
+                                                            result, analysis,
+                                                            display_mode));
             } else {
                 static_assert(sizeof(Analysis) == 0U,
                               "new analysis requires JSON projection");
@@ -1382,7 +1403,7 @@ static Json analysis_json_resolved_document(const Engine &engine,
                     analysis_order_key(engine.database(), segment.surface,
                                        analysis),
                     full_analysis_v3(engine, segment.surface, analysis,
-                                     include_suffix_quantity));
+                                     include_suffix_quantity, display_mode));
             }
             std::ranges::sort(ordered, {},
                               &std::pair<AnalysisOrderKey, Json>::first);
@@ -1428,6 +1449,7 @@ static Json search_json_resolved_document(const Engine &engine,
         throw std::logic_error{
             "analysis result belongs to a different dataset"};
     }
+    const auto display_mode = display_mode_for_schema_version(schema_version);
     Json hits = Json::array();
     if (result.status == QueryStatus::analyzed) {
         std::vector<const AnalysisIR *> ordered;
@@ -1445,17 +1467,20 @@ static Json search_json_resolved_document(const Engine &engine,
         for (const auto *analysis : ordered) {
             hits.push_back(compact_lexical_v3(engine.database(), result.surface,
                                               *analysis,
-                                              include_suffix_quantity));
+                                              include_suffix_quantity,
+                                              display_mode));
         }
         // Preserve search-v2's family ordering. V3 enriches the projected hit;
         // it does not make ordering another observable behavior change.
         for (const auto &analysis : result.compound_analyses) {
-            hits.push_back(compact_compound_v3(result, analysis));
+            hits.push_back(compact_compound_v3(result, analysis,
+                                               display_mode));
         }
         for (const auto &artificial : result.artificial_analyses) {
             std::visit(
                 [&](const auto &analysis) {
-                    hits.push_back(compact_roman_v3(result, analysis));
+                    hits.push_back(compact_roman_v3(
+                        result, analysis, display_mode));
                 },
                 artificial);
         }
@@ -1484,7 +1509,8 @@ static Json search_json_resolved_document(const Engine &engine,
                     analysis_order_key(engine.database(), segment.surface,
                                        analysis),
                     compact_lexical_v3(engine.database(), segment.surface,
-                                       analysis, include_suffix_quantity));
+                                       analysis, include_suffix_quantity,
+                                       display_mode));
             }
             std::ranges::sort(ordered, {},
                               &std::pair<AnalysisOrderKey, Json>::first);

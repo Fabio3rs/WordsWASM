@@ -26,6 +26,11 @@ enum class QuantityOrigin : std::uint8_t {
     ending,
 };
 
+enum class QuantityDisplayMode : std::uint8_t {
+    database_only,
+    legacy_database_and_input,
+};
+
 struct ResolvedQuantityPosition final {
     // Zero-based logical Latin-letter index. Combining quantity marks do not
     // occupy an index of their own.
@@ -36,8 +41,7 @@ struct ResolvedQuantityPosition final {
 };
 
 struct ResolvedQuantity final {
-    // Contains database evidence only. User-supplied marks are represented in
-    // ResolvedForm::display, and never masquerade as lexical evidence here.
+    // Contains database evidence only; never includes user-supplied marks.
     std::optional<std::string> annotated;
     QuantityCoverage coverage{QuantityCoverage::none};
     std::vector<ResolvedQuantityPosition> positions;
@@ -49,8 +53,9 @@ struct ResolvedForm final {
     std::uint8_t stem_key{};
     std::string ending;
     std::string recognized;
-    // Presentation-ready NFC spelling. Database evidence wins where known;
-    // explicit input quantities survive at positions absent from the DB.
+    // Presentation-ready NFC spelling using database evidence only. The
+    // recognized spelling retains explicit input quantities separately.
+    // Published native v3 explicitly requests its legacy combined display.
     std::string display;
     ResolvedQuantity quantity;
     auto operator<=>(const ResolvedForm &) const = default;
@@ -59,12 +64,20 @@ struct ResolvedForm final {
 [[nodiscard]] ResolvedForm resolved_form(const Database &database,
                                          const SurfaceForm &surface,
                                          const AnalysisIR &analysis,
-                                         bool include_suffix_quantity = true);
+                                         bool include_suffix_quantity = true,
+                                         QuantityDisplayMode display_mode =
+                                             QuantityDisplayMode::database_only);
 
 [[nodiscard]] ResolvedForm unquantified_form(std::string stem,
                                              std::uint8_t stem_key,
                                              std::string ending,
-                                             std::string recognized);
+                                             std::string recognized,
+                                             QuantityDisplayMode display_mode =
+                                                 QuantityDisplayMode::database_only);
+
+// Removes user-supplied quantity marks without claiming database evidence.
+[[nodiscard]] std::string
+display_without_input_quantity(std::string_view recognized);
 
 [[nodiscard]] constexpr std::string_view
 quantity_coverage_name(const QuantityCoverage value) noexcept {

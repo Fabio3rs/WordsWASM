@@ -144,7 +144,7 @@ const translations = Object.freeze({
       governs: (value) => `governs ${value}`,
       readingData: "Reading data",
       recognizedForm: "Recognized form",
-      displayForm: "Quantity-resolved form",
+      displayForm: "Form with confirmed quantities",
       quantityCoverageLabel: "Quantity coverage",
       databaseQuantity: "Database annotation",
       stem: "Stem", stemId: "Stem ID", ending: "Ending", ruleId: "Rule ID",
@@ -159,7 +159,7 @@ const translations = Object.freeze({
       evidenceNotesLead: "Evidence and review notes",
       enclitic: (text) => `enclitic -${text}`,
       recognizedFormLead: "Recognized form: ",
-      displayFormLead: "Quantity-resolved form: ",
+      displayFormLead: "Form with confirmed quantities: ",
       dictionaryFormLead: "Dictionary form: ",
       compound: (construction, auxiliary) =>
         `Compound construction: ${construction} · auxiliary ${auxiliary}`,
@@ -313,7 +313,7 @@ const translations = Object.freeze({
       governs: (value) => `rege ${value}`,
       readingData: "Dados da leitura",
       recognizedForm: "Forma reconhecida",
-      displayForm: "Forma com quantidades resolvidas",
+      displayForm: "Forma com quantidades confirmadas",
       quantityCoverageLabel: "Cobertura das quantidades",
       databaseQuantity: "Anotação do banco",
       stem: "Radical", stemId: "ID do radical", ending: "Terminação",
@@ -329,7 +329,7 @@ const translations = Object.freeze({
       evidenceNotesLead: "Notas de evidência e revisão",
       enclitic: (text) => `enclítico -${text}`,
       recognizedFormLead: "Forma reconhecida: ",
-      displayFormLead: "Forma com quantidades resolvidas: ",
+      displayFormLead: "Forma com quantidades confirmadas: ",
       dictionaryFormLead: "Forma do dicionário: ",
       compound: (construction, auxiliary) =>
         `Construção composta: ${construction} · auxiliar ${auxiliary}`,
@@ -484,7 +484,7 @@ const translations = Object.freeze({
       governs: (value) => `${value} regit`,
       readingData: "Notitiae interpretationis",
       recognizedForm: "Forma agnita", stem: "Stirps", stemId: "Stirpis ID",
-      displayForm: "Forma quantitatibus definita",
+      displayForm: "Forma quantitatibus confirmatis",
       quantityCoverageLabel: "Quantitatum comprehensio",
       databaseQuantity: "Annotatio ex datorum basi",
       ending: "Terminatio", ruleId: "Regulae ID", ruleAge: "Regulae aetas",
@@ -499,7 +499,7 @@ const translations = Object.freeze({
       evidenceNotesLead: "Notae testimonii et recognitionis",
       enclitic: (text) => `encliticum -${text}`,
       recognizedFormLead: "Forma agnita: ",
-      displayFormLead: "Forma quantitatibus definita: ",
+      displayFormLead: "Forma quantitatibus confirmatis: ",
       dictionaryFormLead: "Forma dictionarii: ",
       compound: (construction, auxiliary) =>
         `Constructio composita: ${construction} · auxiliare ${auxiliary}`,
@@ -833,6 +833,11 @@ function addDefinitionList(details, entries) {
   details.append(list);
 }
 
+function withoutQuantityMarks(text) {
+  return text.normalize("NFD").replace(/[\u0304\u0306]/gu, "")
+    .normalize("NFC");
+}
+
 function renderDetails(hit, container) {
   const quantity = hit.form.quantity ?? {};
   const details = element("details");
@@ -912,7 +917,10 @@ function renderForm(hit, container) {
   const form = element("p", "form-reading");
   form.append(message("displayFormLead"),
     element("strong", "", hit.form.display));
-  if (hit.form.ending) form.append(` · ${hit.form.stem} + ${hit.form.ending}`);
+  if (hit.form.ending) {
+    form.append(` · ${withoutQuantityMarks(hit.form.stem)} + ` +
+      withoutQuantityMarks(hit.form.ending));
+  }
   container.append(form);
 }
 

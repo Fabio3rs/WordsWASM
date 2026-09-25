@@ -421,9 +421,9 @@ assessment_note(const MorphologicalAssessmentIR &assessment,
                                        const HumanOptions options) {
     const auto &lexeme = database.lexeme(analysis.lexeme);
     Reading reading;
-    reading.display = result.multi_token_query
-                          ? result.multi_token_query->normalized_nfc
-                          : result.surface.normalized_nfc;
+    reading.display = display_without_input_quantity(
+        result.multi_token_query ? result.multi_token_query->normalized_nfc
+                                 : result.surface.normalized_nfc);
     reading.lemma =
         citation_lemma(database, lexeme, result.surface.normalized_nfc);
     reading.dictionary =
@@ -477,7 +477,7 @@ assessment_note(const MorphologicalAssessmentIR &assessment,
                                     const RomanNumeralIR &analysis,
                                     const HumanOptions options) {
     Reading reading;
-    reading.display = surface.normalized_nfc;
+    reading.display = display_without_input_quantity(surface.normalized_nfc);
     reading.lemma = surface.normalized_nfc;
     reading.dictionary = surface.original_utf8;
     reading.part = "numeral";

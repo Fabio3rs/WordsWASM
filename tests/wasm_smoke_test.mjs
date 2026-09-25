@@ -71,6 +71,18 @@ try {
   assert.ok(sancte.hits.some((hit) =>
     hit.partOfSpeech === "adjective" && hit.form.display !== "sanctē",
   ));
+  const markedSancte = engine.analyze("sanctē");
+  assert.ok(markedSancte.hits.some((hit) =>
+    hit.quantityMatch === "unknown" &&
+    hit.form.recognized === "sanctē" && hit.form.display === "sancte" &&
+    hit.form.quantity.annotated === null &&
+    hit.form.quantity.coverage === "none",
+  ));
+  assert.ok(markedSancte.hits.some((hit) =>
+    hit.partOfSpeech === "adverb" && hit.quantityMatch === "exact" &&
+    hit.form.display === "sanctē" &&
+    hit.form.quantity.annotated === "sanctē",
+  ));
 
   const diminutive = engine.search("anaticulus");
   assert.equal(diminutive.schema, "whitakers-words.browser-search");

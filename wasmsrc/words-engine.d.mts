@@ -159,13 +159,19 @@ export interface RuleFlags {
 }
 
 export interface ResolvedForm {
+  /** Recognized stem; may retain quantity marks supplied by the query. */
   stem: string;
   stemKey: number | null;
+  /** Recognized ending; may retain quantity marks supplied by the query. */
   ending: string;
+  /** Normalized spelling accepted from the query, including its quantity marks. */
   recognized: string;
+  /** Spelling marked only where the database provides quantity evidence. */
   display: string;
   quantity: {
+    /** Database-only annotation; null when no vowel quantity is documented. */
     annotated: string | null;
+    /** Coverage of the recognized form by database quantity evidence. */
     coverage: "none" | "partial" | "complete";
     positions: Array<{
       index: number;
@@ -255,6 +261,7 @@ interface LexicalBase<D extends SearchDerivation | AnalysisDerivation>
   dictionaryForm: string;
   lexical: LexicalFlags;
   rule: RuleFlags | null;
+  /** Match of query marks against evidence; "unknown" does not reject a reading. */
   quantityMatch: QuantityMatch;
   assessment: MorphologicalAssessment;
 }

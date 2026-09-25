@@ -112,6 +112,10 @@ addon rule attributes for quantity, source paradigm, and coexistence policy.
 The local browser build emits schema 6, including suffix quantity origin. These
 changes have not been published.
 
+In the local native v4 and browser v6 projections, `form.display` shows only
+database-supported quantity; `form.recognized` retains marks supplied in the
+query. The published native v3 selector keeps its prior `display` behavior.
+
 **Breaking change in the local prototype:** the new engine's adverbial `-ē`
 analysis depends on the source-paradigm and vowel-quantity attributes added in
 WWDB 1.11. WWDB 1.10 lacks those attributes. The development loader can read

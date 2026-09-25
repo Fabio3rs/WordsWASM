@@ -6,10 +6,13 @@ performed after that selection. The local native JSON v4 and browser/WASM
 schema v6 include suffix quantity evidence in `form.display` and
 `form.quantity`. Native v3 retains its prior projection.
 
-`form.recognized` is the normalized spelling accepted by the analysis.
-`form.display` is the NFC, presentation-ready spelling: confirmed database
-evidence takes precedence at known positions, while an explicit macron or breve
-typed by the user survives wherever the database has no evidence.
+`form.recognized` is the normalized spelling accepted by the analysis. It keeps
+macrons and breves supplied in the query. In the experimental native v4 and
+browser v6 projections, `form.display` is the NFC spelling marked **only**
+where the database has quantity evidence. An unverified input mark does not
+appear in `display`; it remains visible in `recognized` and `query`.
+`form.stem` and `form.ending` decompose the recognized input and can likewise
+retain marks from the query; they are not independent quantity evidence.
 
 `form.quantity.annotated` contains database evidence only and is `null` when
 there is none. `coverage` is `none`, `partial`, or `complete`. Each entry of
@@ -18,6 +21,24 @@ or `long`), and `origin` (`stem`, `suffix`, or `ending`). Combining marks do not
 the logical index. Rule-less UNIQUES rows, artificial Roman numerals, and
 compound analyses initially report `none` rather than borrowing uncertain
 evidence.
+
+`quantityMatch` describes the comparison of the marked query with the database:
+`exact` means that every supplied mark has matching evidence, `unknown` means
+that at least one supplied mark lacks evidence, and `unspecified` means that the
+query supplied no quantity marks. `unknown` does **not** assert that a marked
+form is wrong. A conflicting known quantity rejects that reading instead.
+
+For the query `sanctē`, the current projections distinguish these readings:
+
+| Reading | `recognized` | `display` | `quantity.annotated` | `coverage` | `quantityMatch` |
+| --- | --- | --- | --- | --- | --- |
+| Participle or adjective | `sanctē` | `sancte` | `null` | `none` | `unknown` |
+| Derived adverb | `sanctē` | `sanctē` | `sanctē` | `partial` | `exact` |
+
+The web interface and `human` CLI show `display` alongside the recognized
+input. Native v3 retains its published behavior of carrying an unverified
+input mark into `display`; clients that need database-only evidence in v3 can
+read `quantity.annotated` and `quantity.positions`.
 
 The WWDB 1.11 development format rejects a conflicting marked reading (for
 example `sanctĕ` as a derived adverb), while unmarked `sancte` retains all

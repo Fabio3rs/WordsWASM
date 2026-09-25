@@ -77,4 +77,77 @@ TEST(ProjectionTest, ProjectsQuantityOfDerivedAdverbialSuffix) {
     }));
 }
 
+TEST(ProjectionTest, KeepsUnverifiedInputQuantityOutOfCurrentDisplay) {
+    const auto sancte = test::engine().analyze("sanctē");
+    const auto current = Json::parse(analysis_json_v4(test::engine(), sancte));
+    bool found_unknown{};
+    bool found_adverb{};
+    for (const auto &analysis : current.at("analyses")) {
+        const auto &form = analysis.at("form");
+        EXPECT_EQ(form.at("recognized"), "sanctē");
+        if (analysis.at("partOfSpeech") == "adverb") {
+            found_adverb = true;
+            EXPECT_EQ(analysis.at("quantityMatch"), "exact");
+            EXPECT_EQ(form.at("display"), "sanctē");
+            EXPECT_EQ(form.at("quantity").at("annotated"), "sanctē");
+        } else {
+            found_unknown = true;
+            EXPECT_EQ(analysis.at("quantityMatch"), "unknown");
+            EXPECT_EQ(form.at("display"), "sancte");
+            EXPECT_EQ(form.at("quantity").at("annotated"), nullptr);
+        }
+    }
+    EXPECT_TRUE(found_unknown);
+    EXPECT_TRUE(found_adverb);
+
+    const auto search = Json::parse(search_json_v4(test::engine(), sancte));
+    EXPECT_TRUE(std::ranges::any_of(search.at("hits"), [](const Json &hit) {
+        return hit.at("quantityMatch") == "unknown" &&
+               hit.at("form").at("recognized") == "sanctē" &&
+               hit.at("form").at("display") == "sancte";
+    }));
+
+    // The published native v3 selector retains its established presentation.
+    const auto stable = Json::parse(analysis_json_v3(test::engine(), sancte));
+    EXPECT_TRUE(std::ranges::all_of(stable.at("analyses"),
+        [](const Json &analysis) {
+            return analysis.at("form").at("display") == "sanctē";
+        }));
+    const auto stable_search = Json::parse(search_json_v3(test::engine(), sancte));
+    EXPECT_TRUE(std::ranges::all_of(stable_search.at("hits"),
+        [](const Json &hit) {
+            return hit.at("form").at("display") == "sanctē";
+        }));
+
+    const auto partially_known = test::engine().analyze("exērcitus");
+    const auto partial = Json::parse(analysis_json_v4(test::engine(),
+                                                      partially_known));
+    ASSERT_FALSE(partial.at("analyses").empty());
+    for (const auto &analysis : partial.at("analyses")) {
+        EXPECT_EQ(analysis.at("quantityMatch"), "unknown");
+        EXPECT_EQ(analysis.at("form").at("recognized"), "exērcitus");
+        EXPECT_EQ(analysis.at("form").at("display"),
+                  analysis.at("form").at("quantity").at("annotated"));
+        EXPECT_FALSE(analysis.at("form").at("display")
+                         .get<std::string>().starts_with("exērc"));
+    }
+
+    const auto compound = test::engine().analyze_text("amātūrus est");
+    const auto compound_document =
+        Json::parse(analysis_json_v4(test::engine(), compound));
+    EXPECT_TRUE(std::ranges::any_of(compound_document.at("analyses"),
+        [](const Json &analysis) {
+            return analysis.at("derivation").at("method") == "compound" &&
+                   analysis.at("form").at("recognized") == "amātūrus" &&
+                   analysis.at("form").at("display") == "amaturus";
+        }));
+    const auto stable_compound =
+        Json::parse(analysis_json_v3(test::engine(), compound));
+    EXPECT_TRUE(std::ranges::any_of(stable_compound.at("analyses"),
+        [](const Json &analysis) {
+            return analysis.at("derivation").at("method") == "compound" &&
+                   analysis.at("form").at("display") == "amātūrus";
+        }));
+}
+
 } // namespace words

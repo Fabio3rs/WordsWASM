@@ -163,6 +163,38 @@ lex_segment(const std::string_view value) {
     return std::move(*parsed);
 }
 
+[[nodiscard]] std::string without_input_quantity(const std::string_view value) {
+    if (std::ranges::all_of(value, [](const char byte) {
+            return static_cast<unsigned char>(byte) < 0x80U;
+        })) {
+        return std::string{value};
+    }
+    const auto is_word_byte = [](const unsigned char byte) {
+        return byte >= 0x80U || (byte >= 'A' && byte <= 'Z') ||
+               (byte >= 'a' && byte <= 'z');
+    };
+    std::string output;
+    output.reserve(value.size());
+    for (std::size_t offset{}; offset < value.size();) {
+        if (!is_word_byte(static_cast<unsigned char>(value[offset]))) {
+            output.push_back(value[offset++]);
+            continue;
+        }
+        const auto begin = offset;
+        while (offset < value.size() &&
+               is_word_byte(static_cast<unsigned char>(value[offset]))) {
+            ++offset;
+        }
+        const auto token = value.substr(begin, offset - begin);
+        if (const auto parsed = lex_segment(token)) {
+            output.append(parsed->orthography_ascii);
+        } else {
+            output.append(token);
+        }
+    }
+    return output;
+}
+
 [[nodiscard]] constexpr AnalysisDictionaryOrder
 dictionary_order(const DictionaryKind dictionary) noexcept {
     return dictionary == DictionaryKind::unique
@@ -261,21 +293,30 @@ morphology_order_key(const Morphology &morphology) {
 
 } // namespace
 
+std::string display_without_input_quantity(const std::string_view recognized) {
+    return without_input_quantity(recognized);
+}
+
 ResolvedForm unquantified_form(std::string stem, const std::uint8_t stem_key,
-                               std::string ending, std::string recognized) {
+                               std::string ending, std::string recognized,
+                               const QuantityDisplayMode display_mode) {
+    auto display = display_mode == QuantityDisplayMode::legacy_database_and_input
+                       ? recognized
+                       : without_input_quantity(recognized);
     return ResolvedForm{
         .stem = std::move(stem),
         .stem_key = stem_key,
         .ending = std::move(ending),
-        .recognized = recognized,
-        .display = std::move(recognized),
+        .recognized = std::move(recognized),
+        .display = std::move(display),
         .quantity = {},
     };
 }
 
 ResolvedForm resolved_form(const Database &database, const SurfaceForm &surface,
                            const AnalysisIR &analysis,
-                           const bool include_suffix_quantity) {
+                           const bool include_suffix_quantity,
+                           const QuantityDisplayMode display_mode) {
     auto form =
         unquantified_form(analysis.derivation.rewritten_form
                               ? analysis.derivation.rewritten_form->stem
@@ -293,6 +334,9 @@ ResolvedForm resolved_form(const Database &database, const SurfaceForm &surface,
     // from a merely similar dictionary spelling.
     const auto &lexeme = database.lexeme(analysis.lexeme);
     if (lexeme.dictionary == DictionaryKind::unique || !analysis.rule) {
+        if (display_mode == QuantityDisplayMode::database_only) {
+            form.display = without_input_quantity(form.recognized);
+        }
         return form;
     }
 
@@ -302,6 +346,9 @@ ResolvedForm resolved_form(const Database &database, const SurfaceForm &surface,
     if (!recognized || !stem || !ending ||
         recognized->quantities.size() !=
             stem->quantities.size() + ending->quantities.size()) {
+        if (display_mode == QuantityDisplayMode::database_only) {
+            form.display = without_input_quantity(form.recognized);
+        }
         return form;
     }
 
@@ -353,6 +400,13 @@ ResolvedForm resolved_form(const Database &database, const SurfaceForm &surface,
     }
 
     if (form.quantity.positions.empty()) {
+        if (display_mode == QuantityDisplayMode::database_only &&
+            std::ranges::any_of(recognized->quantities,
+                                [](const VowelQuantity quantity) {
+                                    return quantity != VowelQuantity::unknown;
+                                })) {
+            form.display = render_quantities(*recognized, database_quantities);
+        }
         return form;
     }
 
@@ -364,11 +418,15 @@ ResolvedForm resolved_form(const Database &database, const SurfaceForm &surface,
                                  ? QuantityCoverage::complete
                                  : QuantityCoverage::partial;
 
-    auto display_quantities = recognized->quantities;
-    for (const auto &position : form.quantity.positions) {
-        display_quantities[position.index] = position.quantity;
+    if (display_mode == QuantityDisplayMode::legacy_database_and_input) {
+        auto display_quantities = recognized->quantities;
+        for (const auto &position : form.quantity.positions) {
+            display_quantities[position.index] = position.quantity;
+        }
+        form.display = render_quantities(*recognized, display_quantities);
+    } else {
+        form.display = *form.quantity.annotated;
     }
-    form.display = render_quantities(*recognized, display_quantities);
     return form;
 }
 

@@ -68,8 +68,19 @@ assert "display rēs · quantity evidence complete" in run(
 assert "display exercĭtŭs · quantity evidence partial" in run(
     "--format", "human", "exercitus")
 user_marked = run("--format", "human", "--detailed", "exērcitus")
-assert "display exērcĭtŭs · quantity evidence partial" in user_marked
+assert "input exērcitus · display exercĭtŭs · quantity evidence partial" in user_marked
 assert "Database-marked form: exercĭtŭs" in user_marked
+sancte = rows("sanctē")
+assert [row["display"] for row in sancte] == ["sancte", "sancte", "sanctē"]
+assert [row["quantity_coverage"] for row in sancte] == [
+    "none", "none", "partial",
+]
+marked_compound = rows("amātūrus est")
+assert any(row["unit"] == "construction" and
+           row["input"] == "amātūrus est" and
+           row["display"] == "amaturus est" and
+           row["quantity_coverage"] == "none"
+           for row in marked_compound)
 
 deponent = rows("hortor")
 assert any("dep" in row["part"] for row in deponent)
