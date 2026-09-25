@@ -13,6 +13,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -116,27 +117,28 @@ consensus_stem_quantity(const Database &database, const AnalysisIR &analysis,
                         const std::string_view recognized_stem) {
     const auto &lexeme = database.lexeme(analysis.lexeme);
     std::size_t longest{};
-    std::vector<std::uint8_t> slots;
-    for (std::uint8_t slot{}; slot < lexeme.stems.size(); ++slot) {
+    std::array<std::uint8_t, std::tuple_size_v<decltype(lexeme.stems)>> slots{};
+    std::size_t slot_count{};
+    for (std::size_t slot{}; slot < lexeme.stems.size(); ++slot) {
         const auto stored = database.stem_string(lexeme.stems[slot]);
         if (stored.empty() || !lookup_prefix_matches(stored, recognized_stem)) {
             continue;
         }
         if (stored.size() > longest) {
             longest = stored.size();
-            slots.clear();
+            slot_count = 0U;
         }
         if (stored.size() == longest) {
-            slots.push_back(slot);
+            std::span{slots}[slot_count++] = static_cast<std::uint8_t>(slot);
         }
     }
-    if (slots.empty()) {
+    if (slot_count == 0U) {
         return std::nullopt;
     }
 
     QuantityMask consensus;
     std::uint32_t conflicts{};
-    for (const auto slot : slots) {
+    for (const auto slot : std::span{slots}.first(slot_count)) {
         const auto candidate = database.stem_quantity(analysis.lexeme, slot);
         conflicts |= (consensus.long_vowel ^ candidate.long_vowel) &
                      consensus.known & candidate.known;

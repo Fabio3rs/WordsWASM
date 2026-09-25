@@ -150,4 +150,57 @@ TEST(ProjectionTest, KeepsUnverifiedInputQuantityOutOfCurrentDisplay) {
         }));
 }
 
+TEST(ProjectionTest, KeepsKnownQuantityWhenRepeatedStemHasUnknownSlot) {
+    constexpr auto army_dictionary_entry = 19'772U;
+    const auto &database = test::engine().database();
+    const auto result = test::engine().analyze("exercitus");
+    const auto found =
+        std::ranges::find_if(result.analyses, [&](const AnalysisIR &analysis) {
+            return database.lexeme(analysis.lexeme).dictionary_entry + 1U ==
+                   army_dictionary_entry;
+        });
+    ASSERT_NE(found, result.analyses.end());
+
+    const auto &lexeme = database.lexeme(found->lexeme);
+    ASSERT_EQ(database.stem_string(lexeme.stems[0]),
+              database.stem_string(lexeme.stems[1]));
+    // QUANTITIES.LAT records this spelling only for slot 1. Slot 2 remains
+    // unknown, so it must not erase the recorded quantity.
+    EXPECT_EQ(database.stem_quantity(found->lexeme, 0U).known, 1U << 5U);
+    EXPECT_EQ(database.stem_quantity(found->lexeme, 1U).known, 0U);
+
+    const auto form = resolved_form(database, result.surface, *found);
+    EXPECT_EQ(form.display, "exercĭtŭs");
+    EXPECT_TRUE(std::ranges::any_of(
+        form.quantity.positions, [](const ResolvedQuantityPosition &position) {
+            return position.index == 5U &&
+                   position.quantity == VowelQuantity::short_vowel &&
+                   position.origin == QuantityOrigin::stem;
+        }));
+}
+
+TEST(ProjectionTest, DoesNotBorrowQuantityFromShorterStem) {
+    constexpr auto adjective_dictionary_entry = 10'303U;
+    const auto &database = test::engine().database();
+    const auto result = test::engine().analyze("clarior");
+    const auto found =
+        std::ranges::find_if(result.analyses, [&](const AnalysisIR &analysis) {
+            return database.lexeme(analysis.lexeme).dictionary_entry + 1U ==
+                   adjective_dictionary_entry;
+        });
+    ASSERT_NE(found, result.analyses.end());
+
+    const auto &lexeme = database.lexeme(found->lexeme);
+    EXPECT_EQ(database.stem_string(lexeme.stems[0]), "clar");
+    EXPECT_EQ(database.stem_string(lexeme.stems[2]), "clari");
+    EXPECT_EQ(database.stem_quantity(found->lexeme, 0U).known, 1U << 2U);
+    EXPECT_EQ(database.stem_quantity(found->lexeme, 2U).known, 0U);
+
+    const auto form = resolved_form(database, result.surface, *found);
+    EXPECT_EQ(form.stem, "clari");
+    EXPECT_EQ(form.display, "clarior");
+    EXPECT_TRUE(form.quantity.positions.empty());
+    EXPECT_FALSE(form.quantity.annotated.has_value());
+}
+
 } // namespace words

@@ -1398,6 +1398,7 @@ static Json analysis_json_resolved_document(const Engine &engine,
         Json segments = Json::array();
         for (const auto &segment : result.two_word_suggestion->segments) {
             std::vector<std::pair<AnalysisOrderKey, Json>> ordered;
+            ordered.reserve(segment.analyses.size());
             for (const auto &analysis : segment.analyses) {
                 ordered.emplace_back(
                     analysis_order_key(engine.database(), segment.surface,
@@ -1504,6 +1505,7 @@ static Json search_json_resolved_document(const Engine &engine,
         Json segments = Json::array();
         for (const auto &segment : result.two_word_suggestion->segments) {
             std::vector<std::pair<AnalysisOrderKey, Json>> ordered;
+            ordered.reserve(segment.analyses.size());
             for (const auto &analysis : segment.analyses) {
                 ordered.emplace_back(
                     analysis_order_key(engine.database(), segment.surface,

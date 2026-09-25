@@ -1430,7 +1430,13 @@ TEST(EngineTest, BoundsOrthographyThenSyncopeToTwoTypedSteps) {
     const auto result = test::engine().analyze("ahmasti");
     ASSERT_EQ(result.status, QueryStatus::analyzed);
     ASSERT_EQ(result.analyses.size(), 1U);
-    const auto &rewritten = *result.analyses.front().derivation.rewritten_form;
+    const auto &rewritten_form =
+        result.analyses.front().derivation.rewritten_form;
+    if (!rewritten_form) {
+        ADD_FAILURE() << "expected a rewritten form";
+        return;
+    }
+    const auto &rewritten = *rewritten_form;
     EXPECT_EQ(rewritten.count, 2U);
 
     const auto full = Json::parse(analysis_json(test::engine(), result));
