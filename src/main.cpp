@@ -319,7 +319,8 @@ Usage:
 Options:
   --database FILE, --db FILE  WWDB database to load.
   --dataset-id ID             Expected dataset identifier, when known.
-  --format FORMAT, -f FORMAT  human, analysis-v3/v4, or search-v3/v4.
+  --format FORMAT, -f FORMAT  human, analysis-v4, search-v4,
+                              analysis-v3/search-v3 (deprecated compatibility).
   --pretty                    Indent JSON for terminal reading; emit an array for multiple results.
   --human-style STYLE         normal (default) or compact (tab-separated rows).
   --detailed                  Show full meanings, editorial notes, and quantity evidence.
@@ -342,14 +343,14 @@ Options:
   --version                   Show the CLI version.
 
 Formats:
-  analysis-v3  Full morphological analysis; requires a full WWDB.
-  search-v3    Search-oriented result; works with full and search WWDBs.
-  analysis-v4  Analysis with suffix quantity evidence; requires a full WWDB.
-  search-v4    Search with suffix quantity evidence; works with both WWDBs.
+  analysis-v4  Stable JSON analysis; requires a full WWDB.
+  search-v4    Stable JSON search; works with full and search WWDBs.
+  analysis-v3  Deprecated compatibility; requires a full WWDB.
+  search-v3    Deprecated compatibility; works with full and search WWDBs.
   human        Readable analyses; requires a full WWDB.
 
 Human output, including compact TSV, is presentation and may change in minor releases.
-Select an explicit versioned format for a stable machine contract.
+Select analysis-v4 or search-v4 for the stable native JSON contract.
 Streamed JSON emits one value per input line: an object for one result or an
 array when the line produces multiple results.
 

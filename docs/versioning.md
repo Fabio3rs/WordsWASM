@@ -11,7 +11,7 @@ the meaning of one from the value of another.
 | Identifier | What it identifies | Stable 1.0 baseline |
 | --- | --- | --- |
 | GitHub release and npm package version | A distributable release train. | `1.0.0` |
-| Native CLI JSON schema | A selected JSON output contract. | `analysis-v3`, `search-v3`, `analysis-v4`, `search-v4` |
+| Native CLI JSON schema | A selected JSON output contract. | `analysis-v4`, `search-v4` |
 | Browser schema | Documents returned by the high-level WebAssembly API. | 6 |
 | WWDB format | The binary database wire format. | 1.11 |
 | `datasetId` | The logical data snapshot and its ID space. | A `sha256:` identity in the release manifest |
@@ -68,26 +68,29 @@ currently guaranteed.
 
 ### Native CLI JSON
 
-The stable JSON contracts are selected explicitly:
+The stable 1.x native JSON contracts are selected explicitly:
 
 | Selector | `schema` | `schemaVersion` | Database |
 | --- | --- | ---: | --- |
-| `analysis-v3` | `whitakers-words.analysis` | 3 | Full WWDB |
-| `search-v3` | `whitakers-words.search` | 3 | Full or search-only WWDB |
 | `analysis-v4` | `whitakers-words.analysis` | 4 | Full WWDB |
 | `search-v4` | `whitakers-words.search` | 4 | Full or search-only WWDB |
 
+`analysis-v3` and `search-v3` remain available as deprecated compatibility
+formats. They are not part of the stable 1.x API contract and may be changed
+or removed in a future release without a major-version bump. They currently
+work without runtime warnings;
+their existing document shapes are covered by tests while the selectors exist.
+
 `wordswasm-cli` supplies its bundled full database and selects `human`
 when `--format` is omitted. `--pretty` without an explicit format selects
-`analysis-v4`. Scripts needing JSON must select an explicit versioned format;
-use `analysis-v4` or `search-v4` for suffix quantity evidence. The standalone
-native binary requires an explicit `--database` and `--format`.
+`analysis-v4`. Scripts needing stable native JSON must select `analysis-v4`
+or `search-v4`. Both include suffix quantity evidence. The standalone native
+binary requires an explicit `--database` and `--format`.
 
 The binary currently also accepts the unversioned `analysis` and `search`
 selectors (schema 1) and the v2 selectors. They are retained as an unsupported
 migration path, are not part of the stable 1.x API, and may be removed in a
-minor release. New integrations should select v4 when they need suffix
-quantity evidence; v3 keeps its existing document shape. The v1 and v2
+minor release. New integrations should select v4. The v1 and v2
 implementation and schema records, plus historical examples, remain in the
 repository as development records rather than a promise to preserve all
 prerelease interfaces.

@@ -93,7 +93,7 @@ The actual separators are tabs. There is one row per reading, and one row with
 `suggestion:N` parts. Embedded
 tabs, newlines, backslashes, and control characters are escaped within fields.
 Both human styles are presentation formats; the TSV columns and their order may
-change in minor releases. Use an explicit versioned format for a stable machine
+change in minor releases. Use `analysis-v4` or `search-v4` for a stable machine
 contract.
 Compact output never contains color codes. In normal human output,
 `--color=auto` uses color only when stdout is a terminal; `always` and `never`
@@ -124,10 +124,11 @@ wordswasm -f search-v4 mālum
 
 `--db` is an alias for `--database`, and `-f` is an alias for `--format`.
 `analysis-v3`, `analysis-v4`, and `human` require a full database;
-`search-v3` and `search-v4` accept a full or search-only database. Both v3 and
-v4 are versioned CLI JSON contracts for 1.0. The binary may accept older
-development selectors, but those are unsupported migration paths; new
-integrations needing suffix quantity evidence should use v4. See [Versioning]
+`search-v3` and `search-v4` accept a full or search-only database. Only v4 is
+part of the stable 1.x native JSON contract. V3 remains a deprecated
+compatibility format and may be changed or removed without a major-version
+bump. The binary may accept older development selectors, but those are
+unsupported migration paths; new integrations should use v4. See [Versioning]
 for the compatibility policy.
 
 ### Optional result filters

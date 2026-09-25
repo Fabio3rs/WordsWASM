@@ -91,7 +91,8 @@ wordswasm mālum
 
 It uses its bundled full database and human-readable output by default. Pass
 `--format analysis-v4` or `--format search-v4` for JSON automation with suffix
-quantity evidence. Version 3 remains available for its existing document shape.
+quantity evidence. Version 3 remains available as a deprecated compatibility
+format and may be changed or removed without a major-version bump.
 
 Maintainers can follow the [npm publishing guide](docs/npm-publishing.md) for
 the local bootstrap and GitHub OIDC release process.
@@ -130,7 +131,7 @@ tar -xzf words-cli-v1.0.0-rc1-linux-x86_64.tar.gz
 cd words-cli-v1.0.0-rc1-linux-x86_64
 ./words_cli \
   --database ../words-full-v1.0.0-rc1.wwdb \
-  --format analysis-v3 \
+  --format analysis-v4 \
   amamus
 ```
 
@@ -145,7 +146,7 @@ Expand-Archive words-cli-v1.0.0-rc1-windows-x86_64.zip
 Set-Location words-cli-v1.0.0-rc1-windows-x86_64\words-cli-v1.0.0-rc1-windows-x86_64
 .\words_cli.exe `
   --database ..\..\words-full-v1.0.0-rc1.wwdb `
-  --format analysis-v3 `
+  --format analysis-v4 `
   amamus
 ```
 
@@ -153,23 +154,22 @@ The native CLI requires an explicit database and format. Its output formats are:
 
 | Format | Compatible database | Output |
 | --- | --- | --- |
-| `analysis-v3` | `words-full` | Complete analyses and quantity-resolved forms, lexical metadata, and meanings. |
-| `search-v3` | `words-full` or `words-search` | Compact hits with quantity-resolved forms and no meanings. |
 | `analysis-v4` | `words-full` | Analyses with suffix quantity evidence and database-supported display forms. |
 | `search-v4` | `words-full` or `words-search` | Search hits with suffix quantity evidence and database-supported display forms. |
+| `analysis-v3` | `words-full` | Deprecated compatibility format; full analyses with the earlier display behavior. |
+| `search-v3` | `words-full` or `words-search` | Deprecated compatibility format; compact hits with the earlier display behavior. |
 | `human` | `words-full` | Readable analyses or tab-separated rows (`--human-style compact`). |
 
-The binary may still accept older format selectors from development releases,
-but they are not part of the stable 1.x API. New integrations needing suffix
-quantity evidence should select v4 explicitly. Quote a phrase or line
-containing spaces; compounds recognized
-by the grammar are returned as one unit, while independent words produce
-separate JSON lines:
+Only v4 is covered by the stable 1.x native JSON contract. V3 may be changed
+or removed without a major-version bump. The binary may also accept older
+development selectors; they are unsupported. New integrations should select
+v4. Quote a phrase or line containing spaces; compounds recognized by the grammar are
+returned as one unit, while independent words produce separate JSON lines:
 
 ```sh
 ./words_cli \
   --database ../words-full-v1.0.0-rc1.wwdb \
-  --format analysis-v3 \
+  --format analysis-v4 \
   "amo puellam"
 ```
 
@@ -180,9 +180,9 @@ input line. With no positional text, stdin is the default stream source; use
 ```sh
 printf 'amo\npuella\nmālum\n' | ./words_cli \
   --database ../words-full-v1.0.0-rc1.wwdb \
-  --format analysis-v3
+  --format analysis-v4
 ./words_cli --database ../words-full-v1.0.0-rc1.wwdb \
-  --format analysis-v3 --input corpus.txt
+  --format analysis-v4 --input corpus.txt
 ```
 
 `--pretty` indents JSON for terminal reading while keeping it valid JSON. If a
@@ -507,8 +507,9 @@ The format and data pipeline are described in
 
 ### Optional presentation filters
 
-The CLI accepts `--filter-trim=deponent-active-form` with v3 and human formats; use
-`--filter-trim=none` to explicitly keep all analyses. The JS/WASM query methods
+The CLI accepts `--filter-trim=deponent-active-form` with v4, deprecated v3,
+and human formats; use `--filter-trim=none` to explicitly keep all analyses.
+The JS/WASM query methods
 accept `{filters: {excludeWhitakerTrimReasons: ["deponent-active-form"]}}`.
 Both default to no filtering and reuse the six existing trim reasons.
 See [client filter behavior](docs/morphological-assessment.md#optional-client-filters)

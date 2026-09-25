@@ -7,7 +7,7 @@ schema v6 include suffix quantity evidence in `form.display` and
 `form.quantity`. Native v3 retains its prior projection.
 
 `form.recognized` is the normalized spelling accepted by the analysis. It keeps
-macrons and breves supplied in the query. In the experimental native v4 and
+macrons and breves supplied in the query. In the native v4 and
 browser v6 projections, `form.display` is the NFC spelling marked **only**
 where the database has quantity evidence. An unverified input mark does not
 appear in `display`; it remains visible in `recognized` and `query`.
@@ -36,7 +36,7 @@ For the query `sanctē`, the current projections distinguish these readings:
 | Derived adverb | `sanctē` | `sanctē` | `sanctē` | `partial` | `exact` |
 
 The web interface and `human` CLI show `display` alongside the recognized
-input. Native v3 retains its published behavior of carrying an unverified
+input. Native v3 retains its earlier behavior of carrying an unverified
 input mark into `display`; clients that need database-only evidence in v3 can
 read `quantity.annotated` and `quantity.positions`.
 

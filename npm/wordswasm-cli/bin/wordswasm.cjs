@@ -27,7 +27,8 @@ Defaults:
 
 Options:
   --database FILE, --db FILE  Use another WWDB database.
-  --format FORMAT, -f FORMAT  human (default), analysis-v3/v4, or search-v3/v4.
+  --format FORMAT, -f FORMAT  human (default), analysis-v4, search-v4,
+                              analysis-v3/search-v3 (deprecated compatibility).
   --pretty                    Indent JSON for terminal reading; emit an array for multiple results.
   --human-style STYLE         normal (default) or compact (tab-separated rows).
   --detailed                  Show full meanings, editorial notes, and quantity evidence.
@@ -54,7 +55,7 @@ when --format is omitted, but cannot be used with stream input because JSONL
 needs one compact JSON value per line. The native command exits 2 for invalid input, 3 for
 database/engine/input errors, and 4 for unexpected failures.
 Human output, including compact TSV, may change in minor releases.
-Select an explicit versioned format for a stable machine contract.
+Select analysis-v4 or search-v4 for the stable native JSON contract.
 Streamed JSON emits one value per input line: an object for one result or an
 array when the line produces multiple results.
 `);
