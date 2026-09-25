@@ -195,12 +195,19 @@ using Assignment = std::vector<std::size_t>;
 using Domains = std::vector<std::vector<bool>>;
 
 struct Enumeration final {
+    struct RejectedState final {
+        Assignment prefix;
+        std::string reason;
+        double partial_score{};
+    };
     std::vector<Assignment> valid;
+    std::vector<RejectedState> rejected_states;
     std::map<std::string, std::uint64_t, std::less<>> rejections;
     std::uint64_t checks{};
     std::uint64_t states{};
     std::uint64_t backtracks{};
     std::uint64_t complete{};
+    std::uint64_t beam_score_pruned{};
 };
 
 struct NominalFeatures final {
@@ -2035,6 +2042,102 @@ void add_score_reason(std::vector<ScoreReason> *const reasons,
                              " finite-clause-anchor");
     }
     return score;
+}
+
+// Local inspection fallback: retain only the most promising partial
+// morphology assignments. The normal corpus runs still enumerate exactly.
+[[nodiscard]] Enumeration enumerate_beam(const Lattice &lattice,
+                                         const RelationLattice &relations,
+                                         const Domains &domains,
+                                         const bool fragment,
+                                         const std::size_t width,
+                                         const bool record_rejections) {
+    struct State final {
+        Assignment choices;
+        double score{};
+    };
+    Enumeration result;
+    std::vector<State> beam{{.choices = {}, .score = 0.0}};
+    PartialAssignment partial(domains.size());
+    for (std::size_t token = 0; token < domains.size(); ++token) {
+        std::vector<State> next;
+        for (const auto &state : beam) {
+            for (std::size_t candidate = 0; candidate < domains[token].size();
+                 ++candidate) {
+                if (!domains[token][candidate]) {
+                    continue;
+                }
+                ++result.states;
+                for (std::size_t previous = 0; previous < token; ++previous) {
+                    partial[previous] = state.choices[previous];
+                }
+                partial[token] = candidate;
+                State extended = state;
+                extended.choices.push_back(candidate);
+                extended.score += candidate_score(
+                    lattice.candidates[token][candidate], token, nullptr);
+                const auto violation = forward_violation(
+                    lattice, domains, partial, fragment, result.checks);
+                if (violation) {
+                    ++result.rejections[std::string{*violation}];
+                    ++result.backtracks;
+                    if (record_rejections) {
+                        result.rejected_states.push_back(
+                            {.prefix = std::move(extended.choices),
+                             .reason = std::string{*violation},
+                             .partial_score = extended.score});
+                    }
+                    continue;
+                }
+                next.push_back(std::move(extended));
+            }
+        }
+        for (std::size_t previous = 0; previous <= token; ++previous) {
+            partial[previous].reset();
+        }
+        std::ranges::stable_sort(next, [](const State &left,
+                                          const State &right) {
+            return left.score > right.score;
+        });
+        if (next.size() > width) {
+            result.beam_score_pruned += next.size() - width;
+            if (record_rejections) {
+                for (std::size_t index = width; index < next.size(); ++index) {
+                    result.rejected_states.push_back(
+                        {.prefix = std::move(next[index].choices),
+                         .reason = "beam-score-limit",
+                         .partial_score = next[index].score});
+                }
+            }
+            next.resize(width);
+        }
+        beam = std::move(next);
+        if (beam.empty()) {
+            break;
+        }
+    }
+    for (auto &state : beam) {
+        if (state.choices.size() != domains.size()) {
+            continue;
+        }
+        ++result.complete;
+        const auto violation = first_violation(lattice, relations,
+                                               state.choices, fragment,
+                                               result.checks);
+        if (violation) {
+            ++result.rejections[std::string{*violation}];
+            ++result.backtracks;
+            if (record_rejections) {
+                result.rejected_states.push_back(
+                    {.prefix = std::move(state.choices),
+                     .reason = std::string{*violation},
+                     .partial_score = state.score});
+            }
+        } else {
+            result.valid.push_back(std::move(state.choices));
+        }
+    }
+    return result;
 }
 
 [[nodiscard]] double
@@ -4646,9 +4749,11 @@ std::vector<Fixture> load_corpus(const std::filesystem::path &path) {
 
 Experiment::Experiment(const words::Engine &engine,
                        const std::uint64_t max_product,
-                       const words::AnalysisOptions analysis_options)
+                       const words::AnalysisOptions analysis_options,
+                       const bool record_rejections)
     : engine_{engine}, max_product_{max_product},
-      analysis_options_{analysis_options} {}
+      analysis_options_{analysis_options},
+      record_rejections_{record_rejections} {}
 
 Result Experiment::run(const Fixture &fixture, const Strategy strategy) const {
     const auto started = Clock::now();
@@ -4809,7 +4914,12 @@ Result Experiment::run(const Fixture &fixture, const Strategy strategy) const {
         result.domains_after_propagation = domain_counts(domains);
         const auto pruned = domain_product(domains);
         result.pruned_product = pruned.convert_to<std::string>();
-        if (pruned > max_product_) {
+        const bool local_beam =
+            fixture.id == "ad-hoc" &&
+            (strategy == Strategy::dependency_mst ||
+             strategy == Strategy::dependency_eisner) &&
+            pruned > max_product_;
+        if (pruned > max_product_ && !local_beam) {
             result.status = "experiment-budget-exceeded";
             result.diagnostics.push_back("pruned-product-exceeds-max-product");
             result.elapsed_ns = static_cast<std::uint64_t>(
@@ -4821,7 +4931,21 @@ Result Experiment::run(const Fixture &fixture, const Strategy strategy) const {
     }
     Enumeration enumeration;
     const bool fragment = fixture.mode == GrammarMode::fragment;
-    if (strategy == Strategy::incremental_dfs) {
+    const bool local_beam = fixture.id == "ad-hoc" &&
+                            (strategy == Strategy::dependency_mst ||
+                             strategy == Strategy::dependency_eisner) &&
+                            domain_product(domains) > max_product_;
+    if (local_beam) {
+        constexpr std::size_t beam_width{512U};
+        enumeration = enumerate_beam(
+            lattice, relation_lattice, domains, fragment,
+            static_cast<std::size_t>(std::min<std::uint64_t>(max_product_,
+                                                            beam_width)),
+            record_rejections_);
+        result.diagnostics.push_back("approximate-beam-search:width=" +
+                                     std::to_string(std::min<std::uint64_t>(
+                                         max_product_, beam_width)));
+    } else if (strategy == Strategy::incremental_dfs) {
         enumeration =
             enumerate_incremental(lattice, relation_lattice, domains, fragment);
     } else if (strategy == Strategy::dfs_mrv_forward_checking) {
@@ -4833,8 +4957,23 @@ Result Experiment::run(const Fixture &fixture, const Strategy strategy) const {
     result.enumeration_constraint_checks = enumeration.checks;
     result.enumeration_partial_states = enumeration.states;
     result.enumeration_backtracks = enumeration.backtracks;
+    result.beam_score_pruned_states = enumeration.beam_score_pruned;
     result.complete_assignments = enumeration.complete;
     result.rejections = std::move(enumeration.rejections);
+    if (record_rejections_) {
+        result.rejected_alternatives.reserve(
+            enumeration.rejected_states.size());
+        for (auto &rejected : enumeration.rejected_states) {
+            const auto token = rejected.prefix.size() - 1U;
+            const auto candidate = rejected.prefix.back();
+            result.rejected_alternatives.push_back(
+                {.prefix_candidates = std::move(rejected.prefix),
+                 .alternative =
+                     analysis_choice(token, lattice.candidates[token][candidate]),
+                 .reason = std::move(rejected.reason),
+                 .partial_score = rejected.partial_score});
+        }
+    }
 
     std::vector<Assignment> accepted;
     std::vector<DependencyTreeAnalysis> dependency_trees;
@@ -5031,7 +5170,9 @@ Result Experiment::run(const Fixture &fixture, const Strategy strategy) const {
         }
     }
     if (accepted.empty()) {
-        result.status = "no-parse";
+        result.status = local_beam ? "approximate-no-parse" : "no-parse";
+    } else if (local_beam) {
+        result.status = "approximate";
     }
     populate_best(result, lattice, relation_lattice, fixture, accepted);
     if (strategy == Strategy::dependency_tree_oracle ||
@@ -5599,7 +5740,8 @@ bool Experiment::self_test(const std::vector<Fixture> &fixtures,
     return true;
 }
 
-std::string to_json(const Result &result, const bool include_morphology_nbest) {
+std::string to_json(const Result &result, const bool include_morphology_nbest,
+                    const bool include_rejections) {
     using Json = nlohmann::ordered_json;
     const auto propagation_algorithm_name =
         propagation_algorithm(result.strategy);
@@ -5766,9 +5908,20 @@ std::string to_json(const Result &result, const bool include_morphology_nbest) {
         {"partialStates", result.enumeration_partial_states},
         {"constraintChecks", result.enumeration_constraint_checks},
         {"backtracks", result.enumeration_backtracks},
+        {"beamScorePrunedStates", result.beam_score_pruned_states},
         {"completeAssignments", result.complete_assignments},
         {"rejectionsByConstraint", result.rejections},
     };
+    if (include_rejections) {
+        output["enumeration"]["rejectedAlternatives"] = Json::array();
+        for (const auto &rejected : result.rejected_alternatives) {
+            output["enumeration"]["rejectedAlternatives"].push_back(
+                {{"reason", rejected.reason},
+                 {"prefixCandidates", rejected.prefix_candidates},
+                 {"partialScore", rejected.partial_score},
+                 {"alternative", choice_json(rejected.alternative)}});
+        }
+    }
     output["relationCandidates"] = {
         {"generationPerformed", result.relation_candidate_generation_performed},
         {"generated", result.relation_candidates_generated},

@@ -48,6 +48,7 @@ struct Options final {
     bool human{};
     bool json{};
     bool include_nbest{};
+    bool include_rejections{};
     bool help{};
 };
 
@@ -182,6 +183,8 @@ parse_options(const int argc, char *const argv[]) {
             options.json = true;
         } else if (argument == "--include-nbest") {
             options.include_nbest = true;
+        } else if (argument == "--include-rejections") {
+            options.include_rejections = true;
         } else if (argument == "--help" || argument == "-h") {
             options.help = true;
         } else {
@@ -196,6 +199,10 @@ parse_options(const int argc, char *const argv[]) {
     }
     if (options.json && options.human) {
         return std::unexpected("--json and --human cannot be combined");
+    }
+    if (options.include_rejections && (!options.text || !options.json)) {
+        return std::unexpected(
+            "--include-rejections requires --text and --json");
     }
     if (options.text && !options.strategy && !options.all_strategies) {
         options.strategy = parsers::Strategy::dependency_mst;
@@ -229,6 +236,8 @@ void usage(std::ostream &output) {
            "  --json                    NDJSON output for --text\n"
            "  --include-nbest           include every possible analysis "
            "in NDJSON\n"
+           "  --include-rejections      include rejected partial analyses "
+           "in --text --json\n"
            "  --self-test               verify strategy invariants on the "
            "corpus\n";
 }
@@ -398,7 +407,8 @@ int main(const int argc, char *argv[]) try {
         return 3;
     }
     const parsers::Experiment experiment{**engine, options->max_product,
-                                         options->analysis_options};
+                                         options->analysis_options,
+                                         options->include_rejections};
     std::vector<parsers::Fixture> fixtures;
     if (options->text) {
         if (options->corpus_explicit) {
@@ -478,7 +488,8 @@ int main(const int argc, char *argv[]) try {
                     std::cout << '\n';
                 }
             } else {
-                std::cout << parsers::to_json(result, options->include_nbest)
+                std::cout << parsers::to_json(result, options->include_nbest,
+                                               options->include_rejections)
                           << '\n';
             }
         }

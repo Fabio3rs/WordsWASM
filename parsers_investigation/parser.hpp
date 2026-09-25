@@ -206,6 +206,13 @@ struct ScoreReason final {
     std::string detail;
 };
 
+struct RejectedAlternative final {
+    std::vector<std::size_t> prefix_candidates;
+    AnalysisChoice alternative;
+    std::string reason;
+    double partial_score{};
+};
+
 struct RelationCandidateContextChoice final {
     std::size_t token{};
     std::size_t candidate{};
@@ -314,8 +321,10 @@ struct Result final {
     std::uint64_t enumeration_constraint_checks{};
     std::uint64_t enumeration_partial_states{};
     std::uint64_t enumeration_backtracks{};
+    std::uint64_t beam_score_pruned_states{};
     std::uint64_t complete_assignments{};
     std::map<std::string, std::uint64_t, std::less<>> rejections;
+    std::vector<RejectedAlternative> rejected_alternatives;
 
     std::uint64_t parser_units_created{};
     std::uint64_t parser_duplicate_deductions{};
@@ -362,7 +371,8 @@ load_corpus(const std::filesystem::path &path);
 class Experiment final {
   public:
     Experiment(const words::Engine &engine, std::uint64_t max_product,
-               words::AnalysisOptions analysis_options = {});
+               words::AnalysisOptions analysis_options = {},
+               bool record_rejections = false);
 
     [[nodiscard]] Result run(const Fixture &fixture, Strategy strategy) const;
     [[nodiscard]] bool self_test(const std::vector<Fixture> &fixtures,
@@ -372,9 +382,11 @@ class Experiment final {
     const words::Engine &engine_;
     std::uint64_t max_product_{};
     words::AnalysisOptions analysis_options_{};
+    bool record_rejections_{};
 };
 
 [[nodiscard]] std::string to_json(const Result &result,
-                                  bool include_morphology_nbest = false);
+                                  bool include_morphology_nbest = false,
+                                  bool include_rejections = false);
 
 } // namespace parsers
