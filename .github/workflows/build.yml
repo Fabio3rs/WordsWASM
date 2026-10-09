@@ -261,8 +261,13 @@ jobs:
           "${emulator[@]}" build/native-release/words_cli \
             --database whitakers-words/poc/compact-db/output/words-poc-dense.wwdb \
             --dataset-id sha256:0000000000000000000000000000000000000000000000000000000000000000 \
-            --format analysis-v2 amo \
-            | python3 -c "import json,sys; assert json.load(sys.stdin)['schemaVersion'] == 2"
+            --format analysis-v4 amo \
+            | python3 -c "import json,sys; assert json.load(sys.stdin)['schemaVersion'] == 4"
+          "${emulator[@]}" build/native-release/words_cli \
+            --database whitakers-words/poc/compact-db/output/words-poc-dense.wwdb \
+            --dataset-id sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            --format search-v4 amo \
+            | python3 -c "import json,sys; assert json.load(sys.stdin)['schemaVersion'] == 4"
           file build/native-release/words_cli \
             | tee build/native-release/file.txt
           grep -F "statically linked" build/native-release/file.txt
@@ -288,8 +293,13 @@ jobs:
           build/native-release/words_cli.exe \
             --database whitakers-words/poc/compact-db/output/words-poc-dense.wwdb \
             --dataset-id sha256:0000000000000000000000000000000000000000000000000000000000000000 \
-            --format analysis-v2 amo \
-            | grep -F '"schemaVersion":2'
+            --format analysis-v4 amo \
+            | grep -F '"schemaVersion":4'
+          build/native-release/words_cli.exe \
+            --database whitakers-words/poc/compact-db/output/words-poc-dense.wwdb \
+            --dataset-id sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            --format search-v4 amo \
+            | grep -F '"schemaVersion":4'
           objdump -p build/native-release/words_cli.exe \
             | sed -n '/DLL Name/p' \
             | tee build/native-release/dlls.txt
@@ -305,8 +315,13 @@ jobs:
           build/native-release/words_cli \
             --database whitakers-words/poc/compact-db/output/words-poc-dense.wwdb \
             --dataset-id sha256:0000000000000000000000000000000000000000000000000000000000000000 \
-            --format analysis-v2 amo \
-            | python3 -c "import json,sys; assert json.load(sys.stdin)['schemaVersion'] == 2"
+            --format analysis-v4 amo \
+            | python3 -c "import json,sys; assert json.load(sys.stdin)['schemaVersion'] == 4"
+          build/native-release/words_cli \
+            --database whitakers-words/poc/compact-db/output/words-poc-dense.wwdb \
+            --dataset-id sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            --format search-v4 amo \
+            | python3 -c "import json,sys; assert json.load(sys.stdin)['schemaVersion'] == 4"
           file build/native-release/words_cli | grep -F "${{ matrix.arch }}"
           otool -L build/native-release/words_cli \
             | tee build/native-release/dylibs.txt
@@ -772,10 +787,61 @@ jobs:
           path: release/npm/**
           if-no-files-found: error
 
+  npm-runtime-consumer:
+    name: Packaged npm runtime (${{ matrix.os }}, Node 20)
+    needs: package-npm
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-packages
+          path: release/npm
+      - name: Select exact tarballs for this platform
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import {readFileSync, appendFileSync} from "node:fs";
+          import path from "node:path";
+          const root = path.resolve("release/npm");
+          const plan = JSON.parse(readFileSync(path.join(root, "publish-plan.json")));
+          const names = {
+            WASM_TARBALL: "wordswasm",
+            CLI_TARBALL: "wordswasm-cli",
+            PLATFORM_TARBALL: `@fabiors/wordswasm-cli-${process.platform}-${process.arch}`,
+          };
+          for (const [key, name] of Object.entries(names)) {
+            const item = plan.packages.find((item) => item.name === name);
+            if (!item) throw new Error(`Missing package: ${name}`);
+            appendFileSync(process.env.GITHUB_ENV, `${key}=${path.join(root, item.tarball)}\n`);
+          }
+          appendFileSync(process.env.GITHUB_ENV, `CONSUMER_VERSION=${plan.version}\n`);
+          JS
+      - name: Install isolated consumer and Chromium
+        shell: bash
+        run: |
+          cp -R tests/fixtures/npm-runtime-consumer "$RUNNER_TEMP/npm-consumer"
+          cd "$RUNNER_TEMP/npm-consumer"
+          npm ci
+          npm install --ignore-scripts "$WASM_TARBALL" "$CLI_TARBALL" "$PLATFORM_TARBALL"
+          npx playwright install --with-deps chromium
+      - name: Test Node, browser, Worker and npm CLI
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP/npm-consumer"
+          npm test
+
   publish-release:
     name: Publish tagged GitHub release
     if: github.event_name == 'release'
-    needs: [wasm, package-native, sanitizer-tests]
+    needs: [wasm, package-native, sanitizer-tests, npm-runtime-consumer]
     runs-on: ubuntu-latest
     permissions:
       contents: write

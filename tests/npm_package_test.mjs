@@ -37,12 +37,14 @@ const engine = await createWordsAnalysisEngine({
   databaseBytes: bytes,
   datasetId: JSON.parse(manifest).datasetId,
 });
-assert.ok(Number.isInteger(engine.analyze("amo").schemaVersion));
+assert.equal(engine.analyze("amo").schemaVersion, 6);
+assert.equal(engine.search("amo").schemaVersion, 6);
 engine.dispose();
 
 const bundled = await createBundledWordsAnalysisEngine();
 assert.equal(bundled.databaseKind, "full");
-assert.ok(Number.isInteger(bundled.analyze("amo").schemaVersion));
+assert.equal(bundled.analyze("amo").schemaVersion, 6);
+assert.equal(bundled.search("amo").schemaVersion, 6);
 bundled.dispose();
 
 const packageMetadata = JSON.parse(
@@ -165,20 +167,29 @@ if (process.platform === "linux" && process.arch === "x64") {
   assert.match(result.stdout, /quantity evidence/);
 
   const explicitJson = spawnSync(process.execPath, [
-    wrapperScript, "--format", "analysis-v3", "amo",
+    wrapperScript, "--format", "analysis-v4", "amo",
   ], {encoding: "utf8"});
   assert.equal(explicitJson.status, 0, explicitJson.stderr);
-  assert.equal(JSON.parse(explicitJson.stdout).schemaVersion, 3);
+  assert.equal(JSON.parse(explicitJson.stdout).schemaVersion, 4);
 
-  const stream = spawnSync(process.execPath, [wrapperScript, "--format", "analysis-v3"], {
+  const explicitSearch = spawnSync(process.execPath, [
+    wrapperScript, "--format", "search-v4", "amo",
+  ], {encoding: "utf8"});
+  assert.equal(explicitSearch.status, 0, explicitSearch.stderr);
+  assert.equal(JSON.parse(explicitSearch.stdout).schemaVersion, 4);
+  assert.equal(JSON.parse(explicitSearch.stdout).schema, "whitakers-words.search");
+
+  const stream = spawnSync(process.execPath, [wrapperScript, "--format", "analysis-v4"], {
     encoding: "utf8",
     input: "amo\npuella\n",
   });
   assert.equal(stream.status, 0, stream.stderr);
-  assert.equal(stream.stdout.split("\n").filter(Boolean).length, 2);
+  const documents = stream.stdout.split("\n").filter(Boolean).map(JSON.parse);
+  assert.equal(documents.length, 2);
+  assert.ok(documents.every((document) => document.schemaVersion === 4));
 
   const explicitStream = spawnSync(process.execPath, [
-    wrapperScript, "--format", "analysis-v3", "--input", "-"], {
+    wrapperScript, "--format", "analysis-v4", "--input", "-"], {
     encoding: "utf8",
     input: "amo\n",
   });

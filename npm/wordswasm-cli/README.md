@@ -17,15 +17,16 @@ bundled full WWDB database; it does not install the WebAssembly library.
 
 ## Install
 
-The current release line is a prerelease:
+Install the stable release:
 
 ```sh
-npm install --global wordswasm-cli@next
+npm install -g wordswasm-cli
 wordswasm mālum
 ```
 
-When a stable release is available, omit `@next`. The wrapper chooses exactly
-one of the following optional platform packages for supported systems:
+For release candidates, use `npm install -g wordswasm-cli@next`. Pin an exact
+version for reproducible deployments. The wrapper chooses exactly one of the
+following optional platform packages for supported systems:
 
 - Linux x64, ARM64, and ARM hard-float;
 - macOS x64 and Apple silicon;

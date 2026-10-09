@@ -1,4 +1,5 @@
 const defaultModuleUrl = new URL("./words_wasm.mjs", import.meta.url);
+const defaultWasmUrl = new URL("./words_wasm.wasm", import.meta.url);
 
 function requireDatasetId(datasetId) {
   if (typeof datasetId !== "string" ||
@@ -465,7 +466,14 @@ export async function createWordsAnalysisEngine({
     : downloadDatabase(databaseUrl, fetchImpl);
   const resolvedModuleUrl = new URL(moduleUrl, import.meta.url);
   const locateFile = moduleOptions.locateFile ??
-    ((path) => new URL(path, resolvedModuleUrl).href);
+    ((path) => {
+      // Bundlers emit the module and WASM with independent content hashes.
+      // An explicit URL lets them rewrite the default binary's location too.
+      if (path === "words_wasm.wasm" && resolvedModuleUrl.href === defaultModuleUrl.href) {
+        return defaultWasmUrl.href;
+      }
+      return new URL(path, resolvedModuleUrl).href;
+    });
   const modulePromise = resolveModuleFactory(moduleFactory, resolvedModuleUrl)
     .then((factory) => factory({...moduleOptions, locateFile}));
   const [module, bytes] = await Promise.all([modulePromise, bytesPromise]);

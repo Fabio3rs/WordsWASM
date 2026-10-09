@@ -638,3 +638,31 @@ test("rejects invalid filter parameters before invoking WASM", async () => {
     }
   } finally { engine.dispose(); }
 });
+
+test("resolves the default WASM asset independently while preserving host overrides", async () => {
+  for (const options of [
+    {},
+    {moduleUrl: new URL("https://example.test/custom/engine.mjs")},
+    {moduleOptions: {locateFile: (name) => `https://cdn.example.test/${name}`}},
+  ]) {
+    let locateFile;
+    const engine = await createWordsAnalysisEngine({
+      databaseBytes: new Uint8Array([1, 2, 3]),
+      ...options,
+      moduleFactory: async (received) => {
+        locateFile = received.locateFile;
+        return fakeFactory([])();
+      },
+    });
+    try {
+      const expected = options.moduleOptions
+        ? "https://cdn.example.test/words_wasm.wasm"
+        : options.moduleUrl
+          ? "https://example.test/custom/words_wasm.wasm"
+          : new URL("../wasmsrc/words_wasm.wasm", import.meta.url).href;
+      assert.equal(locateFile("words_wasm.wasm"), expected);
+    } finally {
+      engine.dispose();
+    }
+  }
+});

@@ -17,15 +17,14 @@ search-only WWDB databases, and manifests. It does not install a native CLI.
 
 ## Install
 
-The current release line is a prerelease. Install its moving prerelease tag:
+Install the stable release:
 
 ```sh
-npm install wordswasm@next
+npm install wordswasm
 ```
 
-When stable 1.0 is available, `npm install wordswasm` selects `latest`.
-To make a deployment reproducible, replace `@next` with an exact version.
-`next` remains the most recent prerelease after a stable publication.
+For release candidates, use `npm install wordswasm@next`. Pin an exact version
+for reproducible deployments. The `next` tag is separate from stable `latest`.
 
 ## Quick start: browser, Worker, bundler, or Node.js
 

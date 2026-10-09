@@ -1,0 +1,54 @@
+name: Published npm consumer validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact published version to validate
+        required: true
+        default: 1.0.0-rc6
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  consumer:
+    name: Node 20, browser, Worker and CLI (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    env:
+      CONSUMER_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Prepare isolated consumer outside the checkout
+        shell: bash
+        run: |
+          cp -R tests/fixtures/npm-runtime-consumer "$RUNNER_TEMP/npm-consumer"
+      - name: Install exact published packages and browser
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP/npm-consumer"
+          npm ci
+          npm install --save-exact "wordswasm@$CONSUMER_VERSION" "wordswasm-cli@$CONSUMER_VERSION"
+          npx playwright install --with-deps chromium
+          npm ls --all --json > installed-packages.json
+      - name: Execute consumer checks
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP/npm-consumer"
+          npm test
+      - name: Preserve resolved package versions and integrity
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-consumer-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/npm-consumer/package-lock.json
+            ${{ runner.temp }}/npm-consumer/installed-packages.json
