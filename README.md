@@ -25,7 +25,7 @@ The project currently provides:
 
 GitHub Releases provide ready-to-run command-line binaries, the WWDB
 databases, and a deployable JavaScript/WebAssembly bundle. In the filenames
-below, `<tag>` is the release tag, for example `v1.0.0-rc1`.
+below, `<tag>` is the release tag, for example `v1.0.0`.
 
 | Download | Release asset | Use it for |
 | --- | --- | --- |
@@ -52,11 +52,11 @@ The release also includes `words-cli-<tag>.sha256` and
 downloaded files from their directory with:
 
 ```sh
-sha256sum --check words-cli-v1.0.0-rc1.sha256 --ignore-missing
-sha256sum --check words-assets-v1.0.0-rc1.sha256 --ignore-missing
+sha256sum --check words-cli-v1.0.0.sha256 --ignore-missing
+sha256sum --check words-assets-v1.0.0.sha256 --ignore-missing
 ```
 
-Replace `v1.0.0-rc1` in these and the following examples with the tag you
+Replace `v1.0.0` in these and the following examples with the tag you
 downloaded.
 
 ## npm packages
@@ -65,7 +65,7 @@ The WebAssembly library is published as `wordswasm` and includes the engine,
 both database projections, manifests, and TypeScript declarations:
 
 ```sh
-npm install wordswasm@next
+npm install wordswasm
 ```
 
 ```js
@@ -76,16 +76,16 @@ console.log(engine.analyze("mālum"));
 engine.dispose();
 ```
 
-The convenience API reads package assets in Node.js and fetches them in
-browsers, Workers, and bundler output. For a database hosted elsewhere or
-already in memory, use the lower-level `createWordsAnalysisEngine()` with one
-of `databaseUrl` or `databaseBytes`.
+Node.js 20 or newer is supported. The convenience API reads package assets
+in Node.js and fetches them in browsers, Workers, and bundler output. For a
+database hosted elsewhere or already in memory, use the lower-level
+`createWordsAnalysisEngine()` with one of `databaseUrl` or `databaseBytes`.
 
 The optional native CLI installs independently and selects one matching
 platform package automatically:
 
 ```sh
-npm install --global wordswasm-cli@next
+npm install -g wordswasm-cli
 wordswasm mālum
 ```
 
@@ -97,9 +97,9 @@ format and may be changed or removed without a major-version bump.
 Maintainers can follow the [npm publishing guide](docs/npm-publishing.md) for
 the local bootstrap and GitHub OIDC release process.
 
-`@next` selects the current prerelease line. After a stable release is
-published, omit it to install `latest`; applications that need reproducible
-builds should name an exact version. The package READMEs describe
+The commands above select the stable `latest` release. For release candidates,
+use `wordswasm@next` or `wordswasm-cli@next`. Applications that need
+reproducible builds should pin an exact version. The package READMEs describe
 [the WebAssembly API](npm/wordswasm/README.md) and
 [the native CLI](npm/wordswasm-cli/README.md) in more detail.
 The [versioning and compatibility policy](docs/versioning.md) defines the
@@ -127,10 +127,10 @@ Extract the archive for your platform, enter the directory it creates, and
 point the executable at the separately downloaded full database:
 
 ```sh
-tar -xzf words-cli-v1.0.0-rc1-linux-x86_64.tar.gz
-cd words-cli-v1.0.0-rc1-linux-x86_64
+tar -xzf words-cli-v1.0.0-linux-x86_64.tar.gz
+cd words-cli-v1.0.0-linux-x86_64
 ./words_cli \
-  --database ../words-full-v1.0.0-rc1.wwdb \
+  --database ../words-full-v1.0.0.wwdb \
   --format analysis-v4 \
   amamus
 ```
@@ -142,10 +142,10 @@ and directory name. For macOS, substitute either the `macos-arm64` or
 ### Windows PowerShell
 
 ```powershell
-Expand-Archive words-cli-v1.0.0-rc1-windows-x86_64.zip
-Set-Location words-cli-v1.0.0-rc1-windows-x86_64\words-cli-v1.0.0-rc1-windows-x86_64
+Expand-Archive words-cli-v1.0.0-windows-x86_64.zip
+Set-Location words-cli-v1.0.0-windows-x86_64\words-cli-v1.0.0-windows-x86_64
 .\words_cli.exe `
-  --database ..\..\words-full-v1.0.0-rc1.wwdb `
+  --database ..\..\words-full-v1.0.0.wwdb `
   --format analysis-v4 `
   amamus
 ```
@@ -168,7 +168,7 @@ returned as one unit, while independent words produce separate JSON lines:
 
 ```sh
 ./words_cli \
-  --database ../words-full-v1.0.0-rc1.wwdb \
+  --database ../words-full-v1.0.0.wwdb \
   --format analysis-v4 \
   "amo puellam"
 ```
@@ -179,9 +179,9 @@ input line. With no positional text, stdin is the default stream source; use
 
 ```sh
 printf 'amo\npuella\nmālum\n' | ./words_cli \
-  --database ../words-full-v1.0.0-rc1.wwdb \
+  --database ../words-full-v1.0.0.wwdb \
   --format analysis-v4
-./words_cli --database ../words-full-v1.0.0-rc1.wwdb \
+./words_cli --database ../words-full-v1.0.0.wwdb \
   --format analysis-v4 --input corpus.txt
 ```
 
@@ -452,7 +452,7 @@ cmake --build build/native \
   -j"$(nproc)"
 
 # 3. Generate both database profiles expected by the tests.
-# The packer emits the WWDB 1.11 format planned for stable 1.0.
+# The packer emits WWDB 1.11, the stable 1.0 database format.
 mkdir -p whitakers-words/poc/compact-db/output
 build/native/wwdb_poc_pack \
   whitakers-words \
@@ -485,6 +485,13 @@ Lexer, artificial-result, and browser-wrapper unit tests do not load these
 fixtures, but the complete suite does. GTest is required for `words_tests`;
 Python 3 and `jsonschema` are required for the differential and data-pipeline
 tests. Node.js enables the browser-wrapper test.
+
+The release CI also installs the generated npm tarballs in isolated consumers
+on Linux and Windows. It runs the WASM API and native CLI on Node.js 20, then
+executes a Vite production build in Chromium and a module Web Worker, checking
+asset loading, initialization errors, and `dispose()`. The
+[manual npm consumer workflow](.github/workflows/npm-consumer.yml) runs the
+same checks against an exact version already published to the npm registry.
 
 GNAT/GPRbuild are required for the Ada build. Emscripten is required for the
 browser build; exporting and smoke-testing browser assets also requires the
