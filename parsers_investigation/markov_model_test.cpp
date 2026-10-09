@@ -348,5 +348,56 @@ int main() {
     }
     require(rejected, "malformed dependency candidate rejection");
 
+    // A nonzero index must survive Result copies/moves and resolve the new
+    // owner's morphology while retaining each tree's own dependency arcs.
+    parsers::Result shared_result;
+    shared_result.morphology_nbest.push_back(permuted_relations);
+    shared_result.morphology_nbest.push_back(intended_attachment);
+    parsers::RankedDependencyTreeAnalysis intended_tree;
+    intended_tree.assignment_id = intended_attachment.assignment_id;
+    intended_tree.morphology_index = 1U;
+    intended_tree.relations = intended_attachment.relations;
+    auto alternative_tree = intended_tree;
+    alternative_tree.relations = direct_predicative.relations;
+    shared_result.tree_nbest = {intended_tree, alternative_tree};
+    const auto first_view = parsers::dependency_tree_view(
+        shared_result, shared_result.tree_nbest.front());
+    const auto second_view = parsers::dependency_tree_view(
+        shared_result, shared_result.tree_nbest.back());
+    require(first_view.analysis.data() == second_view.analysis.data() &&
+                first_view.analysis.data() ==
+                    shared_result.morphology_nbest[1U].analysis.data(),
+            "trees must borrow the same morphology buffer");
+    require(parsers::dependency_markov::extract_factors(
+                first_view, dependency_state, 2U, true) == intended_with_profile &&
+                parsers::dependency_markov::extract_factors(
+                    second_view, dependency_state, 2U, true) == direct_with_profile,
+            "shared morphology must preserve each tree's own arc factors");
+    auto copied_result = shared_result;
+    require(parsers::dependency_tree_view(copied_result,
+                copied_result.tree_nbest.front()).analysis.data() !=
+                first_view.analysis.data(),
+            "copied Result must own independent morphology storage");
+    shared_result = parsers::Result{};
+    auto moved_result = std::move(copied_result);
+    const auto moved_view = parsers::dependency_tree_view(
+        moved_result, moved_result.tree_nbest.back());
+    const auto moved_state = [&](const std::size_t token) {
+        const auto &choice = moved_view.analysis[token];
+        return choice.part + ':' + choice.morphology;
+    };
+    require(parsers::dependency_markov::extract_factors(
+                moved_view, moved_state, 2U, true) == direct_with_profile,
+            "copied and moved Result must survive original owner's destruction");
+    auto invalid_tree = moved_result.tree_nbest.front();
+    invalid_tree.morphology_index = 2U;
+    rejected = false;
+    try {
+        static_cast<void>(parsers::dependency_tree_view(moved_result, invalid_tree));
+    } catch (const std::out_of_range &) {
+        rejected = true;
+    }
+    require(rejected, "invalid morphology index must be rejected");
+
     std::cout << "markov-model-test: passed\n";
 }

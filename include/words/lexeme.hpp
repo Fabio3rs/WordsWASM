@@ -31,11 +31,15 @@ lexeme_paradigm(const LexemeRecord &lexeme) noexcept {
     case std::to_underlying(PartOfSpeech::pack):
     case std::to_underlying(PartOfSpeech::adjective):
     case std::to_underlying(PartOfSpeech::numeral):
-        return DeclensionParadigm{.number = lexeme.declension,
-                                  .variant = lexeme.variant};
+        return DeclensionParadigm{
+            .number = lexeme.declension,
+            .variant = lexeme.variant,
+        };
     case std::to_underlying(PartOfSpeech::verb):
-        return ConjugationParadigm{.number = lexeme.declension,
-                                   .variant = lexeme.variant};
+        return ConjugationParadigm{
+            .number = lexeme.declension,
+            .variant = lexeme.variant,
+        };
     case std::to_underlying(PartOfSpeech::unknown):
     case std::to_underlying(PartOfSpeech::adverb):
     case std::to_underlying(PartOfSpeech::participle):

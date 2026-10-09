@@ -72,9 +72,11 @@ render_quantities(const SurfaceForm &surface,
     std::string output;
     output.reserve(surface.normalized_nfc.size() + quantities.size());
     for (std::size_t index{}; index < quantities.size(); ++index) {
-        const auto encoded = poc::latin_unicode::encode_latin_glyph_nfc(
-            LatinGlyph{.base = surface.orthography_ascii[index],
-                       .quantity = latin_quantity(quantities[index])});
+        const auto encoded =
+            poc::latin_unicode::encode_latin_glyph_nfc(LatinGlyph{
+                .base = surface.orthography_ascii[index],
+                .quantity = latin_quantity(quantities[index]),
+            });
         if (!encoded) {
             output = surface.normalized_nfc;
             return output; // Fix -Werror,-Wnrvo
@@ -236,18 +238,21 @@ morphology_order_key(const Morphology &morphology) {
             if constexpr (std::is_same_v<Value, NounMorphology> ||
                           std::is_same_v<Value, PronounMorphology>) {
                 key = MorphologyOrderKey{
-                    number(value.declension), number(value.variant),
+                    number(value.declension),
+                    number(value.variant),
                     token(case_name(value.grammatical_case)),
                     token(number_name(value.number)),
-                    token(gender_name(value.gender))};
+                    token(gender_name(value.gender)),
+                };
             } else if constexpr (std::is_same_v<Value, AdjectiveMorphology>) {
-                key =
-                    MorphologyOrderKey{number(value.declension),
-                                       number(value.variant),
-                                       token(case_name(value.grammatical_case)),
-                                       token(number_name(value.number)),
-                                       token(gender_name(value.gender)),
-                                       token(degree_name(value.degree))};
+                key = MorphologyOrderKey{
+                    number(value.declension),
+                    number(value.variant),
+                    token(case_name(value.grammatical_case)),
+                    token(number_name(value.number)),
+                    token(gender_name(value.gender)),
+                    token(degree_name(value.degree)),
+                };
             } else if constexpr (std::is_same_v<Value, NumeralMorphology>) {
                 key = MorphologyOrderKey{
                     number(value.declension),
@@ -255,33 +260,38 @@ morphology_order_key(const Morphology &morphology) {
                     token(case_name(value.grammatical_case)),
                     token(number_name(value.number)),
                     token(gender_name(value.gender)),
-                    token(numeral_type_name(value.numeral_type))};
+                    token(numeral_type_name(value.numeral_type)),
+                };
             } else if constexpr (std::is_same_v<Value, AdverbMorphology>) {
                 key = MorphologyOrderKey{token(degree_name(value.degree))};
             } else if constexpr (std::is_same_v<Value, VerbMorphology>) {
-                key =
-                    MorphologyOrderKey{number(value.conjugation),
-                                       number(value.variant),
-                                       token(tense_name(value.tense)),
-                                       token(voice_name(value.voice)),
-                                       token(mood_name(value.mood)),
-                                       number(std::to_underlying(value.person)),
-                                       token(number_name(value.number))};
-            } else if constexpr (std::is_same_v<Value, ParticipleMorphology>) {
-                key =
-                    MorphologyOrderKey{number(value.conjugation),
-                                       number(value.variant),
-                                       token(case_name(value.grammatical_case)),
-                                       token(number_name(value.number)),
-                                       token(gender_name(value.gender)),
-                                       token(tense_name(value.tense)),
-                                       token(voice_name(value.voice))};
-            } else if constexpr (std::is_same_v<Value, SupineMorphology>) {
                 key = MorphologyOrderKey{
-                    number(value.conjugation), number(value.variant),
+                    number(value.conjugation),
+                    number(value.variant),
+                    token(tense_name(value.tense)),
+                    token(voice_name(value.voice)),
+                    token(mood_name(value.mood)),
+                    number(std::to_underlying(value.person)),
+                    token(number_name(value.number)),
+                };
+            } else if constexpr (std::is_same_v<Value, ParticipleMorphology>) {
+                key = MorphologyOrderKey{
+                    number(value.conjugation),
+                    number(value.variant),
                     token(case_name(value.grammatical_case)),
                     token(number_name(value.number)),
-                    token(gender_name(value.gender))};
+                    token(gender_name(value.gender)),
+                    token(tense_name(value.tense)),
+                    token(voice_name(value.voice)),
+                };
+            } else if constexpr (std::is_same_v<Value, SupineMorphology>) {
+                key = MorphologyOrderKey{
+                    number(value.conjugation),
+                    number(value.variant),
+                    token(case_name(value.grammatical_case)),
+                    token(number_name(value.number)),
+                    token(gender_name(value.gender)),
+                };
             } else if constexpr (std::is_same_v<Value, PrepositionMorphology>) {
                 key = MorphologyOrderKey{token(case_name(value.governs))};
             } else if constexpr (!std::is_same_v<Value, InvariableMorphology>) {
@@ -302,17 +312,16 @@ std::string display_without_input_quantity(const std::string_view recognized) {
 ResolvedForm unquantified_form(std::string stem, const std::uint8_t stem_key,
                                std::string ending, std::string recognized,
                                const QuantityDisplayMode display_mode) {
-    auto display = display_mode == QuantityDisplayMode::legacy_database_and_input
-                       ? recognized
-                       : without_input_quantity(recognized);
-    return ResolvedForm{
-        .stem = std::move(stem),
-        .stem_key = stem_key,
-        .ending = std::move(ending),
-        .recognized = std::move(recognized),
-        .display = std::move(display),
-        .quantity = {},
-    };
+    auto display =
+        display_mode == QuantityDisplayMode::legacy_database_and_input
+            ? recognized
+            : without_input_quantity(recognized);
+    return ResolvedForm{.stem = std::move(stem),
+                        .stem_key = stem_key,
+                        .ending = std::move(ending),
+                        .recognized = std::move(recognized),
+                        .display = std::move(display),
+                        .quantity = {}};
 }
 
 ResolvedForm resolved_form(const Database &database, const SurfaceForm &surface,
@@ -377,8 +386,10 @@ ResolvedForm resolved_form(const Database &database, const SurfaceForm &surface,
         break;
     }
     if (lexical_stem_size != 0U) {
-        if (const auto mask = consensus_stem_quantity(database, analysis,
-                                                      std::string_view{stem->lookup_ascii}.substr(0U, lexical_stem_size))) {
+        if (const auto mask = consensus_stem_quantity(
+                database, analysis,
+                std::string_view{stem->lookup_ascii}.substr(
+                    0U, lexical_stem_size))) {
             apply_mask(*mask, lexical_stem_size, 0U, QuantityOrigin::stem,
                        *recognized, database_quantities,
                        form.quantity.positions);

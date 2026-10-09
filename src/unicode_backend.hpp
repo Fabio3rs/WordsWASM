@@ -5,15 +5,15 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <expected>
+#include <expected> // NOLINT
 #include <limits>
 #include <span>
-#include <string_view>
+#include <string_view> // NOLINT
 #include <type_traits>
 
-#if defined(WORDS_UNICODE_BACKEND_COMPACT)
+#ifdef WORDS_UNICODE_BACKEND_COMPACT
 #include "whitakers-words/poc/latin-unicode/unicode_backend.hpp"
-#elif defined(WORDS_UNICODE_BACKEND_FULL)
+#elifdef WORDS_UNICODE_BACKEND_FULL
 #include <utf8proc.h>
 #else
 #error "The Unicode backend must be selected by CMake"
@@ -37,7 +37,7 @@ struct DecodedCodepoint final {
 [[nodiscard]] inline ssize_t iterate(const byte_t *const input,
                                      const ssize_t input_size,
                                      codepoint_t *const codepoint) noexcept {
-#if defined(WORDS_UNICODE_BACKEND_COMPACT)
+#ifdef WORDS_UNICODE_BACKEND_COMPACT
     return poc::unicode_backend::compact::iterate(input, input_size, codepoint);
 #else
     static_assert(std::is_same_v<byte_t, utf8proc_uint8_t>);
@@ -59,9 +59,11 @@ decode_at(const std::span<const byte_t> bytes,
     if (consumed <= 0) {
         return {};
     }
-    return DecodedCodepoint{.value = codepoint,
-                            .byte_count = static_cast<std::size_t>(consumed),
-                            .valid = true};
+    return DecodedCodepoint{
+        .value = codepoint,
+        .byte_count = static_cast<std::size_t>(consumed),
+        .valid = true,
+    };
 }
 
 // Application-oriented replacement for the utf8proc category block used by
@@ -69,7 +71,7 @@ decode_at(const std::span<const byte_t> bytes,
 // category vocabulary.
 [[nodiscard]] BoundaryFlag words_category(codepoint_t codepoint) noexcept;
 
-#if defined(WORDS_UNICODE_BACKEND_COMPACT)
+#ifdef WORDS_UNICODE_BACKEND_COMPACT
 // The ASCII fast path remains in LatinLexer. Only the Unicode path enters the
 // finite Latin normalizer selected for compact builds.
 [[nodiscard]] std::expected<SurfaceForm, LexError>

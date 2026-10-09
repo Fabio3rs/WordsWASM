@@ -144,11 +144,13 @@ analyze_roman_numeral(const std::string_view normalized_word,
     if (!value) {
         return std::nullopt;
     }
-    return RomanNumeralIR{.value = *value,
-                          .well_formed = well_formed,
-                          .stem = {},
-                          .derivation = {},
-                          .assessment = {}};
+    return RomanNumeralIR{
+        .value = *value,
+        .well_formed = well_formed,
+        .stem = {},
+        .derivation = {},
+        .assessment = {},
+    };
 }
 
 } // namespace words

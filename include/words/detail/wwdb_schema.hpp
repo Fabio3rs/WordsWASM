@@ -30,8 +30,9 @@ inline constexpr std::size_t u32_size = wire_bytes(32U);
 inline constexpr std::size_t u48_size = wire_bytes(48U);
 inline constexpr std::size_t u64_size = wire_bytes(64U);
 
-inline constexpr std::array<std::uint8_t, 8U> magic{'W',  'W',  'D',   'B',
-                                                    '\r', '\n', 0x1aU, '\n'};
+inline constexpr std::array<std::uint8_t, 8U> magic{
+    'W', 'W', 'D', 'B', '\r', '\n', 0x1aU, '\n',
+};
 inline constexpr std::uint16_t major_version = 1U;
 inline constexpr std::uint16_t legacy_minor_version = 6U;
 inline constexpr std::uint16_t quantity_minor_version = 7U;
@@ -161,8 +162,8 @@ inline constexpr std::uint32_t stem_quantity_long_vowel_offset =
 // Sparse rule attributes: global addon ID, kind, source paradigm, and two
 // 16-bit quantity masks. An 11-letter prefix/tackon fits without changing the
 // base addon records or allocating masks for rules without evidence.
-inline constexpr std::uint32_t addon_attribute_stride = u16_size + 2U +
-                                                       2U * u16_size;
+inline constexpr std::uint32_t addon_attribute_stride =
+    u16_size + 2U + (2U * u16_size);
 inline constexpr std::uint32_t addon_attribute_kind_offset = u16_size;
 inline constexpr std::uint8_t addon_attribute_kind_mask = 0x07U;
 inline constexpr std::uint8_t addon_attribute_coexists_with_regular = 0x08U;

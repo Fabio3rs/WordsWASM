@@ -14,7 +14,7 @@ struct HumanOptions final {
     bool color{};
 };
 
-[[nodiscard]] std::string human_header();
+[[nodiscard]] std::string_view human_header();
 [[nodiscard]] std::string render_human(const Engine &engine,
                                        const QueryResult &result,
                                        const ResultFilters &filters,

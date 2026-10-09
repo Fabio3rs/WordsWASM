@@ -1,7 +1,7 @@
 #include "words/lexer.hpp"
 #include "unicode_backend.hpp"
 
-#if defined(WORDS_UNICODE_BACKEND_FULL)
+#ifdef WORDS_UNICODE_BACKEND_FULL
 #include <utf8proc.h>
 #endif
 
@@ -19,7 +19,7 @@
 namespace words {
 namespace {
 
-#if defined(WORDS_UNICODE_BACKEND_FULL)
+#ifdef WORDS_UNICODE_BACKEND_FULL
 struct Utf8ProcDeleter final {
     void operator()(utf8proc_uint8_t *value) const noexcept {
         utf8proc_free(value);
@@ -49,7 +49,7 @@ struct CodepointRange final {
     }
 };
 
-#if defined(WORDS_UNICODE_BACKEND_FULL)
+#ifdef WORDS_UNICODE_BACKEND_FULL
 constexpr utf8proc_int32_t macron = 0x0304;
 constexpr utf8proc_int32_t breve = 0x0306;
 // WHY: keeping the allowlist ordered lets validation remain allocation-free
@@ -74,7 +74,7 @@ constexpr std::array unicode_whitespace_ranges{
     CodepointRange{.first = 0x3000, .last = 0x3000},
 };
 
-#if defined(WORDS_UNICODE_BACKEND_FULL)
+#ifdef WORDS_UNICODE_BACKEND_FULL
 [[nodiscard]] constexpr bool
 is_supported_quantity_mark(const utf8proc_int32_t codepoint) noexcept {
     return codepoint == macron || codepoint == breve;
@@ -139,7 +139,7 @@ boundary_flag(const detail::unicode_backend::codepoint_t codepoint) noexcept {
     return detail::unicode_backend::words_category(codepoint);
 }
 
-#if defined(WORDS_UNICODE_BACKEND_FULL)
+#ifdef WORDS_UNICODE_BACKEND_FULL
 [[nodiscard]] constexpr bool
 is_supported_original_codepoint(const utf8proc_int32_t codepoint) noexcept {
     if ((codepoint >= 'A' && codepoint <= 'Z') ||
@@ -226,14 +226,15 @@ ascii_lowercase(const unsigned char value) noexcept {
     return result;
 }
 
-#if defined(WORDS_UNICODE_BACKEND_FULL)
+#ifdef WORDS_UNICODE_BACKEND_FULL
 [[nodiscard]] std::expected<MappedUtf8, LexError>
 map_utf8(const std::string_view input, const utf8proc_option_t options) {
     if (input.size() > static_cast<std::size_t>(
                            std::numeric_limits<utf8proc_ssize_t>::max())) {
-        return std::unexpected(
-            LexError{.code = DiagnosticCode::input_too_large,
-                     .message = "UTF-8 input exceeds utf8proc limits"});
+        return std::unexpected(LexError{
+            .code = DiagnosticCode::input_too_large,
+            .message = "UTF-8 input exceeds utf8proc limits",
+        });
     }
 
     Utf8Buffer output;
@@ -242,20 +243,25 @@ map_utf8(const std::string_view input, const utf8proc_option_t options) {
                      static_cast<utf8proc_ssize_t>(input.size()),
                      std::out_ptr(output), options);
     if (length < 0) {
-        return std::unexpected(LexError{.code = DiagnosticCode::invalid_utf8,
-                                        .message = utf8proc_errmsg(length)});
+        return std::unexpected(LexError{
+            .code = DiagnosticCode::invalid_utf8,
+            .message = utf8proc_errmsg(length),
+        });
     }
-    return MappedUtf8{.buffer = std::move(output),
-                      .size = static_cast<std::size_t>(length)};
+    return MappedUtf8{
+        .buffer = std::move(output),
+        .size = static_cast<std::size_t>(length),
+    };
 }
 
 [[nodiscard]] std::expected<void, LexError>
 validate_original_input(const std::string_view input) {
     if (input.size() > static_cast<std::size_t>(
                            std::numeric_limits<utf8proc_ssize_t>::max())) {
-        return std::unexpected(
-            LexError{.code = DiagnosticCode::input_too_large,
-                     .message = "UTF-8 input exceeds utf8proc limits"});
+        return std::unexpected(LexError{
+            .code = DiagnosticCode::input_too_large,
+            .message = "UTF-8 input exceeds utf8proc limits",
+        });
     }
 
     auto remaining = std::span<const utf8proc_uint8_t>{
@@ -266,16 +272,18 @@ validate_original_input(const std::string_view input) {
             remaining.data(), static_cast<utf8proc_ssize_t>(remaining.size()),
             &codepoint);
         if (consumed <= 0) {
-            return std::unexpected(
-                LexError{.code = DiagnosticCode::invalid_utf8,
-                         .message = utf8proc_errmsg(consumed)});
+            return std::unexpected(LexError{
+                .code = DiagnosticCode::invalid_utf8,
+                .message = utf8proc_errmsg(consumed),
+            });
         }
         if (!is_supported_original_codepoint(codepoint)) {
             return std::unexpected(LexError{
                 .code = DiagnosticCode::unsupported_character,
                 .message =
                     "input must contain ASCII Latin letters with optional "
-                    "macrons or breves"});
+                    "macrons or breves",
+            });
         }
         remaining = remaining.subspan(static_cast<std::size_t>(consumed));
     }
@@ -289,7 +297,8 @@ append_codepoint(std::string &output, const utf8proc_int32_t codepoint) {
     if (encoded_size <= 0) {
         return std::unexpected(LexError{
             .code = DiagnosticCode::unicode_normalization_failed,
-            .message = "utf8proc could not encode a vowel quantity mark"});
+            .message = "utf8proc could not encode a vowel quantity mark",
+        });
     }
     output.append(reinterpret_cast<const char *>(encoded.data()),
                   static_cast<std::size_t>(encoded_size));
@@ -316,7 +325,8 @@ build_logical_offsets(SurfaceForm &surface) {
         if (consumed <= 0) {
             return std::unexpected(LexError{
                 .code = DiagnosticCode::unicode_normalization_failed,
-                .message = "utf8proc produced an invalid NFC sequence"});
+                .message = "utf8proc produced an invalid NFC sequence",
+            });
         }
         if (!is_supported_quantity_mark(codepoint)) {
             if (has_logical_letter) {
@@ -325,9 +335,10 @@ build_logical_offsets(SurfaceForm &surface) {
             }
             has_logical_letter = true;
         } else if (!has_logical_letter) {
-            return std::unexpected(
-                LexError{.code = DiagnosticCode::unicode_normalization_failed,
-                         .message = "NFC quantity mark has no base letter"});
+            return std::unexpected(LexError{
+                .code = DiagnosticCode::unicode_normalization_failed,
+                .message = "NFC quantity mark has no base letter",
+            });
         }
         const auto consumed_size = static_cast<std::size_t>(consumed);
         byte_offset += consumed_size;
@@ -338,10 +349,11 @@ build_logical_offsets(SurfaceForm &surface) {
             static_cast<std::uint32_t>(byte_offset));
     }
     if (surface.nfc_byte_offsets.size() != surface.quantities.size() + 1U) {
-        return std::unexpected(
-            LexError{.code = DiagnosticCode::unicode_normalization_failed,
-                     .message = "NFC logical-letter boundaries do not match "
-                                "the Latin surface"});
+        return std::unexpected(LexError{
+            .code = DiagnosticCode::unicode_normalization_failed,
+            .message = "NFC logical-letter boundaries do not match "
+                       "the Latin surface",
+        });
     }
     return {};
 }
@@ -435,7 +447,7 @@ LatinLexer::lex(const std::string_view utf8) const {
         return lex_ascii_latin_word(utf8);
     }
 
-#if defined(WORDS_UNICODE_BACKEND_COMPACT)
+#ifdef WORDS_UNICODE_BACKEND_COMPACT
     return detail::unicode_backend::normalize_latin(utf8);
 #else
     auto validation = validate_original_input(utf8);
@@ -466,9 +478,10 @@ LatinLexer::lex(const std::string_view utf8) const {
             remaining.data(), static_cast<utf8proc_ssize_t>(remaining.size()),
             &codepoint);
         if (consumed <= 0) {
-            return std::unexpected(
-                LexError{.code = DiagnosticCode::invalid_utf8,
-                         .message = "utf8proc produced an invalid sequence"});
+            return std::unexpected(LexError{
+                .code = DiagnosticCode::invalid_utf8,
+                .message = "utf8proc produced an invalid sequence",
+            });
         }
         remaining = remaining.subspan(static_cast<std::size_t>(consumed));
 
@@ -485,25 +498,29 @@ LatinLexer::lex(const std::string_view utf8) const {
         if (is_supported_quantity_mark(codepoint)) {
             if (glyphs.empty() || !is_vowel(glyphs.back().base) ||
                 glyphs.back().quantity != VowelQuantity::unknown) {
-                return std::unexpected(
-                    LexError{.code = DiagnosticCode::invalid_vowel_quantity,
-                             .message = "macron or breve is misplaced, "
-                                        "duplicated, or conflicting"});
+                return std::unexpected(LexError{
+                    .code = DiagnosticCode::invalid_vowel_quantity,
+                    .message = "macron or breve is misplaced, "
+                               "duplicated, or conflicting",
+                });
             }
             glyphs.back().quantity = codepoint == macron
                                          ? VowelQuantity::long_vowel
                                          : VowelQuantity::short_vowel;
             continue;
         }
-        return std::unexpected(
-            LexError{.code = DiagnosticCode::unsupported_character,
-                     .message = "input must contain one Latin word "
-                                "with optional macrons or breves"});
+        return std::unexpected(LexError{
+            .code = DiagnosticCode::unsupported_character,
+            .message = "input must contain one Latin word "
+                       "with optional macrons or breves",
+        });
     }
 
     if (glyphs.empty()) {
-        return std::unexpected(LexError{.code = DiagnosticCode::empty_input,
-                                        .message = "Latin word is empty"});
+        return std::unexpected(LexError{
+            .code = DiagnosticCode::empty_input,
+            .message = "Latin word is empty",
+        });
     }
 
     SurfaceForm result;
@@ -548,9 +565,10 @@ LatinLexer::lex(const std::string_view utf8) const {
     // 2GB limit seems ok
     if (result.normalized_nfc.size() >
         static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) {
-        return std::unexpected(
-            LexError{.code = DiagnosticCode::input_too_large,
-                     .message = "normalized input exceeds range limits"});
+        return std::unexpected(LexError{
+            .code = DiagnosticCode::input_too_large,
+            .message = "normalized input exceeds range limits",
+        });
     }
     auto offsets = build_logical_offsets(result);
     if (!offsets) {

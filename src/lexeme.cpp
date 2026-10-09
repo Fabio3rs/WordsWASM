@@ -185,7 +185,11 @@ adjective_dictionary_form(const Database &database, const LexemeRecord &lexeme,
                 break;
             case 3:
                 forms = {
-                    add(0, "us"), add(1, "a"), add(1, "um (gen -ius)"), {}};
+                    add(0, "us"),
+                    add(1, "a"),
+                    add(1, "um (gen -ius)"),
+                    {},
+                };
                 break;
             case 5:
                 forms = {add(0, "us"), add(1, "a"), add(1, "ud"), {}};
@@ -240,31 +244,55 @@ adjective_dictionary_form(const Database &database, const LexemeRecord &lexeme,
         }
     } else {
         if (lexeme.declension == 1U && lexeme.variant == 1U) {
-            forms = {add(0, "us"), add(1, "a -um"), add(2, "or -or -us"),
-                     add(3, "mus -a -um")};
+            forms = {
+                add(0, "us"),
+                add(1, "a -um"),
+                add(2, "or -or -us"),
+                add(3, "mus -a -um"),
+            };
         } else if (lexeme.declension == 1U && lexeme.variant == 2U) {
-            forms = {add(0, ""), add(1, "a -um"), add(2, "or -or -us"),
-                     add(3, "mus -a -um")};
+            forms = {
+                add(0, ""),
+                add(1, "a -um"),
+                add(2, "or -or -us"),
+                add(3, "mus -a -um"),
+            };
         } else if (lexeme.declension == 3U) {
             switch (lexeme.variant) {
             case 1:
-                forms = {add(0, ""), add(1, "is (gen.)"), add(2, "or -or -us"),
-                         add(3, "mus -a -um")};
+                forms = {
+                    add(0, ""),
+                    add(1, "is (gen.)"),
+                    add(2, "or -or -us"),
+                    add(3, "mus -a -um"),
+                };
                 break;
             case 2:
-                forms = {add(0, "is"), add(1, "e"), add(2, "or -or -us"),
-                         add(3, "mus -a -um")};
+                forms = {
+                    add(0, "is"),
+                    add(1, "e"),
+                    add(2, "or -or -us"),
+                    add(3, "mus -a -um"),
+                };
                 break;
             case 3:
-                forms = {add(0, ""), add(1, "is -e"), add(2, "or -or -us"),
-                         add(3, "mus -a -um")};
+                forms = {
+                    add(0, ""),
+                    add(1, "is -e"),
+                    add(2, "or -or -us"),
+                    add(3, "mus -a -um"),
+                };
                 break;
             default:
                 break;
             }
         } else if (lexeme.declension == 9U) {
-            forms = {add(0, ""), "undeclined", add(2, "or -or -us"),
-                     add(3, "mus -a -um")};
+            forms = {
+                add(0, ""),
+                "undeclined",
+                add(2, "or -or -us"),
+                add(3, "mus -a -um"),
+            };
         }
     }
 
@@ -308,8 +336,11 @@ pronoun_dictionary_form(const Database &database, const LexemeRecord &lexeme,
     std::array<std::string, 3> forms;
     switch (lexeme.declension) {
     case 3:
-        forms = {add(0, "ic"), add(0, "aec"),
-                 add(0, lexeme.variant == 2U ? "uc" : "oc")};
+        forms = {
+            add(0, "ic"),
+            add(0, "aec"),
+            add(0, lexeme.variant == 2U ? "uc" : "oc"),
+        };
         break;
     case 4:
         if (lexeme.variant == 1U) {
@@ -319,8 +350,11 @@ pronoun_dictionary_form(const Database &database, const LexemeRecord &lexeme,
         }
         break;
     case 6:
-        forms = {add(0, "e"), add(0, "a"),
-                 add(0, lexeme.variant == 2U ? "um" : "ud")};
+        forms = {
+            add(0, "e"),
+            add(0, "a"),
+            add(0, lexeme.variant == 2U ? "um" : "ud"),
+        };
         break;
     case 9:
         if (lexeme.variant == 8U) {
@@ -379,27 +413,47 @@ numeral_dictionary_form(const Database &database, const LexemeRecord &lexeme,
         if (lexeme.declension == 1U) {
             switch (lexeme.variant) {
             case 1:
-                forms = {add(0, "us -a -um"), add(1, "us -a -um"),
-                         add(2, "i -ae -a"), add(3, "")};
+                forms = {
+                    add(0, "us -a -um"),
+                    add(1, "us -a -um"),
+                    add(2, "i -ae -a"),
+                    add(3, ""),
+                };
                 break;
             case 2:
-                forms = {add(0, "o -ae o"), add(1, "us -a -um"),
-                         add(2, "i -ae -a"), add(3, "")};
+                forms = {
+                    add(0, "o -ae o"),
+                    add(1, "us -a -um"),
+                    add(2, "i -ae -a"),
+                    add(3, ""),
+                };
                 break;
             case 3:
-                forms = {add(0, "es -es -ia"), add(1, "us -a -um"),
-                         add(2, "i -ae -a"), add(3, "")};
+                forms = {
+                    add(0, "es -es -ia"),
+                    add(1, "us -a -um"),
+                    add(2, "i -ae -a"),
+                    add(3, ""),
+                };
                 break;
             case 4:
-                forms = {add(0, "i -ae -a"), add(1, "us -a -um"),
-                         add(2, "i -ae -a"), add(3, "ie (n)s")};
+                forms = {
+                    add(0, "i -ae -a"),
+                    add(1, "us -a -um"),
+                    add(2, "i -ae -a"),
+                    add(3, "ie (n)s"),
+                };
                 break;
             default:
                 break;
             }
         } else if (lexeme.declension == 2U) {
-            forms = {add(0, ""), add(1, "us -a -um"), add(2, "i -ae -a"),
-                     add(3, "ie (n)s")};
+            forms = {
+                add(0, ""),
+                add(1, "us -a -um"),
+                add(2, "i -ae -a"),
+                add(3, "ie (n)s"),
+            };
         }
     } else if (lexeme.numeral_type == NumeralType::cardinal) {
         if (lexeme.declension == 1U) {

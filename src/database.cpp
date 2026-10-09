@@ -472,7 +472,7 @@ parse_stem_quantities(const std::span<const std::byte> image,
             fail("invalid-quantity-mask",
                  "stem quantity is inconsistent with its lexical slot");
         }
-        output.push_back({key, quantity});
+        output.push_back({.key = key, .quantity = quantity});
     }
     return output;
 }
@@ -964,7 +964,7 @@ Database::load_poc(std::vector<std::byte> image) try {
         const auto route =
             Database::rewrite_route_index(rewrite.kind, rewrite.stage);
         const auto bucket =
-            route * Database::rewrite_priority_count + rewrite.priority;
+            (route * Database::rewrite_priority_count) + rewrite.priority;
         if (bucket_counts.at(bucket)++ == 0U) {
             ++rewrite_group_count;
         }
@@ -980,7 +980,7 @@ Database::load_poc(std::vector<std::byte> image) try {
         for (std::size_t priority = 0U;
              priority < Database::rewrite_priority_count; ++priority) {
             const auto bucket =
-                route * Database::rewrite_priority_count + priority;
+                (route * Database::rewrite_priority_count) + priority;
             bucket_offsets.at(bucket) =
                 static_cast<std::uint32_t>(rewrite_index);
             const auto count = bucket_counts.at(bucket);
@@ -989,9 +989,9 @@ Database::load_poc(std::vector<std::byte> image) try {
             }
             database->rewrite_groups_.push_back({
                 .kind = static_cast<RewriteKind>(
-                    route / Database::rewrite_stage_count + 1U),
+                    (route / Database::rewrite_stage_count) + 1U),
                 .stage = static_cast<RewriteStage>(
-                    route % Database::rewrite_stage_count + 1U),
+                    (route % Database::rewrite_stage_count) + 1U),
                 .priority = static_cast<std::uint8_t>(priority),
                 .first = rewrite_index,
                 .count = count,
@@ -1009,7 +1009,7 @@ Database::load_poc(std::vector<std::byte> image) try {
         const auto route =
             Database::rewrite_route_index(rewrite.kind, rewrite.stage);
         const auto bucket =
-            route * Database::rewrite_priority_count + rewrite.priority;
+            (route * Database::rewrite_priority_count) + rewrite.priority;
         database->rewrite_schedule_.at(bucket_offsets.at(bucket)++) = &rewrite;
     }
 
@@ -1225,8 +1225,8 @@ Database::load_poc(std::vector<std::byte> image) try {
             }
             previous_key = key;
             database->morphological_notices_.push_back({
-                key,
-                MorphologicalNoticeSet::from_bits(notice_bits),
+                .key = key,
+                .notices = MorphologicalNoticeSet::from_bits(notice_bits),
             });
         }
     }
@@ -1253,9 +1253,11 @@ Database::load_poc(std::vector<std::byte> image) try {
             fail("invalid-reference",
                  "stem reference points outside lexical data");
         }
-        const StemReference reference{.lexeme = LexemeId{lexeme_id},
-                                      .lexical_slot = lexical_slot,
-                                      .stem_key = stem_key};
+        const StemReference reference{
+            .lexeme = LexemeId{lexeme_id},
+            .lexical_slot = lexical_slot,
+            .stem_key = stem_key,
+        };
         const auto stem_id = database->lexemes_[lexeme_id].stems[lexical_slot];
         return std::pair{database->stem_string(stem_id), reference};
     };
@@ -1284,11 +1286,12 @@ Database::load_poc(std::vector<std::byte> image) try {
             }
 
             if (!previous_key || !normalized_equal(*previous_key, key)) {
-                database->stem_groups_.push_back(
-                    {key,
-                     static_cast<std::uint32_t>(
-                         database->stem_references_.size()),
-                     0U});
+                database->stem_groups_.push_back({
+                    .key = key,
+                    .first = static_cast<std::uint32_t>(
+                        database->stem_references_.size()),
+                    .count = 0U,
+                });
             }
             database->stem_references_.push_back(reference);
             ++database->stem_groups_.back().count;
@@ -1305,7 +1308,7 @@ Database::load_poc(std::vector<std::byte> image) try {
         for (std::uint32_t ordinal = 0; ordinal < stem_reference_section.count;
              ++ordinal) {
             const auto [key, reference] = decode_stem_reference(ordinal);
-            indexed_stems.push_back({key, reference});
+            indexed_stems.push_back({.key = key, .reference = reference});
         }
         std::ranges::sort(indexed_stems, [](const IndexedStem &left,
                                             const IndexedStem &right) {
@@ -1330,10 +1333,10 @@ Database::load_poc(std::vector<std::byte> image) try {
             } while (index < indexed_stems.size() &&
                      normalized_equal(key, indexed_stems[index].key));
             database->stem_groups_.push_back({
-                key,
-                static_cast<std::uint32_t>(first),
-                static_cast<std::uint32_t>(database->stem_references_.size() -
-                                           first),
+                .key = key,
+                .first = static_cast<std::uint32_t>(first),
+                .count = static_cast<std::uint32_t>(
+                    database->stem_references_.size() - first),
             });
         }
     }
@@ -1548,7 +1551,7 @@ Database::load_poc(std::vector<std::byte> image) try {
         database->stem_quantities_.reserve(parsed.size());
         for (const auto &quantity : parsed) {
             database->stem_quantities_.push_back(
-                {quantity.key, quantity.quantity});
+                {.key = quantity.key, .quantity = quantity.quantity});
         }
     }
 
@@ -1560,7 +1563,7 @@ Database::load_poc(std::vector<std::byte> image) try {
     indexed_rules.reserve(database->rules_.size());
     for (const auto &rule : database->rules_) {
         indexed_rules.push_back(
-            {database->ending_string(rule.ending), rule.id});
+            {.key = database->ending_string(rule.ending), .id = rule.id});
     }
     std::ranges::sort(
         indexed_rules, [](const IndexedRule &left, const IndexedRule &right) {
@@ -1580,10 +1583,10 @@ Database::load_poc(std::vector<std::byte> image) try {
         } while (index < indexed_rules.size() &&
                  normalized_equal(key, indexed_rules[index].key));
         database->ending_groups_.push_back({
-            key,
-            static_cast<std::uint32_t>(first),
-            static_cast<std::uint32_t>(database->ending_rule_ids_.size() -
-                                       first),
+            .key = key,
+            .first = static_cast<std::uint32_t>(first),
+            .count = static_cast<std::uint32_t>(
+                database->ending_rule_ids_.size() - first),
         });
     }
 
@@ -1680,18 +1683,21 @@ Database::load_poc(std::vector<std::byte> image) try {
                      "unique nominal morphology contains an invalid enum");
             }
             if (part == PartOfSpeech::noun) {
-                decoded = NounMorphology{.declension = lexeme.declension,
-                                         .variant = lexeme.variant,
-                                         .grammatical_case = grammatical_case,
-                                         .number = number,
-                                         .gender = gender};
+                decoded = NounMorphology{
+                    .declension = lexeme.declension,
+                    .variant = lexeme.variant,
+                    .grammatical_case = grammatical_case,
+                    .number = number,
+                    .gender = gender,
+                };
             } else {
-                decoded =
-                    PronounMorphology{.declension = lexeme.declension,
-                                      .variant = lexeme.variant,
-                                      .grammatical_case = grammatical_case,
-                                      .number = number,
-                                      .gender = gender};
+                decoded = PronounMorphology{
+                    .declension = lexeme.declension,
+                    .variant = lexeme.variant,
+                    .grammatical_case = grammatical_case,
+                    .number = number,
+                    .gender = gender,
+                };
             }
         } else if (part == PartOfSpeech::adjective) {
             const auto degree = static_cast<Degree>(
@@ -1711,12 +1717,14 @@ Database::load_poc(std::vector<std::byte> image) try {
                 fail("invalid-enum",
                      "unique adjective morphology contains an invalid enum");
             }
-            decoded = AdjectiveMorphology{.declension = lexeme.declension,
-                                          .variant = lexeme.variant,
-                                          .grammatical_case = grammatical_case,
-                                          .number = number,
-                                          .gender = gender,
-                                          .degree = degree};
+            decoded = AdjectiveMorphology{
+                .declension = lexeme.declension,
+                .variant = lexeme.variant,
+                .grammatical_case = grammatical_case,
+                .number = number,
+                .gender = gender,
+                .degree = degree,
+            };
         } else if (part == PartOfSpeech::verb) {
             const auto tense =
                 static_cast<Tense>(morphology & wwdb::three_bit_mask);
@@ -1746,13 +1754,15 @@ Database::load_poc(std::vector<std::byte> image) try {
                 fail("invalid-enum",
                      "unique verb morphology contains an invalid enum");
             }
-            decoded = VerbMorphology{.conjugation = lexeme.declension,
-                                     .variant = lexeme.variant,
-                                     .tense = tense,
-                                     .voice = voice,
-                                     .mood = mood,
-                                     .person = person,
-                                     .number = verb_number};
+            decoded = VerbMorphology{
+                .conjugation = lexeme.declension,
+                .variant = lexeme.variant,
+                .tense = tense,
+                .voice = voice,
+                .mood = mood,
+                .person = person,
+                .number = verb_number,
+            };
         } else {
             fail("invalid-enum", "unsupported unique part of speech");
         }
@@ -1760,9 +1770,11 @@ Database::load_poc(std::vector<std::byte> image) try {
         const auto lexeme_id =
             LexemeId{static_cast<std::uint32_t>(database->lexemes_.size())};
         database->lexemes_.push_back(lexeme);
-        indexed_uniques.push_back(
-            {database->stem_string(StringId{surface_id}),
-             UniqueReference{.lexeme = lexeme_id, .morphology = decoded}});
+        indexed_uniques.push_back({
+            .key = database->stem_string(StringId{surface_id}),
+            .reference =
+                UniqueReference{.lexeme = lexeme_id, .morphology = decoded},
+        });
     }
 
     std::ranges::sort(indexed_uniques, [](const IndexedUnique &left,
@@ -1784,10 +1796,10 @@ Database::load_poc(std::vector<std::byte> image) try {
         } while (index < indexed_uniques.size() &&
                  normalized_equal(key, indexed_uniques[index].key));
         database->unique_groups_.push_back({
-            key,
-            static_cast<std::uint32_t>(first),
-            static_cast<std::uint32_t>(database->unique_references_.size() -
-                                       first),
+            .key = key,
+            .first = static_cast<std::uint32_t>(first),
+            .count = static_cast<std::uint32_t>(
+                database->unique_references_.size() - first),
         });
     }
 
@@ -1951,7 +1963,7 @@ Database::load_poc(std::vector<std::byte> image) try {
     indexed_suffixes.reserve(database->suffixes_.size());
     for (const auto &suffix : database->suffixes_) {
         indexed_suffixes.push_back(
-            {database->suffix_string(suffix.fix), suffix.id});
+            {.key = database->suffix_string(suffix.fix), .id = suffix.id});
     }
     std::ranges::sort(indexed_suffixes, [](const IndexedSuffix &left,
                                            const IndexedSuffix &right) {
@@ -1971,9 +1983,10 @@ Database::load_poc(std::vector<std::byte> image) try {
         } while (index < indexed_suffixes.size() &&
                  normalized_equal(key, indexed_suffixes[index].key));
         database->suffix_groups_.push_back({
-            key,
-            static_cast<std::uint32_t>(first),
-            static_cast<std::uint32_t>(database->suffix_ids_.size() - first),
+            .key = key,
+            .first = static_cast<std::uint32_t>(first),
+            .count = static_cast<std::uint32_t>(database->suffix_ids_.size() -
+                                                first),
         });
     }
 
@@ -2118,8 +2131,10 @@ Database::load_poc(std::vector<std::byte> image) try {
                 AddonKind::unknown) {
             fail("invalid-reference", "addon ID is not dense and unique");
         }
-        database->addon_references_[id.value()] = {.kind = kind,
-                                                   .ordinal = ordinal};
+        database->addon_references_[id.value()] = {
+            .kind = kind,
+            .ordinal = ordinal,
+        };
     };
     for (std::uint32_t ordinal = 0; ordinal < database->prefixes_.size();
          ++ordinal) {
@@ -2172,10 +2187,10 @@ Database::load_poc(std::vector<std::byte> image) try {
         // PACK prefixes are tickons in the Ada loader and belong to their own
         // scheduler rather than ordinary prefix derivation.
         if (prefix.root == PartOfSpeech::pack) {
-            indexed_tickons.push_back({key, prefix.id});
+            indexed_tickons.push_back({.key = key, .id = prefix.id});
             continue;
         }
-        indexed_prefixes.push_back({key, prefix.id});
+        indexed_prefixes.push_back({.key = key, .id = prefix.id});
     }
     std::ranges::sort(indexed_prefixes, [](const IndexedPrefix &left,
                                            const IndexedPrefix &right) {
@@ -2195,9 +2210,10 @@ Database::load_poc(std::vector<std::byte> image) try {
         } while (index < indexed_prefixes.size() &&
                  normalized_equal(key, indexed_prefixes[index].key));
         database->prefix_groups_.push_back({
-            key,
-            static_cast<std::uint32_t>(first),
-            static_cast<std::uint32_t>(database->prefix_ids_.size() - first),
+            .key = key,
+            .first = static_cast<std::uint32_t>(first),
+            .count = static_cast<std::uint32_t>(database->prefix_ids_.size() -
+                                                first),
         });
     }
 
@@ -2218,9 +2234,10 @@ Database::load_poc(std::vector<std::byte> image) try {
         } while (index < indexed_tickons.size() &&
                  normalized_equal(key, indexed_tickons[index].key));
         database->tickon_groups_.push_back({
-            key,
-            static_cast<std::uint32_t>(first),
-            static_cast<std::uint32_t>(database->tickon_ids_.size() - first),
+            .key = key,
+            .first = static_cast<std::uint32_t>(first),
+            .count = static_cast<std::uint32_t>(database->tickon_ids_.size() -
+                                                first),
         });
     }
 
@@ -2232,7 +2249,8 @@ Database::load_poc(std::vector<std::byte> image) try {
     std::vector<IndexedTackon> indexed_packons;
     for (const auto &tackon : database->tackons_) {
         auto &target = tackon.packon ? indexed_packons : indexed_tackons;
-        target.push_back({database->tackon_string(tackon.fix), tackon.id});
+        target.push_back(
+            {.key = database->tackon_string(tackon.fix), .id = tackon.id});
     }
     const auto build_tackon_index = [](auto &source, auto &ids, auto &groups) {
         std::ranges::sort(
@@ -2251,8 +2269,11 @@ Database::load_poc(std::vector<std::byte> image) try {
                 ++index;
             } while (index < source.size() &&
                      normalized_equal(key, source[index].key));
-            groups.push_back({key, static_cast<std::uint32_t>(first),
-                              static_cast<std::uint32_t>(ids.size() - first)});
+            groups.push_back({
+                key,
+                static_cast<std::uint32_t>(first),
+                static_cast<std::uint32_t>(ids.size() - first),
+            });
         }
     };
     build_tackon_index(indexed_tackons, database->tackon_ids_,
@@ -2291,7 +2312,9 @@ Database::load_poc(std::vector<std::byte> image) try {
         LoadError{.code = error.code(), .message = error.what()});
 } catch (const std::bad_alloc &) {
     return std::unexpected(LoadError{
-        .code = "out-of-memory", .message = "cannot allocate WWDB snapshot"});
+        .code = "out-of-memory",
+        .message = "cannot allocate WWDB snapshot",
+    });
 }
 
 std::span<const StemReference>
@@ -2482,7 +2505,7 @@ std::size_t Database::rewrite_route_index(const RewriteKind kind,
     }
     const auto kind_index = static_cast<std::size_t>(kind_value) - 1U;
     const auto stage_index = static_cast<std::size_t>(stage_value) - 1U;
-    return kind_index * rewrite_stage_count + stage_index;
+    return (kind_index * rewrite_stage_count) + stage_index;
 }
 
 std::span<const RewriteGroup>

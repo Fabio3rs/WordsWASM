@@ -1,16 +1,18 @@
 #include "unicode_backend.hpp"
 
-#if defined(WORDS_UNICODE_BACKEND_COMPACT)
+#ifdef WORDS_UNICODE_BACKEND_COMPACT
 #include "whitakers-words/poc/latin-unicode/latin_utf8.hpp"
 #endif
 
+// NOLINTBEGIN
 #include <string>
 #include <utility>
+// NOLINTEND
 
 namespace words::detail::unicode_backend {
 namespace {
 
-#if defined(WORDS_UNICODE_BACKEND_COMPACT)
+#ifdef WORDS_UNICODE_BACKEND_COMPACT
 using poc::latin_unicode::LatinQuantity;
 using poc::latin_unicode::LatinSurfaceErrorCode;
 
@@ -51,7 +53,7 @@ quantity(const LatinQuantity value) noexcept {
 } // namespace
 
 BoundaryFlag words_category(const codepoint_t codepoint) noexcept {
-#if defined(WORDS_UNICODE_BACKEND_COMPACT)
+#ifdef WORDS_UNICODE_BACKEND_COMPACT
     const auto result =
         poc::unicode_backend::compact::words_category(codepoint);
     static_assert(
@@ -89,7 +91,7 @@ BoundaryFlag words_category(const codepoint_t codepoint) noexcept {
 #endif
 }
 
-#if defined(WORDS_UNICODE_BACKEND_COMPACT)
+#ifdef WORDS_UNICODE_BACKEND_COMPACT
 std::expected<SurfaceForm, LexError>
 normalize_latin(const std::string_view input) {
     auto compact =

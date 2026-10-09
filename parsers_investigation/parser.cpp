@@ -4372,18 +4372,34 @@ void populate_tree_best(Result &result, const Lattice &lattice,
     }
     result.tree_nbest.clear();
     result.tree_nbest.reserve(order.size());
+    if (result.morphology_nbest.size() >
+        std::numeric_limits<MorphologyIndex>::max()) {
+        throw std::length_error{"too many morphology assignments for tree indices"};
+    }
+    std::map<std::string_view, MorphologyIndex, std::less<>> morphology_indices;
+    for (std::size_t index = 0; index < result.morphology_nbest.size(); ++index) {
+        const auto [entry, inserted] = morphology_indices.emplace(
+            result.morphology_nbest[index].assignment_id,
+            static_cast<MorphologyIndex>(index));
+        static_cast<void>(entry);
+        if (!inserted) {
+            throw std::logic_error{"duplicate morphology assignment in tree result"};
+        }
+    }
     for (std::size_t rank = 0; rank < order.size(); ++rank) {
         const auto &tree = trees[order[rank]];
         const auto morphology_score =
             assignment_score(lattice, tree.assignment, &relation_lattice);
+        auto morphology_id = assignment_id(tree.assignment);
+        const auto morphology_index = morphology_indices.at(morphology_id);
         RankedDependencyTreeAnalysis ranked{
             .tree_id = tree.id,
-            .assignment_id = assignment_id(tree.assignment),
+            .assignment_id = std::move(morphology_id),
             .manual_score = morphology_score + tree.arc_score,
             .morphology_score = morphology_score,
             .arc_score = tree.arc_score,
             .projective = tree.projective,
-            .analysis = {},
+            .morphology_index = morphology_index,
             .relations = {},
             .matches_preferred_lemmas =
                 result.preferred_lemmas_declared &&
@@ -4393,12 +4409,6 @@ void populate_tree_best(Result &result, const Lattice &lattice,
                 matches_morphology_gold(lattice, tree.assignment, fixture),
             .matches_dependency_gold = false,
         };
-        ranked.analysis.reserve(tree.assignment.size());
-        for (std::size_t token = 0; token < tree.assignment.size(); ++token) {
-            const auto &candidate =
-                lattice.candidates[token][tree.assignment[token]];
-            ranked.analysis.push_back(analysis_choice(token, candidate));
-        }
         ranked.relations.reserve(tree.arcs.size());
         for (const auto &arc : tree.arcs) {
             ranked.relations.push_back(arc.relation);
@@ -6126,7 +6136,7 @@ std::string to_json(const Result &result, const bool include_morphology_nbest,
                 {"tokens", Json::array()},
                 {"relations", Json::array()},
             };
-            for (const auto &choice : ranked.analysis) {
+            for (const auto &choice : dependency_tree_view(result, ranked).analysis) {
                 analysis["tokens"].push_back(choice_json(choice));
             }
             for (const auto &relation : ranked.relations) {

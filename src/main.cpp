@@ -213,7 +213,9 @@ parse_options(const int argc, char *const argv[]) {
         } else if (argument == "--human-style") {
             options.human_style_specified = true;
             auto value = require_value(argument);
-            if (!value) return std::unexpected(std::move(value.error()));
+            if (!value) {
+                return std::unexpected(std::move(value.error()));
+            }
             options.human_style = *value;
         } else if (argument.starts_with("--color=")) {
             options.color_specified = true;
@@ -221,7 +223,9 @@ parse_options(const int argc, char *const argv[]) {
         } else if (argument == "--color") {
             options.color_specified = true;
             auto value = require_value(argument);
-            if (!value) return std::unexpected(std::move(value.error()));
+            if (!value) {
+                return std::unexpected(std::move(value.error()));
+            }
             options.color = *value;
         } else if (argument.starts_with("--two-words=")) {
             return std::unexpected("two-words mode must be legacy");
@@ -263,16 +267,20 @@ parse_options(const int argc, char *const argv[]) {
         options.format != "human") {
         return std::unexpected("trim filters require a v3 or human format");
     }
-    if (options.human_style != "normal" && options.human_style != "compact")
+    if (options.human_style != "normal" && options.human_style != "compact") {
         return std::unexpected("human style must be normal or compact");
+    }
     if (options.color != "auto" && options.color != "always" &&
-        options.color != "never")
+        options.color != "never") {
         return std::unexpected("color must be auto, always, or never");
+    }
     if (options.format == "human") {
-        if (options.pretty)
+        if (options.pretty) {
             return std::unexpected("--pretty requires a JSON format");
-        if (options.human_style == "compact" && options.color == "always")
+        }
+        if (options.human_style == "compact" && options.color == "always") {
             return std::unexpected("compact human output cannot be colored");
+        }
     } else if (options.detailed || options.human_style_specified ||
                options.color_specified) {
         return std::unexpected("--detailed, --human-style, and --color require human format");
@@ -295,7 +303,7 @@ read_file(const std::filesystem::path &path) {
     input.seekg(0);
     if (!bytes.empty()) {
         if (bytes.size() > static_cast<std::size_t>(
-                               (std::numeric_limits<std::streamsize>::max)())) {
+                               std::numeric_limits<std::streamsize>::max())) {
             return std::unexpected("database exceeds stream limits");
         }
         input.read(reinterpret_cast<char *>(bytes.data()),
@@ -411,7 +419,9 @@ void write_result(const words::Engine &engine, const words::QueryResult &result,
                   const words::client::HumanOptions human,
                   std::size_t &result_number) {
     if (format == "human") {
-        if (result_number > 0U && !human.compact) std::print(stdout, "\n");
+        if (result_number > 0U && !human.compact) {
+            std::print(stdout, "\n");
+        }
         std::print(stdout, "{}", words::client::render_human(
             engine, result, filters, human, ++result_number));
         return;
@@ -513,9 +523,13 @@ int main(const int argc, char *argv[]) try {
              ? (!stdout_is_tty() || terminal_color_ready())
              : (stdout_is_tty() && terminal_color_ready()));
     const words::client::HumanOptions human{
-        .compact = compact, .detailed = options->detailed, .color = color};
-    if (options->format == "human" && compact)
+        .compact = compact,
+        .detailed = options->detailed,
+        .color = color,
+    };
+    if (options->format == "human" && compact) {
         std::print(stdout, "{}", words::client::human_header());
+    }
     std::size_t result_number{};
     if (options->stream_input || options->word.empty()) {
         // WHY: corpus acceptance should exercise one long-lived immutable

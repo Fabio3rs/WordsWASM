@@ -260,10 +260,12 @@ factor_kind_marker(const parsers::dependency_markov::FactorKind kind) noexcept {
     return is_verified(parsed) ? 1.0 : options.synthetic_weight;
 }
 
-template <typename Analysis>
 [[nodiscard]] std::vector<parsers::dependency_markov::Factor>
-factors(const Analysis &analysis, const Projection projection,
+factors(const parsers::Result &result,
+        const parsers::RankedDependencyTreeAnalysis &candidate,
+        const Projection projection,
         const std::size_t order, const bool include_predicate_profiles) {
+    const auto analysis = parsers::dependency_tree_view(result, candidate);
     return parsers::dependency_markov::extract_factors(
         analysis,
         [&](const std::size_t token) {
@@ -413,7 +415,8 @@ diagnostics_json(const parsers::dependency_markov::Diagnostics &diagnostics) {
                 if (!candidate.matches_dependency_gold) {
                     continue;
                 }
-                auto candidate_factors = factors(candidate, projection, order,
+                auto candidate_factors = factors(training.parser_output,
+                                                 candidate, projection, order,
                                                  include_predicate_profiles);
                 alternatives.emplace(factor_signature(candidate_factors),
                                      std::move(candidate_factors));
@@ -438,7 +441,8 @@ diagnostics_json(const parsers::dependency_markov::Diagnostics &diagnostics) {
         std::vector<ScoredCandidate> candidates;
         candidates.reserve(target.parser_output.tree_nbest.size());
         for (const auto &candidate : target.parser_output.tree_nbest) {
-            const auto score = model.score(factors(candidate, projection, order,
+            const auto score = model.score(factors(target.parser_output,
+                                                   candidate, projection, order,
                                                    include_predicate_profiles));
             all_diagnostics.merge(score.diagnostics);
             candidates.push_back(

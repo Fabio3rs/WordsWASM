@@ -83,7 +83,8 @@ suggested_enclitic(const Database &database, const WordSegmentIR &segment) {
     return SuggestedEnclitic{
         .base = segment.surface.normalized_nfc.substr(
             0U, segment.surface.normalized_nfc.size() - shared_suffix.size()),
-        .suffix = std::string{shared_suffix}};
+        .suffix = std::string{shared_suffix},
+    };
 }
 
 void add(std::string &target, const std::string_view value) {
@@ -111,11 +112,11 @@ void add_ordinal(std::string &target, const unsigned value,
     if (value == 0U) {
         return;
     }
-    const auto suffix = value % 100U >= 11U && value % 100U <= 13U ? "th"
-                        : value % 10U == 1U                        ? "st"
-                        : value % 10U == 2U                        ? "nd"
-                        : value % 10U == 3U                        ? "rd"
-                                                                   : "th";
+    const auto *const suffix = value % 100U >= 11U && value % 100U <= 13U ? "th"
+                               : value % 10U == 1U                        ? "st"
+                               : value % 10U == 2U                        ? "nd"
+                               : value % 10U == 3U                        ? "rd"
+                                                   : "th";
     add(target, std::to_string(value) + suffix + " " + std::string{label});
 }
 
@@ -278,7 +279,7 @@ void add_ordinal(std::string &target, const unsigned value,
     return result;
 }
 
-[[nodiscard]] std::string trim_note(const WhitakerTrimReason reason) {
+[[nodiscard]] std::string_view trim_note(const WhitakerTrimReason reason) {
     switch (std::to_underlying(reason)) {
     case std::to_underlying(WhitakerTrimReason::unsupported_short_imperative):
         return "short imperative outside Whitaker's listed forms";
@@ -301,7 +302,7 @@ void add_ordinal(std::string &target, const unsigned value,
     }
 }
 
-[[nodiscard]] std::string notice_note(const MorphologicalNotice notice) {
+[[nodiscard]] std::string_view notice_note(const MorphologicalNotice notice) {
     switch (std::to_underlying(notice)) {
     case std::to_underlying(
         MorphologicalNotice::related_passive_usage_attested):
@@ -317,7 +318,7 @@ void add_ordinal(std::string &target, const unsigned value,
     }
 }
 
-[[nodiscard]] std::string diagnostic_text(const DiagnosticCode code) {
+[[nodiscard]] std::string_view diagnostic_text(const DiagnosticCode code) {
     switch (std::to_underlying(code)) {
     case std::to_underlying(DiagnosticCode::empty_input):
         return "empty input";
@@ -430,7 +431,7 @@ assessment_note(const MorphologicalAssessmentIR &assessment,
             lexeme, analysis.rule ? &database.rule(*analysis.rule) : nullptr);
         if (const auto *participle =
                 std::get_if<ParticipleMorphology>(&analysis.morphology);
-            participle && participle->tense == Tense::future &&
+            (participle != nullptr) && participle->tense == Tense::future &&
             participle->voice == Voice::passive) {
             reading.explanation = "Gerundive: a future participial form "
                                   "expressing necessity or obligation.";
@@ -759,7 +760,7 @@ void field(std::string &output, const std::string_view value) {
 
 } // namespace
 
-std::string human_header() {
+std::string_view human_header() {
     return "result\tunit\treading\tstatus\tinput\tdisplay\t"
            "quantity_coverage\tlemma\tpart\tfeatures\tmeaning\tnote\n";
 }
@@ -785,23 +786,26 @@ std::string render_human(const Engine &engine, const QueryResult &result,
                                              : nullptr;
                 output.append(std::to_string(result_number));
                 field(output, unit.name);
-                field(output, reading ? std::to_string(index + 1U) : "0");
+                field(output,
+                      (reading != nullptr) ? std::to_string(index + 1U) : "0");
                 field(output, unit.status);
                 field(output, unit.input);
-                field(output, reading ? reading->display : "");
-                field(output, reading ? reading->quantity_coverage : "none");
-                field(output, reading ? reading->lemma : "");
-                field(output, reading ? reading->part : "");
-                field(output, reading ? reading->features : "");
-                field(output, reading ? reading->meaning : "");
-                auto note = reading ? reading->note : status_note(unit);
-                if (reading && !reading->explanation.empty()) {
+                field(output, (reading != nullptr) ? reading->display : "");
+                field(output, (reading != nullptr) ? reading->quantity_coverage
+                                                   : "none");
+                field(output, (reading != nullptr) ? reading->lemma : "");
+                field(output, (reading != nullptr) ? reading->part : "");
+                field(output, (reading != nullptr) ? reading->features : "");
+                field(output, (reading != nullptr) ? reading->meaning : "");
+                auto note =
+                    (reading != nullptr) ? reading->note : status_note(unit);
+                if ((reading != nullptr) && !reading->explanation.empty()) {
                     if (!note.empty()) {
                         note.append("; ");
                     }
                     note.append(reading->explanation);
                 }
-                if (reading && !reading->metadata.empty()) {
+                if ((reading != nullptr) && !reading->metadata.empty()) {
                     if (!note.empty()) {
                         note.append("; ");
                     }

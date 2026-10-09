@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <map>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -182,10 +183,11 @@ struct RankedMorphologyAnalysis final {
     bool matches_morphology_gold{};
 };
 
-// A dependency candidate is kept separate from the morphology N-best because
-// one morphology assignment can admit many different trees.  Statistical
-// rerankers consume this representation; they must not reconstruct or splice
-// arcs from different parser candidates.
+using MorphologyIndex = std::uint32_t;
+
+// Morphology is owned by Result::morphology_nbest, finalized before tree_nbest.
+// Indices are local to that Result and remain valid when it is copied/moved.
+// Each tree owns its arcs: they may differ from the morphology's projection.
 struct RankedDependencyTreeAnalysis final {
     std::string tree_id;
     std::string assignment_id;
@@ -193,7 +195,7 @@ struct RankedDependencyTreeAnalysis final {
     double morphology_score{};
     double arc_score{};
     bool projective{};
-    std::vector<AnalysisChoice> analysis;
+    MorphologyIndex morphology_index{};
     std::vector<Relation> relations;
     bool matches_preferred_lemmas{};
     bool matches_morphology_gold{};
@@ -360,6 +362,19 @@ struct Result final {
     std::vector<Relation> best_relations;
     std::vector<std::string> diagnostics;
 };
+
+struct DependencyTreeView final {
+    std::span<const AnalysisChoice> analysis;
+    std::span<const Relation> relations;
+};
+
+// Borrow only while reading; do not retain this view across Result mutations.
+[[nodiscard]] inline DependencyTreeView
+dependency_tree_view(const Result &result,
+                     const RankedDependencyTreeAnalysis &tree) {
+    return {result.morphology_nbest.at(tree.morphology_index).analysis,
+            tree.relations};
+}
 
 [[nodiscard]] std::string_view strategy_name(Strategy strategy) noexcept;
 [[nodiscard]] std::optional<Strategy> parse_strategy(std::string_view value);

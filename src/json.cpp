@@ -205,18 +205,24 @@ independent_token_result(const QueryResult &parent,
         // sole product policy. Whitaker compatibility never removes a hit.
         {"whitakerTrim", "annotate"},
         {"orthography", orthography_mode_name(options.orthography)},
-        {"twoWords", options.two_words == TwoWordsMode::legacy_first_match
-                         ? "legacy"
-                         : "disabled"},
-        {"mechanisms",
-         Json{{"productiveDerivations", mechanisms.productive_derivations},
-              {"prefixes", mechanisms.prefixes},
-              {"suffixes", mechanisms.suffixes},
-              {"tickons", mechanisms.tickons},
-              {"tackons", mechanisms.tackons},
-              {"packons", mechanisms.packons},
-              {"syncope", mechanisms.syncope},
-              {"verbalCompounds", mechanisms.verbal_compounds}}},
+        {
+            "twoWords",
+            options.two_words == TwoWordsMode::legacy_first_match ? "legacy"
+                                                                  : "disabled",
+        },
+        {
+            "mechanisms",
+            Json{
+                {"productiveDerivations", mechanisms.productive_derivations},
+                {"prefixes", mechanisms.prefixes},
+                {"suffixes", mechanisms.suffixes},
+                {"tickons", mechanisms.tickons},
+                {"tackons", mechanisms.tackons},
+                {"packons", mechanisms.packons},
+                {"syncope", mechanisms.syncope},
+                {"verbalCompounds", mechanisms.verbal_compounds},
+            },
+        },
     };
 }
 
@@ -317,30 +323,40 @@ independent_token_result(const QueryResult &parent,
     };
     switch (std::to_underlying(lexeme.part_of_speech)) {
     case std::to_underlying(PartOfSpeech::noun):
-        return Json{{"declension", paradigm_json(declension().number)},
-                    {"variant", paradigm_json(declension().variant)},
-                    {"gender", gender_json(lexeme.gender)},
-                    {"nounKind", noun_kind_json(lexeme.noun_kind)}};
+        return Json{
+            {"declension", paradigm_json(declension().number)},
+            {"variant", paradigm_json(declension().variant)},
+            {"gender", gender_json(lexeme.gender)},
+            {"nounKind", noun_kind_json(lexeme.noun_kind)},
+        };
     case std::to_underlying(PartOfSpeech::pronoun):
     case std::to_underlying(PartOfSpeech::pack):
-        return Json{{"declension", paradigm_json(declension().number)},
-                    {"variant", paradigm_json(declension().variant)},
-                    {"pronounKind", pronoun_kind_json(lexeme.pronoun_kind)}};
+        return Json{
+            {"declension", paradigm_json(declension().number)},
+            {"variant", paradigm_json(declension().variant)},
+            {"pronounKind", pronoun_kind_json(lexeme.pronoun_kind)},
+        };
     case std::to_underlying(PartOfSpeech::adjective):
-        return Json{{"declension", paradigm_json(declension().number)},
-                    {"variant", paradigm_json(declension().variant)},
-                    {"degree", degree_json(lexeme.adjective_degree)}};
+        return Json{
+            {"declension", paradigm_json(declension().number)},
+            {"variant", paradigm_json(declension().variant)},
+            {"degree", degree_json(lexeme.adjective_degree)},
+        };
     case std::to_underlying(PartOfSpeech::numeral):
-        return Json{{"declension", paradigm_json(declension().number)},
-                    {"variant", paradigm_json(declension().variant)},
-                    {"numeralType", numeral_type_json(lexeme.numeral_type)},
-                    {"numeralValue", lexeme.numeral_value}};
+        return Json{
+            {"declension", paradigm_json(declension().number)},
+            {"variant", paradigm_json(declension().variant)},
+            {"numeralType", numeral_type_json(lexeme.numeral_type)},
+            {"numeralValue", lexeme.numeral_value},
+        };
     case std::to_underlying(PartOfSpeech::adverb):
         return Json{{"degree", degree_json(lexeme.adverb_degree)}};
     case std::to_underlying(PartOfSpeech::verb):
-        return Json{{"conjugation", paradigm_json(conjugation().number)},
-                    {"variant", paradigm_json(conjugation().variant)},
-                    {"verbKind", verb_kind_json(lexeme.verb_kind)}};
+        return Json{
+            {"conjugation", paradigm_json(conjugation().number)},
+            {"variant", paradigm_json(conjugation().variant)},
+            {"verbKind", verb_kind_json(lexeme.verb_kind)},
+        };
     case std::to_underlying(PartOfSpeech::preposition):
         return Json{{"governs", case_json(lexeme.governs)}};
     default:
@@ -422,11 +438,15 @@ derivation_json(const Database &database, const DerivationIR &derivation,
                 step["stage"] = rewrite_stage_name(rewrite.stage);
                 step["application"] = Json{
                     {"position", rewritten_form->positions.at(rewrite_index)},
-                    {"removeCount",
-                     rewritten_form->remove_counts.at(rewrite_index)},
+                    {
+                        "removeCount",
+                        rewritten_form->remove_counts.at(rewrite_index),
+                    },
                     {"observed", rewritten_form->observed.at(rewrite_index)},
-                    {"replacement",
-                     rewritten_form->replacements.at(rewrite_index)},
+                    {
+                        "replacement",
+                        rewritten_form->replacements.at(rewrite_index),
+                    },
                 };
             }
             steps.push_back(std::move(step));
@@ -439,8 +459,11 @@ derivation_json(const Database &database, const DerivationIR &derivation,
     Json output{
         // Unique remains the method even when a recursively stripped tackon
         // contributes steps; this is the precedence used by the Ada emitter.
-        {"method",
-         derivation_method(rewrite_method, dictionary, derivation.count != 0U)},
+        {
+            "method",
+            derivation_method(rewrite_method, dictionary,
+                              derivation.count != 0U),
+        },
         {"steps", std::move(steps)},
     };
     if (extended && rewritten_form) {
@@ -478,9 +501,13 @@ morphological_assessment_json(const MorphologicalAssessmentIR &assessment) {
     return Json{
         {"generatedByWhitaker", assessment.generated_by_whitaker},
         {"structurallyGenerated", true},
-        {"whitakerTrim",
-         Json{{"compatible", assessment.whitaker_trim.accepted()},
-              {"reasons", std::move(reasons)}}},
+        {
+            "whitakerTrim",
+            Json{
+                {"compatible", assessment.whitaker_trim.accepted()},
+                {"reasons", std::move(reasons)},
+            },
+        },
         {"notices", std::move(notices)},
     };
 }
@@ -556,8 +583,10 @@ resolved_quantity_name(const VowelQuantity quantity) noexcept {
         });
     }
     return Json{
-        {"annotated",
-         quantity.annotated ? Json(*quantity.annotated) : Json(nullptr)},
+        {
+            "annotated",
+            quantity.annotated ? Json(*quantity.annotated) : Json(nullptr),
+        },
         {"coverage", quantity_coverage_name(quantity.coverage)},
         {"positions", std::move(positions)},
     };
@@ -619,9 +648,11 @@ void enrich_full_form(Json &analysis, const ResolvedForm &form) {
         {"lexeme", full_lexeme_json(database, lexeme, surface.normalized_nfc)},
         {"form", std::move(form)},
         {"morphology", morphology},
-        {"derivation",
-         derivation_json(database, analysis.derivation, lexeme.dictionary,
-                         analysis.derivation.rewritten_form, extended)},
+        {
+            "derivation",
+            derivation_json(database, analysis.derivation, lexeme.dictionary,
+                            analysis.derivation.rewritten_form, extended),
+        },
     };
     if (extended) {
         output["assessment"] =
@@ -653,16 +684,28 @@ void enrich_full_form(Json &analysis, const ResolvedForm &form) {
 
     Json output{
         {"partOfSpeech", lexical_part_name(PartOfSpeech::verb)},
-        {"lexeme",
-         full_lexeme_json(database, lexeme, result.surface.normalized_nfc)},
-        {"form",
-         Json{{"stem", std::move(stem)},
-              {"stemKey", nullptr},
-              {"ending", ""},
-              {"rule",
-               Json{{"age", nullptr},
-                    {"frequency",
-                     rule_frequency_name(RuleFrequency::most_frequent)}}}}},
+        {
+            "lexeme",
+            full_lexeme_json(database, lexeme, result.surface.normalized_nfc),
+        },
+        {
+            "form",
+            Json{
+                {"stem", std::move(stem)},
+                {"stemKey", nullptr},
+                {"ending", ""},
+                {
+                    "rule",
+                    Json{
+                        {"age", nullptr},
+                        {
+                            "frequency",
+                            rule_frequency_name(RuleFrequency::most_frequent),
+                        },
+                    },
+                },
+            },
+        },
         {"morphology", morphology_json(analysis.morphology)},
         {"derivation", std::move(derivation)},
     };
@@ -691,48 +734,80 @@ void enrich_full_form(Json &analysis, const ResolvedForm &form) {
     for (const auto addon_id : analysis.derivation.steps()) {
         const auto &tackon = database.tackon(addon_id);
         steps.push_back(Json{
-            {"type", database.addon_kind(addon_id) == AddonKind::packon
-                         ? "packon"
-                         : "tackon"},
+            {
+                "type",
+                database.addon_kind(addon_id) == AddonKind::packon ? "packon"
+                                                                   : "tackon",
+            },
             {"text", database.tackon_string(tackon.fix)},
             {"meaning", database.tackon_meaning(tackon.meaning)},
         });
     }
     steps.push_back(Json{
-        {"type", roman_dictionary_name}, {"text", ""}, {"meaning", meaning}});
+        {"type", roman_dictionary_name},
+        {"text", ""},
+        {"meaning", meaning},
+    });
     Json output{
         {"partOfSpeech", lexical_part_name(PartOfSpeech::numeral)},
-        {"lexeme",
-         Json{{"dictionary", roman_dictionary_name},
-              {"entryId", nullptr},
-              {"dictionaryForm", result.surface.original_utf8},
-              {"partOfSpeech", lexical_part_name(PartOfSpeech::numeral)},
-              {"meaning", meaning},
-              {"properties", Json::object()},
-              {"metadata", Json{{"age", nullptr},
-                                {"subject", nullptr},
-                                {"geography", nullptr},
-                                {"frequency", nullptr},
-                                {"source", nullptr}}}}},
-        {"form",
-         Json{{"stem", stem},
-              {"stemKey", nullptr},
-              {"ending", ""},
-              {"rule",
-               Json{{"age", nullptr},
-                    {"frequency",
-                     rule_frequency_name(analysis.well_formed
-                                             ? RuleFrequency::most_frequent
-                                             : RuleFrequency::infrequent)}}}}},
-        {"morphology",
-         Json{{"declension", roman_numeral_morphology().declension},
-              {"variant", nullptr},
-              {"case", nullptr},
-              {"number", nullptr},
-              {"gender", nullptr},
-              {"numeralType", numeral_type_name(NumeralType::cardinal)}}},
-        {"derivation",
-         Json{{"method", roman_dictionary_name}, {"steps", std::move(steps)}}},
+        {
+            "lexeme",
+            Json{
+                {"dictionary", roman_dictionary_name},
+                {"entryId", nullptr},
+                {"dictionaryForm", result.surface.original_utf8},
+                {"partOfSpeech", lexical_part_name(PartOfSpeech::numeral)},
+                {"meaning", meaning},
+                {"properties", Json::object()},
+                {
+                    "metadata",
+                    Json{
+                        {"age", nullptr},
+                        {"subject", nullptr},
+                        {"geography", nullptr},
+                        {"frequency", nullptr},
+                        {"source", nullptr},
+                    },
+                },
+            },
+        },
+        {
+            "form",
+            Json{
+                {"stem", stem},
+                {"stemKey", nullptr},
+                {"ending", ""},
+                {
+                    "rule",
+                    Json{
+                        {"age", nullptr},
+                        {
+                            "frequency",
+                            rule_frequency_name(
+                                analysis.well_formed
+                                    ? RuleFrequency::most_frequent
+                                    : RuleFrequency::infrequent),
+                        },
+                    },
+                },
+            },
+        },
+        {
+            "morphology",
+            Json{
+                {"declension", roman_numeral_morphology().declension},
+                {"variant", nullptr},
+                {"case", nullptr},
+                {"number", nullptr},
+                {"gender", nullptr},
+                {"numeralType", numeral_type_name(NumeralType::cardinal)},
+            },
+        },
+        {
+            "derivation",
+            Json{{"method", roman_dictionary_name},
+                 {"steps", std::move(steps)}},
+        },
     };
     if (extended) {
         output["assessment"] =
@@ -895,8 +970,10 @@ full_two_word_suggestion(const Engine &engine,
     return Json{
         {"method", "two-words"},
         {"splitAt", suggestion.logical_split},
-        {"classification",
-         suggestion.both_contain_numeral ? "number-pair" : "unconstrained"},
+        {
+            "classification",
+            suggestion.both_contain_numeral ? "number-pair" : "unconstrained",
+        },
         {"segments", std::move(segments)},
     };
 }
@@ -920,8 +997,10 @@ search_two_word_suggestion(const TwoWordSuggestionIR &suggestion,
     return Json{
         {"method", "two-words"},
         {"splitAt", suggestion.logical_split},
-        {"classification",
-         suggestion.both_contain_numeral ? "number-pair" : "unconstrained"},
+        {
+            "classification",
+            suggestion.both_contain_numeral ? "number-pair" : "unconstrained",
+        },
         {"segments", std::move(segments)},
     };
 }
@@ -937,15 +1016,19 @@ search_two_word_suggestion(const TwoWordSuggestionIR &suggestion,
     }
     Json output{
         {"lexemeId", analysis.lexeme.value()},
-        {"ruleId",
-         analysis.rule ? Json(analysis.rule->value()) : Json(nullptr)},
+        {
+            "ruleId",
+            analysis.rule ? Json(analysis.rule->value()) : Json(nullptr),
+        },
         {"addonIds", std::move(addon_ids)},
         {"scoreFlags", 0},
         {"quantityMatch", quantity_match_name(analysis.quantity_match)},
-        {"form",
-         resolved_form_json(resolved_form(database, surface, analysis,
-                                          include_suffix_quantity,
-                                          display_mode))},
+        {
+            "form",
+            resolved_form_json(resolved_form(database, surface, analysis,
+                                             include_suffix_quantity,
+                                             display_mode)),
+        },
         {"assessment", morphological_assessment_json(analysis.assessment)},
     };
     if (analysis.derivation.rewritten_form) {
@@ -970,15 +1053,26 @@ search_two_word_suggestion(const TwoWordSuggestionIR &suggestion,
     stem.append(analysis.auxiliary);
     return Json{
         {"lexemeId", analysis.lexeme.value()},
-        {"ruleId", analysis.source_rule ? Json(analysis.source_rule->value())
-                                        : Json(nullptr)},
+        {
+            "ruleId",
+            analysis.source_rule ? Json(analysis.source_rule->value())
+                                 : Json(nullptr),
+        },
         {"addonIds", std::move(addon_ids)},
         {"scoreFlags", 0},
-        {"form", resolved_form_json(unquantified_form(
-                     std::move(stem), 0U, {}, result.surface.normalized_nfc,
-                     display_mode))},
-        {"compound", Json{{"construction", compound_kind_name(analysis.kind)},
-                          {"auxiliary", analysis.auxiliary}}},
+        {
+            "form",
+            resolved_form_json(unquantified_form(std::move(stem), 0U, {},
+                                                 result.surface.normalized_nfc,
+                                                 display_mode)),
+        },
+        {
+            "compound",
+            Json{
+                {"construction", compound_kind_name(analysis.kind)},
+                {"auxiliary", analysis.auxiliary},
+            },
+        },
         {"assessment", morphological_assessment_json(analysis.assessment)},
     };
 }
@@ -996,11 +1090,19 @@ search_two_word_suggestion(const TwoWordSuggestionIR &suggestion,
         {"ruleId", nullptr},
         {"addonIds", std::move(addon_ids)},
         {"scoreFlags", 0},
-        {"form", resolved_form_json(unquantified_form(
-                     stem, 0U, {}, stem, display_mode))},
-        {"artificial", Json{{"method", roman_dictionary_name},
-                            {"value", analysis.value},
-                            {"wellFormed", analysis.well_formed}}},
+        {
+            "form",
+            resolved_form_json(
+                unquantified_form(stem, 0U, {}, stem, display_mode)),
+        },
+        {
+            "artificial",
+            Json{
+                {"method", roman_dictionary_name},
+                {"value", analysis.value},
+                {"wellFormed", analysis.well_formed},
+            },
+        },
         {"assessment", morphological_assessment_json(analysis.assessment)},
     };
 }
@@ -1134,8 +1236,9 @@ Json analysis_json_v2_document(const Engine &engine, const QueryResult &result) 
         {"diagnostics", std::move(diagnostics)},
     };
     if (result.two_word_suggestion) {
-        output["suggestions"] = Json::array({full_two_word_suggestion(
-            engine, *result.two_word_suggestion, true)});
+        output["suggestions"] = Json::array({
+            full_two_word_suggestion(engine, *result.two_word_suggestion, true),
+        });
     }
     if (!result.independent_tokens.empty()) {
         Json tokens = Json::array();
@@ -1188,9 +1291,14 @@ Json search_json_document(const Engine &engine, const QueryResult &result) {
                     {"ruleId", nullptr},
                     {"addonIds", std::move(addon_ids)},
                     {"scoreFlags", 0},
-                    {"artificial", Json{{"method", roman_dictionary_name},
-                                        {"value", analysis.value},
-                                        {"wellFormed", analysis.well_formed}}},
+                    {
+                        "artificial",
+                        Json{
+                            {"method", roman_dictionary_name},
+                            {"value", analysis.value},
+                            {"wellFormed", analysis.well_formed},
+                        },
+                    },
                 });
             },
             artificial);
@@ -1238,12 +1346,17 @@ Json search_json_v2_document(const Engine &engine, const QueryResult &result) {
             }
             Json hit{
                 {"lexemeId", analysis->lexeme.value()},
-                {"ruleId", analysis->rule ? Json(analysis->rule->value())
-                                          : Json(nullptr)},
+                {
+                    "ruleId",
+                    analysis->rule ? Json(analysis->rule->value())
+                                   : Json(nullptr),
+                },
                 {"addonIds", std::move(addon_ids)},
                 {"scoreFlags", 0},
-                {"assessment",
-                 morphological_assessment_json(analysis->assessment)},
+                {
+                    "assessment",
+                    morphological_assessment_json(analysis->assessment),
+                },
             };
             if (analysis->derivation.rewritten_form) {
                 Json rewrite_ids = Json::array();
@@ -1262,16 +1375,24 @@ Json search_json_v2_document(const Engine &engine, const QueryResult &result) {
             }
             hits.push_back(Json{
                 {"lexemeId", analysis.lexeme.value()},
-                {"ruleId", analysis.source_rule
-                               ? Json(analysis.source_rule->value())
-                               : Json(nullptr)},
+                {
+                    "ruleId",
+                    analysis.source_rule ? Json(analysis.source_rule->value())
+                                         : Json(nullptr),
+                },
                 {"addonIds", std::move(addon_ids)},
                 {"scoreFlags", 0},
-                {"compound",
-                 Json{{"construction", compound_kind_name(analysis.kind)},
-                      {"auxiliary", analysis.auxiliary}}},
-                {"assessment",
-                 morphological_assessment_json(analysis.assessment)},
+                {
+                    "compound",
+                    Json{
+                        {"construction", compound_kind_name(analysis.kind)},
+                        {"auxiliary", analysis.auxiliary},
+                    },
+                },
+                {
+                    "assessment",
+                    morphological_assessment_json(analysis.assessment),
+                },
             });
         }
     }
@@ -1287,11 +1408,18 @@ Json search_json_v2_document(const Engine &engine, const QueryResult &result) {
                     {"ruleId", nullptr},
                     {"addonIds", std::move(addon_ids)},
                     {"scoreFlags", 0},
-                    {"artificial", Json{{"method", roman_dictionary_name},
-                                        {"value", analysis.value},
-                                        {"wellFormed", analysis.well_formed}}},
-                    {"assessment",
-                     morphological_assessment_json(analysis.assessment)},
+                    {
+                        "artificial",
+                        Json{
+                            {"method", roman_dictionary_name},
+                            {"value", analysis.value},
+                            {"wellFormed", analysis.well_formed},
+                        },
+                    },
+                    {
+                        "assessment",
+                        morphological_assessment_json(analysis.assessment),
+                    },
                 });
             },
             artificial);
@@ -1413,16 +1541,24 @@ static Json analysis_json_resolved_document(const Engine &engine,
                 static_cast<void>(key);
                 values.push_back(std::move(value));
             }
-            segments.push_back(Json{{"text", segment.surface.normalized_nfc},
-                                    {"analyses", std::move(values)}});
+            segments.push_back(Json{
+                {"text", segment.surface.normalized_nfc},
+                {"analyses", std::move(values)},
+            });
         }
-        output["suggestions"] = Json::array({Json{
-            {"method", "two-words"},
-            {"splitAt", result.two_word_suggestion->logical_split},
-            {"classification", result.two_word_suggestion->both_contain_numeral
-                                   ? "number-pair"
-                                   : "unconstrained"},
-            {"segments", std::move(segments)}}});
+        output["suggestions"] = Json::array({
+            Json{
+                {"method", "two-words"},
+                {"splitAt", result.two_word_suggestion->logical_split},
+                {
+                    "classification",
+                    result.two_word_suggestion->both_contain_numeral
+                        ? "number-pair"
+                        : "unconstrained",
+                },
+                {"segments", std::move(segments)},
+            },
+        });
     }
     if (!result.independent_tokens.empty()) {
         Json tokens = Json::array();
@@ -1521,16 +1657,24 @@ static Json search_json_resolved_document(const Engine &engine,
                 static_cast<void>(key);
                 values.push_back(std::move(value));
             }
-            segments.push_back(Json{{"text", segment.surface.normalized_nfc},
-                                    {"hits", std::move(values)}});
+            segments.push_back(Json{
+                {"text", segment.surface.normalized_nfc},
+                {"hits", std::move(values)},
+            });
         }
-        output["suggestions"] = Json::array({Json{
-            {"method", "two-words"},
-            {"splitAt", result.two_word_suggestion->logical_split},
-            {"classification", result.two_word_suggestion->both_contain_numeral
-                                   ? "number-pair"
-                                   : "unconstrained"},
-            {"segments", std::move(segments)}}});
+        output["suggestions"] = Json::array({
+            Json{
+                {"method", "two-words"},
+                {"splitAt", result.two_word_suggestion->logical_split},
+                {
+                    "classification",
+                    result.two_word_suggestion->both_contain_numeral
+                        ? "number-pair"
+                        : "unconstrained",
+                },
+                {"segments", std::move(segments)},
+            },
+        });
     }
     if (!result.independent_tokens.empty()) {
         Json tokens = Json::array();

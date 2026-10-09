@@ -1,5 +1,12 @@
 # Inspeção local de frases
 
+O [baseline local de memória e CPU](MEMORY.md) registra medições nativas,
+DHAT e Callgrind, os principais consumidores e os comandos de reprodução.
+O [censo de compartilhamento entre árvores](TREE_SHARING.md) detalha quais
+dados se repetem e a proposta de reutilizar as atribuições morfológicas.
+O [resultado dessa implementação](TREE_SHARING_RESULTS.md) registra a equivalência
+das análises e a redução de 38,1% do heap no pico do Markov estrutural medido.
+
 Este diretório é uma investigação local, fora do código de produção. Depois de
 compilar o alvo `parsers_investigation`, passe uma frase para ver a melhor análise
 morfológica e as dependências em formato legível:
